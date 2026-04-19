@@ -2,10 +2,9 @@
 main.py — Bounty Squad pipeline entrypoint.
 
 Usage:
-    python main.py                         # single run, settings from .env / env vars
-    python main.py --verbose               # verbose LLM output
-    python main.py --dry-run               # build crew & print task graph, don't execute
-    python main.py --approval-mode auto    # skip interactive checkpoints (CI / lab use)
+    python main.py             # single run, settings from .env / env vars
+    python main.py --verbose   # verbose LLM output
+    python main.py --dry-run   # show crew layout without executing
 
 Environment variables (see config.py for full list):
     H1_API_USERNAME     HackerOne API username         (required)
@@ -27,6 +26,11 @@ from datetime import datetime
 from typing import Any
 from uuid import uuid4
 
+from rich.console import Console
+from rich.logging import RichHandler
+from rich.panel import Panel
+from rich.table import Table
+
 try:
     from dotenv import load_dotenv
 
@@ -34,10 +38,13 @@ try:
 except ImportError:
     pass
 
+console = Console()
+
 logging.basicConfig(
     level=logging.DEBUG if os.getenv("VERBOSE", "").lower() == "true" else logging.INFO,
-    format="%(asctime)s  %(levelname)-8s  %(name)s — %(message)s",
-    datefmt="%H:%M:%S",
+    format="%(message)s",
+    datefmt="[%H:%M:%S]",
+    handlers=[RichHandler(console=console, rich_tracebacks=True, show_path=False)],
 )
 logger = logging.getLogger("bounty_squad")
 
@@ -49,9 +56,7 @@ def parse_args() -> argparse.Namespace:
         epilog=__doc__,
     )
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable per-step LLM output")
-    parser.add_argument(
-        "--dry-run", action="store_true", help="Print the task graph without executing"
-    )
+    parser.add_argument("--dry-run", action="store_true", help="Show crew layout without executing")
     return parser.parse_args()
 
 
@@ -65,23 +70,38 @@ def check_env() -> None:
 
 
 def dry_run_summary(crew: Any) -> None:  # noqa: ANN401
-    """Print a human-readable summary of the crew without executing."""
+    """Render the crew layout as rich tables without executing."""
     from tasks import CHECKPOINT_INDICES
 
-    print("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    print("  BOUNTY SQUAD — DRY RUN  ")
-    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
-    print("AGENTS")
+    console.rule("[bold cyan]BOUNTY SQUAD — DRY RUN[/bold cyan]")
+    console.print()
+
+    agents_table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2))
+    agents_table.add_column("Agent", style="cyan")
+    agents_table.add_column("Tools", style="dim")
     for agent in crew.agents:
-        tools = [t.name for t in agent.tools] if agent.tools else ["(none)"]
-        print(f"  • {agent.role:<30} tools: {', '.join(tools)}")
-    print("\nTASKS (sequential)")
+        tools = ", ".join(t.name for t in agent.tools) if agent.tools else "(none)"
+        agents_table.add_row(agent.role, tools)
+    console.print(Panel(agents_table, title="Agents"))
+
+    console.print()
+
+    tasks_table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2))
+    tasks_table.add_column("#", style="dim", width=3)
+    tasks_table.add_column("Agent", style="cyan")
+    tasks_table.add_column("Task")
+    tasks_table.add_column("Checkpoint")
     for i, task in enumerate(crew.tasks):
         checkpoint = CHECKPOINT_INDICES.get(i)
-        tag = f" ↓ [APPROVAL: {checkpoint}]" if checkpoint else ""
-        print(f"  {i + 1}. [{task.agent.role}]{tag}")
-        print(f"     {task.description[:80].strip()}…")
-    print()
+        cp_cell = f"[yellow]▶ {checkpoint}[/yellow]" if checkpoint else ""
+        tasks_table.add_row(
+            str(i + 1),
+            task.agent.role,
+            task.description[:72].strip() + "…",
+            cp_cell,
+        )
+    console.print(Panel(tasks_table, title="Pipeline  [dim](sequential)[/dim]"))
+    console.print()
 
 
 def main() -> None:
@@ -102,9 +122,10 @@ def main() -> None:
     run_id = datetime.utcnow().strftime("%Y%m%d-%H%M%S") + "-" + uuid4().hex[:6]
     started_at = datetime.utcnow()
 
-    logger.info("Bounty Squad — pipeline starting  (run: %s)", run_id)
+    console.rule("[bold]Bounty Squad[/bold]")
     logger.info(
-        "Model: %s | Min bounty: $%s | Min severity: %s",
+        "run=%s  model=%s  min_bounty=$%s  min_severity=%s",
+        run_id,
         config.llm.model,
         config.h1.min_bounty_threshold,
         config.scan.min_severity,
@@ -112,14 +133,17 @@ def main() -> None:
 
     try:
         result = crew.kickoff()
-        logger.info("Pipeline complete.")
 
-        print("\n" + "━" * 50)
-        print("FINAL OUTPUT")
-        print("━" * 50)
-        print(result)
+        console.print()
+        console.print(
+            Panel(
+                str(result),
+                title="[bold green]  Result  [/bold green]",
+                border_style="green",
+                padding=(1, 2),
+            )
+        )
 
-        # Capture token usage from CrewOutput (available in crewai >= 0.28)
         try:
             usage = result.token_usage  # type: ignore[union-attr]
             metrics = build_run_metrics(
@@ -132,13 +156,13 @@ def main() -> None:
             print_metrics(metrics)
             save_metrics(metrics, config.reports_dir)
         except AttributeError:
-            logger.debug("CrewOutput has no token_usage — metrics not available for this run")
+            logger.debug("token_usage not available on this CrewOutput")
 
     except KeyboardInterrupt:
-        logger.warning("Pipeline interrupted by user.")
+        console.print("\n[yellow]Interrupted.[/yellow]")
         sys.exit(0)
-    except Exception as exc:
-        logger.exception("Pipeline failed: %s", exc)
+    except Exception:
+        console.print_exception()
         sys.exit(1)
 
 
