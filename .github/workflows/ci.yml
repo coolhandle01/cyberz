@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "fix/**", "feat/**", "chore/**"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  lint:
+    name: Lint & type-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dev dependencies
+        run: pip install -e ".[dev]"
+
+      - name: ruff — lint
+        run: ruff check .
+
+      - name: ruff — format check
+        run: ruff format --check .
+
+      - name: mypy — type check
+        run: mypy . --ignore-missing-imports
+
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    env:
+      # Dummy creds so H1Client can be imported without KeyError
+      H1_API_USERNAME: ci-user
+      H1_API_TOKEN: ci-token
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dev dependencies
+        run: pip install -e ".[dev]"
+
+      - name: pytest (unit only)
+        run: pytest -m unit --cov --cov-report=term-missing
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: .coverage
+
+  sast:
+    name: SAST
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install SAST tools
+        run: pip install bandit[toml] semgrep
+
+      - name: bandit — security lint
+        run: bandit -c pyproject.toml -r . -q
+
+      - name: semgrep — SAST scan
+        run: >
+          semgrep scan
+          --config=p/python
+          --config=p/security-audit
+          --config=p/owasp-top-ten
+          --error
+          --quiet
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
