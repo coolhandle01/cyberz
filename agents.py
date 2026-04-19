@@ -8,7 +8,7 @@ and a curated backstory that shapes its LLM persona.
 from __future__ import annotations
 
 from crewai import Agent
-from crewai_tools import tool
+from crewai.tools import tool
 from langchain_anthropic import ChatAnthropic
 
 from config import config
@@ -43,7 +43,7 @@ def recon_tool(programme_handle: str) -> dict:
     scope = h1.get_structured_scope(programme_handle)
     programme = h1.parse_programme(policy["data"], scope)
     result = run_recon(programme)
-    return result.model_dump()  # type: ignore[no-any-return]
+    return result.model_dump()
 
 
 @tool("Run Penetration Test")
@@ -85,7 +85,7 @@ def submit_report_tool(report_json: str) -> dict:
     report = DisclosureReport.model_validate_json(report_json)
     save_report(report)
     result = h1.submit_report(report)
-    return result.model_dump()  # type: ignore[no-any-return]
+    return result.model_dump()
 
 
 # ---------------------------------------------------------------------------
@@ -100,7 +100,7 @@ def build_agents(verbose: bool = False) -> dict[str, Agent]:
     # FIX: temperature/max_tokens were silently ignored when passing llm as a
     # model-name string. ChatAnthropic is explicitly constructed so all LLM
     # config is honoured.
-    llm = ChatAnthropic(
+    llm = ChatAnthropic(  # type: ignore[call-arg]
         model=config.llm.model,
         temperature=config.llm.temperature,
         max_tokens=config.llm.max_tokens,
