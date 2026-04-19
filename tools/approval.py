@@ -1,12 +1,14 @@
-"""tools/approval.py — Pluggable approval gate for pipeline checkpoints.
+"""tools/approval.py — Approval gate for pipeline checkpoints.
 
-Swap the active gate in tests via set_gate() to control approval decisions
-without touching stdin. Set APPROVAL_MODE=auto for CI / automated pipelines.
+The CliApprovalGate is the only production implementation. It blocks on stdin
+and renders a rich panel so the operator can review context before approving.
+
+In tests, pass a local ApprovalGate stub to make_approval_callback() directly —
+there is no module-level singleton and no bypass mode.
 """
 
 from __future__ import annotations
 
-import os
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -60,41 +62,14 @@ class CliApprovalGate(ApprovalGate):
         return ApprovalDecision(approved=False, reason=reason or "Rejected by operator")
 
 
-class AutoApprovalGate(ApprovalGate):
-    """Non-blocking gate: always approves. Use for CI / automated pipelines."""
-
-    def request(self, checkpoint: str, summary: str) -> ApprovalDecision:
-        return ApprovalDecision(approved=True, reason=f"auto-approved ({checkpoint})")
-
-
-_gate: ApprovalGate
-
-
-def configure_gate(mode: str) -> None:
-    """Select gate implementation by mode name ('interactive' or 'auto')."""
-    global _gate
-    _gate = AutoApprovalGate() if mode == "auto" else CliApprovalGate()
-
-
-def set_gate(gate: ApprovalGate) -> None:
-    """Override the active gate — for use in tests."""
-    global _gate
-    _gate = gate
-
-
-def get_gate() -> ApprovalGate:
-    return _gate
-
-
 def make_approval_callback(
     gate: ApprovalGate,
     checkpoints: dict[int, str],
 ) -> Callable[[object], None]:
     """Return a task_callback that triggers approval at specified task indices.
 
-    Each call to the returned function advances an internal counter; when the
-    counter matches a key in *checkpoints*, the gate is consulted. Raises
-    PipelineHalted if the operator rejects.
+    Each call advances an internal counter; when the counter matches a key in
+    *checkpoints*, the gate is consulted. Raises PipelineHalted on rejection.
     """
     completed = [0]
 
@@ -109,7 +84,3 @@ def make_approval_callback(
             raise PipelineHalted(f"Pipeline halted at '{checkpoint}': {decision.reason}")
 
     return _callback
-
-
-# Initialise from env at module load
-configure_gate(os.getenv("APPROVAL_MODE", "interactive"))

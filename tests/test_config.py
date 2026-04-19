@@ -94,16 +94,16 @@ class TestScanConfig:
 
 
 class TestAppConfig:
-    def test_approval_mode_defaults_interactive(self, monkeypatch):
-        monkeypatch.delenv("APPROVAL_MODE", raising=False)
+    def test_reports_dir_configurable(self, monkeypatch):
+        monkeypatch.setenv("REPORTS_DIR", "/var/reports")
         from config import AppConfig
 
         c = AppConfig()
-        assert c.approval_mode == "interactive"
+        assert c.reports_dir == "/var/reports"
 
-    def test_approval_mode_auto_via_env(self, monkeypatch):
-        monkeypatch.setenv("APPROVAL_MODE", "auto")
+    def test_verbose_defaults_false(self, monkeypatch):
+        monkeypatch.delenv("VERBOSE", raising=False)
         from config import AppConfig
 
         c = AppConfig()
-        assert c.approval_mode == "auto"
+        assert c.verbose is False

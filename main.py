@@ -14,7 +14,6 @@ Environment variables (see config.py for full list):
     H1_MIN_BOUNTY       Minimum bounty threshold USD    (default: 500)
     MIN_SEVERITY        Minimum finding severity        (default: medium)
     REPORTS_DIR         Local report output directory   (default: ./reports)
-    APPROVAL_MODE       interactive | auto              (default: interactive)
     VERBOSE             Enable verbose LLM output       (default: false)
 """
 
@@ -53,12 +52,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--dry-run", action="store_true", help="Print the task graph without executing"
     )
-    parser.add_argument(
-        "--approval-mode",
-        choices=["interactive", "auto"],
-        default=None,
-        help="Override APPROVAL_MODE env var (interactive=stdin prompts, auto=CI/lab)",
-    )
     return parser.parse_args()
 
 
@@ -95,10 +88,7 @@ def main() -> None:
     args = parse_args()
     check_env()
 
-    if args.approval_mode:
-        os.environ["APPROVAL_MODE"] = args.approval_mode
-
-    # Import crew after env check and after any env overrides
+    # Import crew after env check
     from config import config
     from crew import build_crew
     from tools.metrics import build_run_metrics, print_metrics, save_metrics
@@ -114,11 +104,10 @@ def main() -> None:
 
     logger.info("Bounty Squad — pipeline starting  (run: %s)", run_id)
     logger.info(
-        "Model: %s | Min bounty: $%s | Min severity: %s | Approval mode: %s",
+        "Model: %s | Min bounty: $%s | Min severity: %s",
         config.llm.model,
         config.h1.min_bounty_threshold,
         config.scan.min_severity,
-        config.approval_mode,
     )
 
     try:
