@@ -35,7 +35,7 @@ class TestCliApprovalGate:
     def test_approves_on_y(self, monkeypatch: pytest.MonkeyPatch) -> None:
         gate = CliApprovalGate()
         responses = iter(["y", "looks good"])
-        monkeypatch.setattr("builtins.input", lambda _: next(responses))
+        monkeypatch.setattr("builtins.input", lambda *_: next(responses))
         decision = gate.request("test", "summary")
         assert decision.approved is True
         assert "looks good" in decision.reason
@@ -43,7 +43,7 @@ class TestCliApprovalGate:
     def test_approves_with_empty_reason(self, monkeypatch: pytest.MonkeyPatch) -> None:
         gate = CliApprovalGate()
         responses = iter(["y", ""])
-        monkeypatch.setattr("builtins.input", lambda _: next(responses))
+        monkeypatch.setattr("builtins.input", lambda *_: next(responses))
         decision = gate.request("test", "summary")
         assert decision.approved is True
         assert decision.reason  # falls back to default text
@@ -51,7 +51,7 @@ class TestCliApprovalGate:
     def test_rejects_on_n(self, monkeypatch: pytest.MonkeyPatch) -> None:
         gate = CliApprovalGate()
         responses = iter(["n", "too risky"])
-        monkeypatch.setattr("builtins.input", lambda _: next(responses))
+        monkeypatch.setattr("builtins.input", lambda *_: next(responses))
         decision = gate.request("test", "summary")
         assert decision.approved is False
         assert "too risky" in decision.reason
@@ -59,7 +59,7 @@ class TestCliApprovalGate:
     def test_rejects_on_eof(self, monkeypatch: pytest.MonkeyPatch) -> None:
         gate = CliApprovalGate()
 
-        def _raise(_: str) -> str:
+        def _raise(*_: object) -> str:
             raise EOFError
 
         monkeypatch.setattr("builtins.input", _raise)

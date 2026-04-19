@@ -22,22 +22,22 @@ to be on `PATH`. This has several failure modes:
 ## Proposed architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  docker-compose.yml                                             │
-│                                                                 │
-│  ┌──────────────┐   ┌──────────────┐   ┌─────────────────────┐ │
-│  │  bounty-squad │   │  scan-runner │   │  observability      │ │
-│  │  (Python app) │──▶│  (tools only)│   │  ┌───────────────┐  │ │
-│  │               │   │              │   │  │  Prometheus   │  │ │
-│  │  Port: none   │   │  subfinder   │   │  └──────┬────────┘  │ │
-│  │  Net: internal│   │  httpx       │   │         │           │ │
-│  └──────────────┘   │  nmap        │   │  ┌──────▼────────┐  │ │
-│                      │  nuclei      │   │  │   Grafana     │  │ │
-│                      │  sqlmap      │   │  │  Port: 3000   │  │ │
-│                      │              │   │  └───────────────┘  │ │
-│                      │  Net: scan   │   └─────────────────────┘ │
-│                      └──────────────┘                           │
-└─────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│  docker-compose.yml                                                      │
+│                                                                          │
+│  ┌──────────────┐   ┌──────────────┐   ┌──────────────────────────────┐ │
+│  │  bounty-squad │   │  scan-runner │   │  observability               │ │
+│  │  (Python app) │──▶│  (tools only)│   │  ┌──────────┐  ┌──────────┐ │ │
+│  │               │   │              │   │  │Prometheus│  │ Langfuse │ │ │
+│  │  Port: none   │   │  subfinder   │   │  └────┬─────┘  │ Port:3000│ │ │
+│  │  Net: internal│   │  httpx       │   │       │         └────┬─────┘ │ │
+│  └──────────────┘   │  nmap        │   │  ┌────▼─────┐        │       │ │
+│                      │  nuclei      │   │  │ Grafana  │   ┌────▼─────┐ │ │
+│                      │  sqlmap      │   │  │ Port:3001│   │Postgres  │ │ │
+│                      │              │   │  └──────────┘   └──────────┘ │ │
+│                      │  Net: scan   │   └──────────────────────────────┘ │
+│                      └──────────────┘                                    │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Networks
@@ -92,9 +92,8 @@ downloads, not `apt install`. This guarantees reproducibility.
 ### `prometheus` + `grafana`
 
 Standard `prom/prometheus` and `grafana/grafana` images, version-pinned.
-
-Grafana datasource and dashboard provisioned via config files (no manual
-setup). Dashboards:
+Grafana on port 3001 (Langfuse takes 3000). Datasource and dashboards
+provisioned via config files — no manual setup.
 
 | Dashboard | Key panels |
 |---|---|
@@ -102,6 +101,57 @@ setup). Dashboards:
 | **Scan activity** | Tool call rate, per-tool latency histogram, finding count by severity |
 | **Programme ROI** | Estimated bounty / actual cost ratio per programme |
 | **Rate limiting** | Requests/sec vs configured `SCAN_DELAY`, 429 count |
+
+### `langfuse` + `postgres` — LLM observability
+
+[Langfuse](https://langfuse.com) is self-hosted, open-source, and provides
+per-run traces of every LLM call: prompt sent, tool calls made, response
+received, token counts, latency. This is the layer Prometheus can't give you —
+*why* the agent made a decision, not just *that* it did.
+
+**Service setup:**
+
+```yaml
+langfuse:
+  image: langfuse/langfuse:2
+  ports: ["3000:3000"]
+  environment:
+    DATABASE_URL: postgresql://langfuse:langfuse@postgres:5432/langfuse
+    NEXTAUTH_SECRET: changeme
+    LANGFUSE_SECRET_KEY: changeme
+    LANGFUSE_PUBLIC_KEY: changeme
+  depends_on: [postgres]
+
+postgres:
+  image: postgres:16-alpine
+  environment:
+    POSTGRES_USER: langfuse
+    POSTGRES_PASSWORD: langfuse
+    POSTGRES_DB: langfuse
+  volumes: ["postgres_data:/var/lib/postgresql/data"]
+```
+
+**Python integration** — add `langfuse` to dependencies and configure the
+LangChain callback (zero application code changes required):
+
+```python
+# crew.py — one addition to build_crew()
+from langfuse.callback import CallbackHandler
+
+langfuse_handler = CallbackHandler()   # reads LANGFUSE_* env vars
+return Crew(..., callbacks=[langfuse_handler])
+```
+
+Each pipeline run then appears in the Langfuse UI as a trace tree:
+`build_crew → ProgrammeManager → [tool: list_programmes] → ...`
+
+**New env vars:**
+
+```
+LANGFUSE_PUBLIC_KEY=pk-lf-...
+LANGFUSE_SECRET_KEY=sk-lf-...
+LANGFUSE_HOST=http://langfuse:3000   # internal docker network address
+```
 
 ---
 
@@ -151,6 +201,8 @@ observability/
     datasources/prometheus.yml
     dashboards/pipeline-runs.json
     dashboards/scan-activity.json
+  langfuse/
+    docker-compose.langfuse.yml   # can be included or run standalone
 ```
 
 ---

@@ -29,22 +29,34 @@ class ApprovalGate(ABC):
 
 
 class CliApprovalGate(ApprovalGate):
-    """Interactive gate: prints context and reads y/N from stdin."""
+    """Interactive gate: rich-formatted panel + stdin prompts."""
 
     def request(self, checkpoint: str, summary: str) -> ApprovalDecision:
-        print(f"\n{'=' * 60}")
-        print(f"  CHECKPOINT: {checkpoint}")
-        print("=" * 60)
-        print(summary[:1000])
-        print()
+        from rich.console import Console
+        from rich.panel import Panel
+        from rich.prompt import Confirm, Prompt
+        from rich.text import Text
+
+        console = Console()
+        console.print()
+        console.print(
+            Panel(
+                Text(summary[:1000]),
+                title=f"[bold yellow]  {checkpoint}  [/bold yellow]",
+                subtitle="[dim]approve to continue · reject to halt[/dim]",
+                border_style="yellow",
+                padding=(1, 2),
+            )
+        )
+        console.print()
         try:
-            answer = input("Approve and continue? [y/N] ").strip().lower()
+            approved = Confirm.ask("[bold]Approve and continue?[/bold]", default=False)
         except EOFError:
             return ApprovalDecision(approved=False, reason="Non-interactive stdin — rejected")
-        if answer == "y":
-            reason = input("Reason (optional): ").strip()
+        if approved:
+            reason = Prompt.ask("Reason [dim](optional — Enter to skip)[/dim]", default="")
             return ApprovalDecision(approved=True, reason=reason or "Approved by operator")
-        reason = input("Rejection reason: ").strip()
+        reason = Prompt.ask("Rejection reason")
         return ApprovalDecision(approved=False, reason=reason or "Rejected by operator")
 
 
