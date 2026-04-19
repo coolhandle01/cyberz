@@ -2,10 +2,10 @@
 main.py — Bounty Squad pipeline entrypoint.
 
 Usage:
-    python main.py                  # single run, settings from .env / env vars
-    python main.py --verbose        # verbose LLM output
-    python main.py --dry-run        # build crew & print task graph, don't execute
-    python main.py --no-approval    # skip human checkpoints (automated/CI use)
+    python main.py                         # single run, settings from .env / env vars
+    python main.py --verbose               # verbose LLM output
+    python main.py --dry-run               # build crew & print task graph, don't execute
+    python main.py --approval-mode auto    # skip interactive checkpoints (CI / lab use)
 
 Environment variables (see config.py for full list):
     H1_API_USERNAME     HackerOne API username         (required)
@@ -14,7 +14,7 @@ Environment variables (see config.py for full list):
     H1_MIN_BOUNTY       Minimum bounty threshold USD    (default: 500)
     MIN_SEVERITY        Minimum finding severity        (default: medium)
     REPORTS_DIR         Local report output directory   (default: ./reports)
-    HUMAN_APPROVAL      Pause for human review          (default: true)
+    APPROVAL_MODE       interactive | auto              (default: interactive)
     VERBOSE             Enable verbose LLM output       (default: false)
 """
 
@@ -54,9 +54,10 @@ def parse_args() -> argparse.Namespace:
         "--dry-run", action="store_true", help="Print the task graph without executing"
     )
     parser.add_argument(
-        "--no-approval",
-        action="store_true",
-        help="Skip human approval checkpoints (overrides HUMAN_APPROVAL env var)",
+        "--approval-mode",
+        choices=["interactive", "auto"],
+        default=None,
+        help="Override APPROVAL_MODE env var (interactive=stdin prompts, auto=CI/lab)",
     )
     return parser.parse_args()
 
@@ -72,6 +73,8 @@ def check_env() -> None:
 
 def dry_run_summary(crew: Any) -> None:  # noqa: ANN401
     """Print a human-readable summary of the crew without executing."""
+    from tasks import CHECKPOINT_INDICES
+
     print("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     print("  BOUNTY SQUAD — DRY RUN  ")
     print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
@@ -80,9 +83,10 @@ def dry_run_summary(crew: Any) -> None:  # noqa: ANN401
         tools = [t.name for t in agent.tools] if agent.tools else ["(none)"]
         print(f"  • {agent.role:<30} tools: {', '.join(tools)}")
     print("\nTASKS (sequential)")
-    for i, task in enumerate(crew.tasks, 1):
-        hitl = " [HUMAN APPROVAL]" if getattr(task, "human_input", False) else ""
-        print(f"  {i}. [{task.agent.role}]{hitl}")
+    for i, task in enumerate(crew.tasks):
+        checkpoint = CHECKPOINT_INDICES.get(i)
+        tag = f" ↓ [APPROVAL: {checkpoint}]" if checkpoint else ""
+        print(f"  {i + 1}. [{task.agent.role}]{tag}")
         print(f"     {task.description[:80].strip()}…")
     print()
 
@@ -91,11 +95,10 @@ def main() -> None:
     args = parse_args()
     check_env()
 
-    # Override HUMAN_APPROVAL when --no-approval flag is passed
-    if args.no_approval:
-        os.environ["HUMAN_APPROVAL"] = "false"
+    if args.approval_mode:
+        os.environ["APPROVAL_MODE"] = args.approval_mode
 
-    # Import crew after env check and after env override
+    # Import crew after env check and after any env overrides
     from config import config
     from crew import build_crew
     from tools.metrics import build_run_metrics, print_metrics, save_metrics
@@ -111,11 +114,11 @@ def main() -> None:
 
     logger.info("Bounty Squad — pipeline starting  (run: %s)", run_id)
     logger.info(
-        "Model: %s | Min bounty: $%s | Min severity: %s | Human approval: %s",
+        "Model: %s | Min bounty: $%s | Min severity: %s | Approval mode: %s",
         config.llm.model,
         config.h1.min_bounty_threshold,
         config.scan.min_severity,
-        config.human_approval,
+        config.approval_mode,
     )
 
     try:

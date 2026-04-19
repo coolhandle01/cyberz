@@ -10,7 +10,8 @@ from crewai import Crew, Process
 
 from agents import build_agents
 from config import config
-from tasks import build_tasks
+from tasks import CHECKPOINT_INDICES, build_tasks
+from tools.approval import configure_gate, get_gate, make_approval_callback
 
 
 def build_crew(verbose: bool | None = None) -> Crew:
@@ -23,8 +24,12 @@ def build_crew(verbose: bool | None = None) -> Crew:
     """
     be_verbose = verbose if verbose is not None else config.verbose
 
+    configure_gate(config.approval_mode)
+
     agents = build_agents(verbose=be_verbose)
-    tasks = build_tasks(agents, human_approval=config.human_approval)
+    tasks = build_tasks(agents)
+
+    approval_callback = make_approval_callback(get_gate(), CHECKPOINT_INDICES)
 
     return Crew(
         agents=list(agents.values()),
@@ -33,9 +38,5 @@ def build_crew(verbose: bool | None = None) -> Crew:
         verbose=be_verbose,
         memory=False,
         embedder=None,
+        task_callback=approval_callback,
     )
-
-
-# FIX: removed module-level `crew = build_crew()` — it ran at import time,
-# triggering env reads before main.py's check_env() had a chance to validate
-# required credentials and exit cleanly. Callers must use build_crew() directly.

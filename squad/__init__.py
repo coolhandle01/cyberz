@@ -46,8 +46,6 @@ class SquadMember(ABC):
         cls,
         agent: Agent,
         context: list[Task] | None = None,
-        *,
-        human_input: bool = False,
     ) -> Task:
         """Create a Task wired to the given agent and optional upstream context."""
         description, expected_output = cls.load_prompt()
@@ -56,5 +54,4 @@ class SquadMember(ABC):
             expected_output=expected_output,
             agent=agent,
             context=context or [],
-            human_input=human_input,
         )

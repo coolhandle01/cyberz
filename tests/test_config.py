@@ -94,16 +94,16 @@ class TestScanConfig:
 
 
 class TestAppConfig:
-    def test_human_approval_defaults_true(self, monkeypatch):
-        monkeypatch.delenv("HUMAN_APPROVAL", raising=False)
+    def test_approval_mode_defaults_interactive(self, monkeypatch):
+        monkeypatch.delenv("APPROVAL_MODE", raising=False)
         from config import AppConfig
 
         c = AppConfig()
-        assert c.human_approval is True
+        assert c.approval_mode == "interactive"
 
-    def test_human_approval_disabled_via_env(self, monkeypatch):
-        monkeypatch.setenv("HUMAN_APPROVAL", "false")
+    def test_approval_mode_auto_via_env(self, monkeypatch):
+        monkeypatch.setenv("APPROVAL_MODE", "auto")
         from config import AppConfig
 
         c = AppConfig()
-        assert c.human_approval is False
+        assert c.approval_mode == "auto"
