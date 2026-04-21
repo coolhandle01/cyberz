@@ -22,14 +22,15 @@ from squad.vulnerability_researcher import VulnerabilityResearcher
 
 
 def build_tasks(agents: dict) -> list[Task]:
-    # Pauses for operator review before any scanning begins.
+    # Gate 1: approve or reject the selected programme before any scanning begins.
     select = ProgrammeManager.build_task(agents["programme_manager"], human_input=True)
     recon = OsintAnalyst.build_task(agents["osint_analyst"], context=[select])
     pentest = PenetrationTester.build_task(agents["penetration_tester"], context=[recon])
+    # Gate 2: verify triage conclusions before spending tokens on report writing.
     triage = VulnerabilityResearcher.build_task(
-        agents["vulnerability_researcher"], context=[pentest, select]
+        agents["vulnerability_researcher"], context=[pentest, select], human_input=True
     )
-    # Pauses for operator review before the report is submitted to H1.
+    # Gate 3: review the finished report before it is submitted to H1.
     write = TechnicalAuthor.build_task(
         agents["technical_author"], context=[triage, select], human_input=True
     )
