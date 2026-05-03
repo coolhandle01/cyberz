@@ -7,7 +7,7 @@ human_input=True on a task tells CrewAI to pause after the agent finishes and
 prompt the operator for feedback before advancing. Empty feedback (Enter) accepts
 the result; typed feedback re-invokes the agent with that guidance.
 
-Set CYBERSQUAD_HUMAN_INPUT=false to disable all gates (e.g. for automated/container runs).
+Set CYBERSQUAD_HUMAN_INPUT=false to disable all gates for unattended runs.
 """
 
 from __future__ import annotations
