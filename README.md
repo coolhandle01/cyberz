@@ -1,6 +1,6 @@
 # cybersquad
 
-An autonomous bug bounty pipeline powered by [CrewAI](https://github.com/crewAIInc/crewAI) and Claude. Six AI agents model a full-stack security team: they select HackerOne programmes, map attack surface, run vulnerability scans, triage findings, write professional disclosure reports, and submit them — all in a sequential, auditable pipeline with human approval gates.
+An autonomous bug bounty pipeline powered by [CrewAI](https://github.com/crewAIInc/crewAI) and Claude. Six AI agents model a full-stack security team: they select HackerOne programmes, map attack surface, run vulnerability scans, triage findings, write professional disclosure reports, and submit them — all in a sequential, auditable pipeline.
 
 > **Legal notice** — You are solely responsible for ensuring every target is in scope, every scan is authorised, and every submission is accurate. Never disable or bypass the approval checkpoints.
 
@@ -27,7 +27,7 @@ Programme Manager ──▶ [selection gate] ──▶ OSINT Analyst ──▶ P
                                            HackerOne API
 ```
 
-At each approval gate the pipeline pauses, renders a summary of what the agent produced, and waits for your explicit confirmation before continuing.
+With `CYBERSQUAD_HUMAN_INPUT=true` (the default) the pipeline pauses after programme selection, triage, and report writing, and waits for your confirmation before continuing. Set it to `false` for fully automated runs (e.g. in a container).
 
 | Agent | Responsibility | Tools |
 |---|---|---|
@@ -100,6 +100,7 @@ ANTHROPIC_API_KEY=your-anthropic-key
 | `SCAN_DELAY` | `0.5` | Seconds between scan requests |
 | `NUCLEI_RATE_LIMIT` | `10` | Nuclei requests per second |
 | `REPORTS_DIR` | `./reports` | Directory for generated report files |
+| `CYBERSQUAD_HUMAN_INPUT` | `true` | Pause for operator approval between stages; set `false` for automated runs |
 
 ---
 
@@ -109,14 +110,15 @@ ANTHROPIC_API_KEY=your-anthropic-key
 # Preview agents, tools, and pipeline order — no execution, no API calls
 python main.py --dry-run
 
-# Full run with interactive approval checkpoints
+# Full run (pauses for human approval at each stage by default)
 python main.py
+
+# Fully automated — no pauses
+CYBERSQUAD_HUMAN_INPUT=false python main.py
 
 # Verbose LLM output
 python main.py --verbose
 ```
-
-The pipeline pauses three times: after programme selection (before any scanning begins), after triage (before spending tokens on report writing), and after the report is written (before submission to H1). At each checkpoint a summary panel is displayed and you must explicitly approve to continue.
 
 Generated reports are saved to `REPORTS_DIR` as Markdown files.
 
@@ -217,7 +219,7 @@ Edit any of the five prose files in `squad/<member>/`: `role.md`, `goal.md`, `ba
 
 - **Only scan authorised targets.** The Programme Manager filters for programmes that explicitly permit automated scanning. Do not remove or weaken this check.
 - **Respect rate limits.** `SCAN_DELAY` and `NUCLEI_RATE_LIMIT` exist for a reason. Aggressive scanning can violate programme terms and get you banned.
-- **Read before you approve.** The approval checkpoints are not decorative. Review the programme selection and the report carefully before confirming each gate.
+- **Read before you approve.** When running with `CYBERSQUAD_HUMAN_INPUT=true`, review the programme selection and the report carefully before confirming each pause.
 - **Check for duplicates.** Submitting a known duplicate wastes triage time and reflects poorly on the submission record.
 - **Handle reports carefully.** The `reports/` directory contains vulnerability details and evidence. It is gitignored — do not commit or share its contents.
 
