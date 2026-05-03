@@ -6,7 +6,7 @@ Each model represents a discrete artefact that agents pass to one another.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 
 from pydantic import BaseModel, Field
@@ -65,7 +65,7 @@ class Programme(BaseModel):
     out_of_scope: list[ScopeItem]
     allows_automated_scanning: bool
     priority_score: float = 0.0
-    selected_at: datetime = Field(default_factory=datetime.utcnow)
+    selected_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 # Recon (OSINT Analyst -> Penetration Tester)
@@ -89,7 +89,7 @@ class ReconResult(BaseModel):
     open_ports: dict[str, list[int]] = Field(default_factory=dict)
     technologies: list[str] = Field(default_factory=list)
     notes: str = ""
-    completed_at: datetime = Field(default_factory=datetime.utcnow)
+    completed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 # Vulnerability findings (Penetration Tester -> Vulnerability Researcher)
@@ -121,7 +121,7 @@ class VerifiedVulnerability(BaseModel):
     impact: str
     remediation: str
     in_scope: bool = True
-    confirmed_at: datetime = Field(default_factory=datetime.utcnow)
+    confirmed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 # Report (Technical Author -> Disclosure Coordinator)
@@ -139,7 +139,7 @@ class DisclosureReport(BaseModel):
     structured_scope_id: str | None = None
     impact_statement: str
     attachments: list[str] = Field(default_factory=list)
-    authored_at: datetime = Field(default_factory=datetime.utcnow)
+    authored_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 # Submission (Disclosure Coordinator)
