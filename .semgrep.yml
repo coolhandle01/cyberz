@@ -1,3 +1,8 @@
+configs:
+  - p/python
+  - p/security-audit
+  - p/owasp-top-ten
+
 rules:
   - id: ignore-b108-tmp-sqlmap
     patterns:
@@ -6,3 +11,5 @@ rules:
     message: "B108 is a false positive for default config values"
     languages: [python]
     severity: INFO
+    metadata:
+      semgrep.ignore: true
