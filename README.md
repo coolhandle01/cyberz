@@ -9,22 +9,7 @@ An autonomous bug bounty pipeline powered by [CrewAI](https://github.com/crewAII
 ## How it works
 
 ```
-Programme Manager ──▶ [selection gate] ──▶ OSINT Analyst ──▶ Penetration Tester
-                                                                        │
-                                                                        ▼
-                                          [triage gate] ◀── Vulnerability Researcher
-                                                 │
-                                                 ▼
-                                         Technical Author
-                                                 │
-                                                 ▼
-                                       [submission gate]
-                                                 │
-                                                 ▼
-                                      Disclosure Coordinator
-                                                 │
-                                                 ▼
-                                           HackerOne API
+Programme Manager ──▶ OSINT Analyst ──▶ Penetration Tester ──▶ Vulnerability Researcher ──▶ Technical Author ──▶ Disclosure Coordinator ──▶ HackerOne API
 ```
 
 With `CYBERSQUAD_HUMAN_INPUT=true` (the default) the pipeline pauses after programme selection, triage, and report writing, and waits for your confirmation before continuing. Set it to `false` for fully automated runs (e.g. in a container).
