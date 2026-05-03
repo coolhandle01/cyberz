@@ -1,5 +1,5 @@
 """
-main.py — Bounty Squad pipeline entrypoint.
+main.py - Bounty Squad pipeline entrypoint.
 
 Usage:
     python main.py             # single run, settings from .env / env vars
@@ -51,7 +51,7 @@ logger = logging.getLogger("bounty_squad")
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Bounty Squad — autonomous bug bounty pipeline",
+        description="Bounty Squad - autonomous bug bounty pipeline",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
@@ -71,7 +71,7 @@ def check_env() -> None:
 
 def dry_run_summary(crew: Any) -> None:  # noqa: ANN401
     """Render the crew layout as rich tables without executing."""
-    console.rule("[bold cyan]BOUNTY SQUAD — DRY RUN[/bold cyan]")
+    console.rule("[bold cyan]BOUNTY SQUAD - DRY RUN[/bold cyan]")
     console.print()
 
     agents_table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2))
@@ -90,11 +90,11 @@ def dry_run_summary(crew: Any) -> None:  # noqa: ANN401
     tasks_table.add_column("Task")
     tasks_table.add_column("Human review")
     for i, task in enumerate(crew.tasks):
-        review_cell = "[yellow]▶ pauses for feedback[/yellow]" if task.human_input else ""
+        review_cell = "[yellow]> pauses for feedback[/yellow]" if task.human_input else ""
         tasks_table.add_row(
             str(i + 1),
             task.agent.role,
-            task.description[:72].strip() + "…",
+            task.description[:72].strip() + "...",
             review_cell,
         )
     console.print(Panel(tasks_table, title="Pipeline  [dim](sequential)[/dim]"))

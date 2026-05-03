@@ -1,5 +1,5 @@
 """
-tools/recon_tools.py — OSINT and reconnaissance tooling for the OSINT Analyst.
+tools/recon_tools.py - OSINT and reconnaissance tooling for the OSINT Analyst.
 
 Wraps external binaries (subfinder, httpx, nmap) and pure-Python helpers.
 
@@ -89,7 +89,7 @@ def probe_endpoints(hosts: list[str]) -> list[Endpoint]:
     Returns Endpoint objects with status codes and detected technologies.
     """
     httpx_bin = _require_binary("httpx")
-    # FIX: input_data was computed but never passed — httpx received no targets
+    # FIX: input_data was computed but never passed - httpx received no targets
     input_data = "\n".join(hosts)
 
     result = _run(
@@ -152,7 +152,7 @@ def port_scan(hosts: list[str]) -> dict[str, list[int]]:
                         except ValueError:
                             pass
         results[host] = open_ports
-        logger.info("nmap: %s → %s", host, open_ports)
+        logger.info("nmap: %s -> %s", host, open_ports)
 
     return results
 
@@ -180,7 +180,7 @@ def filter_in_scope(hosts: list[str], programme: Programme) -> list[str]:
                 continue
             pattern = scope_item.asset_identifier.lstrip("*.")
             # FIX: bare endswith(pattern) allowed evil.notexample.com to match
-            # example.com — must verify a dot boundary or exact match
+            # example.com - must verify a dot boundary or exact match
             if host == pattern or host.endswith("." + pattern):
                 allowed.append(host)
                 break
@@ -194,7 +194,7 @@ def filter_in_scope(hosts: list[str], programme: Programme) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# Orchestration — called by the OSINT Analyst agent task
+# Orchestration - called by the OSINT Analyst agent task
 # ---------------------------------------------------------------------------
 
 

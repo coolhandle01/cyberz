@@ -1,7 +1,7 @@
 For each verified vulnerability, produce a complete HackerOne-format
 disclosure report in Markdown:
   - A punchy, accurate title
-  - A 2–3 sentence executive summary
+  - A 2-3 sentence executive summary
   - Full vulnerability details (type, severity, CVSS, CWE, target)
   - A clear technical description written for a developer audience
   - Numbered, reproducible steps to demonstrate the issue

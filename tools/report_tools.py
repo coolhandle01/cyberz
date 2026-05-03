@@ -1,5 +1,5 @@
 """
-tools/report_tools.py — Report generation for the Technical Author agent.
+tools/report_tools.py - Report generation for the Technical Author agent.
 
 Produces structured, professional H1-compatible Markdown reports from
 verified vulnerabilities.

@@ -1,5 +1,5 @@
 """
-squad/__init__.py — shared SquadMember dataclass + agent/task builders.
+squad/__init__.py - shared SquadMember dataclass + agent/task builders.
 
 Each sub-package declares one module-level ``MEMBER = SquadMember(...)`` constant.
 Prose lives in five single-purpose markdown files alongside it:

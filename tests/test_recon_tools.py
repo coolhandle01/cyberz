@@ -1,5 +1,5 @@
 """
-tests/test_recon_tools.py — unit tests for tools/recon_tools.py
+tests/test_recon_tools.py - unit tests for tools/recon_tools.py
 
 Focuses on the scope guard (security-critical) and domain extraction.
 Subprocess calls are mocked so tests run without binaries installed.
@@ -23,7 +23,7 @@ from tools.recon_tools import (
 pytestmark = pytest.mark.unit
 
 
-# ── extract_domain ────────────────────────────────────────────────────────────
+# -- extract_domain ------------------------------------------------------------
 
 
 class TestExtractDomain:
@@ -43,12 +43,12 @@ class TestExtractDomain:
         assert extract_domain("https://example.com:8443") == "example.com"
 
 
-# ── filter_in_scope ───────────────────────────────────────────────────────────
+# -- filter_in_scope -----------------------------------------------------------
 
 
 class TestFilterInScope:
     """
-    The scope guard is security-critical — an out-of-scope false positive
+    The scope guard is security-critical - an out-of-scope false positive
     would cause us to test targets we're not authorised to touch.
     """
 
@@ -101,7 +101,7 @@ class TestFilterInScope:
         assert filter_in_scope(["example.com"], bare_programme) == []
 
 
-# ── enumerate_subdomains ──────────────────────────────────────────────────────
+# -- enumerate_subdomains ------------------------------------------------------
 
 
 class TestEnumerateSubdomains:
@@ -154,7 +154,7 @@ class TestEnumerateSubdomains:
         assert result == []
 
 
-# ── probe_endpoints ───────────────────────────────────────────────────────────
+# -- probe_endpoints -----------------------------------------------------------
 
 
 class TestProbeEndpoints:
@@ -221,7 +221,7 @@ class TestProbeEndpoints:
                 probe_endpoints(["example.com"])
 
 
-# ── port_scan ─────────────────────────────────────────────────────────────────
+# -- port_scan -----------------------------------------------------------------
 
 
 class TestPortScan:

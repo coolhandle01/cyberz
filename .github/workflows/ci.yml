@@ -20,13 +20,13 @@ jobs:
       - name: Install dev dependencies
         run: pip install -e ".[dev]"
 
-      - name: ruff — lint
+      - name: ruff - lint
         run: ruff check .
 
-      - name: ruff — format check
+      - name: ruff - format check
         run: ruff format --check .
 
-      - name: mypy — type check
+      - name: mypy - type check
         run: mypy . --ignore-missing-imports
 
   test:
@@ -69,10 +69,10 @@ jobs:
       - name: Install SAST tools
         run: pip install bandit[toml] semgrep
 
-      - name: bandit — security lint
+      - name: bandit - security lint
         run: bandit -c pyproject.toml -r . -q
 
-      - name: semgrep — SAST scan
+      - name: semgrep - SAST scan
         run: >
           semgrep scan
           --config=p/python

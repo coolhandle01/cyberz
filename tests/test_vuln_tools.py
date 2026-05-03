@@ -1,5 +1,5 @@
 """
-tests/test_vuln_tools.py — unit tests for tools/vuln_tools.py
+tests/test_vuln_tools.py - unit tests for tools/vuln_tools.py
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from tools.vuln_tools import (
 pytestmark = pytest.mark.unit
 
 
-# ── _above_floor ──────────────────────────────────────────────────────────────
+# -- _above_floor --------------------------------------------------------------
 
 
 class TestAboveFloor:
@@ -61,7 +61,7 @@ class TestAboveFloor:
         assert vt._above_floor(Severity.INFORMATIONAL) is False
 
 
-# ── _lookup_cvss ──────────────────────────────────────────────────────────────
+# -- _lookup_cvss --------------------------------------------------------------
 
 
 class TestLookupCvss:
@@ -84,7 +84,7 @@ class TestLookupCvss:
         assert len(result) == 2
 
 
-# ── is_in_scope ───────────────────────────────────────────────────────────────
+# -- is_in_scope ---------------------------------------------------------------
 
 
 class TestIsInScope:
@@ -95,7 +95,7 @@ class TestIsInScope:
         assert is_in_scope(raw_finding_oos, programme) is False
 
 
-# ── triage_findings ───────────────────────────────────────────────────────────
+# -- triage_findings -----------------------------------------------------------
 
 
 class TestTriageFindings:
@@ -140,7 +140,7 @@ class TestTriageFindings:
         assert results[0].target == raw_finding_high.target
 
 
-# ── run_nuclei ────────────────────────────────────────────────────────────────
+# -- run_nuclei ----------------------------------------------------------------
 
 
 class TestRunNuclei:
@@ -180,7 +180,7 @@ class TestRunNuclei:
                 run_nuclei(endpoints)
 
 
-# ── check_cors_misconfiguration ───────────────────────────────────────────────
+# -- check_cors_misconfiguration -----------------------------------------------
 
 
 class TestCheckCorsMisconfiguration:

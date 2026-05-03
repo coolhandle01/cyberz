@@ -1,4 +1,4 @@
-"""Disclosure Coordinator — submits finalised reports to HackerOne."""
+"""Disclosure Coordinator - submits finalised reports to HackerOne."""
 
 from __future__ import annotations
 

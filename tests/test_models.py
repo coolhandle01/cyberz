@@ -1,5 +1,5 @@
 """
-tests/test_models.py — unit tests for models.py
+tests/test_models.py - unit tests for models.py
 """
 
 from __future__ import annotations

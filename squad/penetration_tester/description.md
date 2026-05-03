@@ -11,4 +11,4 @@ finding's vuln_class field so triage can prioritise correctly.
 
 Respect the configured request rate limit. Do not attempt exploits
 beyond proof-of-concept. Capture tool output as evidence.
-Return all raw findings regardless of confidence — triage comes next.
+Return all raw findings regardless of confidence - triage comes next.

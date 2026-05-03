@@ -1,5 +1,5 @@
 """
-crew.py — Assembles the Bounty Squad into a CrewAI Pipeline.
+crew.py - Assembles the Bounty Squad into a CrewAI Pipeline.
 
 Call build_crew() to get a fully wired crew, then crew.kickoff() to run it.
 """

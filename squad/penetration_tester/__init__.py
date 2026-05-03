@@ -1,4 +1,4 @@
-"""Penetration Tester — scans discovered attack surface for vulnerabilities."""
+"""Penetration Tester - scans discovered attack surface for vulnerabilities."""
 
 from __future__ import annotations
 

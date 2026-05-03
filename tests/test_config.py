@@ -1,5 +1,5 @@
 """
-tests/test_config.py — unit tests for config.py
+tests/test_config.py - unit tests for config.py
 """
 
 from __future__ import annotations

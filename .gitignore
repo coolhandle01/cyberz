@@ -15,7 +15,7 @@ build/
 venv/
 env/
 
-# Reports output (contain vuln data — never commit)
+# Reports output (contain vuln data - never commit)
 reports/
 
 # Tool artefacts

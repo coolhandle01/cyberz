@@ -1,5 +1,5 @@
 """
-tasks.py — Pipeline task wiring.
+tasks.py - Pipeline task wiring.
 
 Context chaining lives here because it is a pipeline concern, not a per-member one.
 

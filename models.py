@@ -1,5 +1,5 @@
 """
-models.py — Pydantic data models shared across the entire pipeline.
+models.py - Pydantic data models shared across the entire pipeline.
 
 Each model represents a discrete artefact that agents pass to one another.
 """
@@ -45,7 +45,7 @@ class SubmissionStatus(StrEnum):
 
 
 # ---------------------------------------------------------------------------
-# Programme selection (Programme Manager → everyone)
+# Programme selection (Programme Manager -> everyone)
 # ---------------------------------------------------------------------------
 
 
@@ -73,7 +73,7 @@ class Programme(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Recon (OSINT Analyst → Penetration Tester)
+# Recon (OSINT Analyst -> Penetration Tester)
 # ---------------------------------------------------------------------------
 
 
@@ -99,7 +99,7 @@ class ReconResult(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Vulnerability findings (Penetration Tester → Vulnerability Researcher)
+# Vulnerability findings (Penetration Tester -> Vulnerability Researcher)
 # ---------------------------------------------------------------------------
 
 
@@ -133,7 +133,7 @@ class VerifiedVulnerability(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Report (Technical Author → Disclosure Coordinator)
+# Report (Technical Author -> Disclosure Coordinator)
 # ---------------------------------------------------------------------------
 
 

@@ -1,5 +1,5 @@
 """
-tools/h1_api.py — HackerOne API wrapper.
+tools/h1_api.py - HackerOne API wrapper.
 
 Covers everything the pipeline needs:
   - Listing & ranking programmes
@@ -33,7 +33,7 @@ from models import (
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Severity mapping — H1 uses strings, we use our enum
+# Severity mapping - H1 uses strings, we use our enum
 # ---------------------------------------------------------------------------
 _H1_SEVERITY_MAP: dict[str, Severity] = {
     "none": Severity.INFORMATIONAL,
@@ -193,7 +193,7 @@ class H1Client:
                     "program": {
                         "data": {
                             "type": "program",
-                            # FIX: was {"attributes": {"handle": ...}} → 422 on every submit
+                            # FIX: was {"attributes": {"handle": ...}} -> 422 on every submit
                             "id": report.programme_handle,
                         }
                     }
@@ -235,6 +235,6 @@ class H1Client:
 
 
 # ---------------------------------------------------------------------------
-# Module-level singleton — import this rather than H1Client directly
+# Module-level singleton - import this rather than H1Client directly
 # ---------------------------------------------------------------------------
 h1 = H1Client()
