@@ -18,6 +18,7 @@ from models import (
     VerifiedVulnerability,
 )
 
+
 # Programme fixtures
 @pytest.fixture()
 def scope_item_url() -> ScopeItem:
