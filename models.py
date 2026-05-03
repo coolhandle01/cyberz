@@ -1,5 +1,5 @@
 """
-models.py — Pydantic data models shared across the entire pipeline.
+models.py - Pydantic data models shared across the entire pipeline.
 
 Each model represents a discrete artefact that agents pass to one another.
 """
@@ -11,9 +11,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
-# ---------------------------------------------------------------------------
 # Enumerations
-# ---------------------------------------------------------------------------
 
 
 class Severity(StrEnum):
@@ -44,9 +42,7 @@ class SubmissionStatus(StrEnum):
     INFORMATIVE = "informative"
 
 
-# ---------------------------------------------------------------------------
-# Programme selection (Programme Manager → everyone)
-# ---------------------------------------------------------------------------
+# Programme selection (Programme Manager -> everyone)
 
 
 class ScopeItem(BaseModel):
@@ -72,9 +68,7 @@ class Programme(BaseModel):
     selected_at: datetime = Field(default_factory=datetime.utcnow)
 
 
-# ---------------------------------------------------------------------------
-# Recon (OSINT Analyst → Penetration Tester)
-# ---------------------------------------------------------------------------
+# Recon (OSINT Analyst -> Penetration Tester)
 
 
 class Endpoint(BaseModel):
@@ -98,9 +92,7 @@ class ReconResult(BaseModel):
     completed_at: datetime = Field(default_factory=datetime.utcnow)
 
 
-# ---------------------------------------------------------------------------
-# Vulnerability findings (Penetration Tester → Vulnerability Researcher)
-# ---------------------------------------------------------------------------
+# Vulnerability findings (Penetration Tester -> Vulnerability Researcher)
 
 
 class RawFinding(BaseModel):
@@ -132,9 +124,7 @@ class VerifiedVulnerability(BaseModel):
     confirmed_at: datetime = Field(default_factory=datetime.utcnow)
 
 
-# ---------------------------------------------------------------------------
-# Report (Technical Author → Disclosure Coordinator)
-# ---------------------------------------------------------------------------
+# Report (Technical Author -> Disclosure Coordinator)
 
 
 class DisclosureReport(BaseModel):
@@ -152,9 +142,7 @@ class DisclosureReport(BaseModel):
     authored_at: datetime = Field(default_factory=datetime.utcnow)
 
 
-# ---------------------------------------------------------------------------
 # Submission (Disclosure Coordinator)
-# ---------------------------------------------------------------------------
 
 
 class SubmissionResult(BaseModel):
@@ -167,9 +155,7 @@ class SubmissionResult(BaseModel):
     error: str | None = None
 
 
-# ---------------------------------------------------------------------------
 # Operational metrics (emitted after every pipeline run)
-# ---------------------------------------------------------------------------
 
 
 class RunMetrics(BaseModel):

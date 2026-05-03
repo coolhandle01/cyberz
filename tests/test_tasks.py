@@ -1,4 +1,4 @@
-"""tests/test_tasks.py — unit tests for squad assembly and task wiring."""
+"""tests/test_tasks.py - unit tests for squad assembly and task wiring."""
 
 from __future__ import annotations
 

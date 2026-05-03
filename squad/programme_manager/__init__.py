@@ -1,4 +1,4 @@
-"""Programme Manager — selects the highest-value H1 programme."""
+"""Programme Manager - selects the highest-value H1 programme."""
 
 from __future__ import annotations
 

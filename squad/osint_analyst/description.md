@@ -5,6 +5,6 @@ reconnaissance against all in-scope assets:
   - Perform lightweight port scanning on live hosts
   - Identify technology stacks
 
-Strictly enforce scope — do not interact with any asset not listed
+Strictly enforce scope - do not interact with any asset not listed
 as in-scope. Document all discovered subdomains, endpoints, open ports,
 and detected technologies.

@@ -5,15 +5,15 @@
 The scan tools (subfinder, httpx, nmap, nuclei, sqlmap) are currently assumed
 to be on `PATH`. This has several failure modes:
 
-- **Version drift** — different machines run different tool versions, producing
+- **Version drift** - different machines run different tool versions, producing
   inconsistent results and CI failures
-- **Blast radius** — a misconfigured scan tool running on the host has access
+- **Blast radius** - a misconfigured scan tool running on the host has access
   to the operator's entire network namespace
-- **No resource limits** — a runaway nuclei or sqlmap job can saturate the
+- **No resource limits** - a runaway nuclei or sqlmap job can saturate the
   host's CPU/network indefinitely
-- **No audit trail** — tool invocations are not captured anywhere beyond
+- **No audit trail** - tool invocations are not captured anywhere beyond
   application logs
-- **Observability gap** — token cost and HTTP metrics are tracked in
+- **Observability gap** - token cost and HTTP metrics are tracked in
   `tools/metrics.py`, but scan volume, tool runtimes, and per-programme cost
   are invisible
 
@@ -22,22 +22,22 @@ to be on `PATH`. This has several failure modes:
 ## Proposed architecture
 
 ```
-┌──────────────────────────────────────────────────────────────────────────┐
-│  docker-compose.yml                                                      │
-│                                                                          │
-│  ┌──────────────┐   ┌──────────────┐   ┌──────────────────────────────┐ │
-│  │  bounty-squad │   │  scan-runner │   │  observability               │ │
-│  │  (Python app) │──▶│  (tools only)│   │  ┌──────────┐  ┌──────────┐ │ │
-│  │               │   │              │   │  │Prometheus│  │ Langfuse │ │ │
-│  │  Port: none   │   │  subfinder   │   │  └────┬─────┘  │ Port:3000│ │ │
-│  │  Net: internal│   │  httpx       │   │       │         └────┬─────┘ │ │
-│  └──────────────┘   │  nmap        │   │  ┌────▼─────┐        │       │ │
-│                      │  nuclei      │   │  │ Grafana  │   ┌────▼─────┐ │ │
-│                      │  sqlmap      │   │  │ Port:3001│   │Postgres  │ │ │
-│                      │              │   │  └──────────┘   └──────────┘ │ │
-│                      │  Net: scan   │   └──────────────────────────────┘ │
-│                      └──────────────┘                                    │
-└──────────────────────────────────────────────────────────────────────────┘
++--------------------------------------------------------------------------+
+|  docker-compose.yml                                                      |
+|                                                                          |
+|  +--------------+   +--------------+   +------------------------------+ |
+|  |  bounty-squad |   |  scan-runner |   |  observability               | |
+|  |  (Python app) |-->|  (tools only)|   |  +----------+  +----------+ | |
+|  |               |   |              |   |  |Prometheus|  | Langfuse | | |
+|  |  Port: none   |   |  subfinder   |   |  +----+-----+  | Port:3000| | |
+|  |  Net: internal|   |  httpx       |   |       |         +----+-----+ | |
+|  +--------------+   |  nmap        |   |  +----▼-----+        |       | |
+|                      |  nuclei      |   |  | Grafana  |   +----▼-----+ | |
+|                      |  sqlmap      |   |  | Port:3001|   |Postgres  | | |
+|                      |              |   |  +----------+   +----------+ | |
+|                      |  Net: scan   |   +------------------------------+ |
+|                      +--------------+                                    |
++--------------------------------------------------------------------------+
 ```
 
 ### Networks
@@ -45,10 +45,10 @@ to be on `PATH`. This has several failure modes:
 | Network | Purpose |
 |---|---|
 | `internal` | App ↔ scan-runner communication only. No internet access. |
-| `scan` | scan-runner → target hosts. Egress only, no inbound. |
-| `observability` | App + scan-runner → Prometheus push gateway. Isolated. |
+| `scan` | scan-runner -> target hosts. Egress only, no inbound. |
+| `observability` | App + scan-runner -> Prometheus push gateway. Isolated. |
 
-The application container has **no direct internet access** — all outbound
+The application container has **no direct internet access** - all outbound
 traffic goes through the scan-runner. This means a prompt-injection attack that
 tricks an agent into making an arbitrary HTTP call is blocked at the network
 layer.
@@ -80,7 +80,7 @@ POST /scan/sqlmap      {"url": "...", "params": [...], ...}
 
 Each endpoint:
 1. Validates the request against the scope guard (same `filter_in_scope` logic,
-   but enforced server-side — belt and braces)
+   but enforced server-side - belt and braces)
 2. Runs the tool with pre-pinned binary versions
 3. Streams stdout/stderr to structured logs
 4. Returns parsed JSON output
@@ -93,7 +93,7 @@ downloads, not `apt install`. This guarantees reproducibility.
 
 Standard `prom/prometheus` and `grafana/grafana` images, version-pinned.
 Grafana on port 3001 (Langfuse takes 3000). Datasource and dashboards
-provisioned via config files — no manual setup.
+provisioned via config files - no manual setup.
 
 | Dashboard | Key panels |
 |---|---|
@@ -102,11 +102,11 @@ provisioned via config files — no manual setup.
 | **Programme ROI** | Estimated bounty / actual cost ratio per programme |
 | **Rate limiting** | Requests/sec vs configured `SCAN_DELAY`, 429 count |
 
-### `langfuse` + `postgres` — LLM observability
+### `langfuse` + `postgres` - LLM observability
 
 [Langfuse](https://langfuse.com) is self-hosted, open-source, and provides
 per-run traces of every LLM call: prompt sent, tool calls made, response
-received, token counts, latency. This is the layer Prometheus can't give you —
+received, token counts, latency. This is the layer Prometheus can't give you -
 *why* the agent made a decision, not just *that* it did.
 
 **Service setup:**
@@ -131,11 +131,11 @@ postgres:
   volumes: ["postgres_data:/var/lib/postgresql/data"]
 ```
 
-**Python integration** — add `langfuse` to dependencies and configure the
+**Python integration** - add `langfuse` to dependencies and configure the
 LangChain callback (zero application code changes required):
 
 ```python
-# crew.py — one addition to build_crew()
+# crew.py - one addition to build_crew()
 from langfuse.callback import CallbackHandler
 
 langfuse_handler = CallbackHandler()   # reads LANGFUSE_* env vars
@@ -143,7 +143,7 @@ return Crew(..., callbacks=[langfuse_handler])
 ```
 
 Each pipeline run then appears in the Langfuse UI as a trace tree:
-`build_crew → ProgrammeManager → [tool: list_programmes] → ...`
+`build_crew -> ProgrammeManager -> [tool: list_programmes] -> ...`
 
 **New env vars:**
 
@@ -171,13 +171,13 @@ entrypoint, then drops to a non-root user.
 
 ## Changes required in the Python codebase
 
-1. `tools/recon_tools.py` — replace `subprocess.run(["subfinder", ...])` etc.
+1. `tools/recon_tools.py` - replace `subprocess.run(["subfinder", ...])` etc.
    with `httpx.post(f"{config.scan_runner_url}/scan/subfinder", ...)`. The
    scope guard moves to the scan-runner, but keep a client-side check too.
-2. `tools/vuln_tools.py` — same pattern for nuclei and sqlmap.
-3. `config.py` — add `scan_runner_url: str` field.
-4. `tools/metrics.py` — add Prometheus push client for scan metrics.
-5. Tests — `scan_runner_url` defaults to a mock server in unit tests (no change
+2. `tools/vuln_tools.py` - same pattern for nuclei and sqlmap.
+3. `config.py` - add `scan_runner_url: str` field.
+4. `tools/metrics.py` - add Prometheus push client for scan metrics.
+5. Tests - `scan_runner_url` defaults to a mock server in unit tests (no change
    to existing test structure needed; just add `conftest.py` fixture for the
    mock server URL).
 
@@ -212,7 +212,7 @@ observability/
 - Scan-runner runs as UID 1000, no `CAP_NET_ADMIN` except for the `iptables`
   setup step (which runs as root then drops privileges)
 - All tool binaries are verified by SHA-256 at image build time
-- The scan-runner API has no authentication (internal network only) — add mTLS
+- The scan-runner API has no authentication (internal network only) - add mTLS
   if the deployment moves to a multi-tenant environment
 - `sqlmap` is explicitly rate-limited server-side regardless of client config
   (`--delay` enforced, `--risk` capped at 1 by the server)

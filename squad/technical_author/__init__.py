@@ -1,4 +1,4 @@
-"""Technical Author — writes professional H1-format disclosure reports."""
+"""Technical Author - writes professional H1-format disclosure reports."""
 
 from __future__ import annotations
 

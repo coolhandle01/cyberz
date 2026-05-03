@@ -1,4 +1,4 @@
-"""OSINT Analyst — maps the in-scope attack surface."""
+"""OSINT Analyst - maps the in-scope attack surface."""
 
 from __future__ import annotations
 

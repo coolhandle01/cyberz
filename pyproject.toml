@@ -41,7 +41,7 @@ bounty-squad = "main:main"
 packages = ["tools"]
 py-modules = ["config", "models", "tasks", "crew", "main"]
 
-# ── pytest ────────────────────────────────────────────────────────────────────
+# -- pytest --------------------------------------------------------------------
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -55,7 +55,7 @@ markers = [
     "integration: hits real APIs or binaries (skipped in CI by default)",
 ]
 
-# ── coverage ──────────────────────────────────────────────────────────────────
+# -- coverage ------------------------------------------------------------------
 
 [tool.coverage.run]
 source = ["."]
@@ -70,7 +70,7 @@ exclude_lines = [
     "raise NotImplementedError",
 ]
 
-# ── ruff ──────────────────────────────────────────────────────────────────────
+# -- ruff ----------------------------------------------------------------------
 
 [tool.ruff]
 target-version = "py312"
@@ -85,13 +85,13 @@ select = [
     "B",    # flake8-bugbear (common footguns)
     "C4",   # flake8-comprehensions
     "UP",   # pyupgrade (modernise syntax)
-    "S",    # flake8-bandit (security — basic layer)
+    "S",    # flake8-bandit (security - basic layer)
     "ANN",  # flake8-annotations (type hints)
 ]
 ignore = [
     "S101",    # use of assert (fine in tests)
-    "S603",    # subprocess call — we call binaries intentionally
-    "S607",    # partial path in subprocess — binaries found via shutil.which
+    "S603",    # subprocess call - we call binaries intentionally
+    "S607",    # partial path in subprocess - binaries found via shutil.which
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -101,7 +101,7 @@ ignore = [
 quote-style = "double"
 indent-style = "space"
 
-# ── mypy ──────────────────────────────────────────────────────────────────────
+# -- mypy ----------------------------------------------------------------------
 
 [tool.mypy]
 python_version = "3.12"
@@ -116,15 +116,15 @@ disallow_any_generics = false
 module = "tests.*"
 disallow_untyped_defs = false
 
-# ── bandit ────────────────────────────────────────────────────────────────────
+# -- bandit --------------------------------------------------------------------
 
 [tool.bandit]
 targets = ["."]
 exclude_dirs = ["tests", ".venv"]
 skips = [
-    "B404",  # import subprocess — we use it intentionally for binary wrappers
-    "B603",  # subprocess without shell=True — correct, we never use shell=True
-    "B607",  # partial executable path — resolved via shutil.which before call
+    "B404",  # import subprocess - we use it intentionally for binary wrappers
+    "B603",  # subprocess without shell=True - correct, we never use shell=True
+    "B607",  # partial executable path - resolved via shutil.which before call
 ]
 severity = "medium"
 confidence = "medium"

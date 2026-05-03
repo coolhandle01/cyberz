@@ -1,17 +1,20 @@
 """
-tasks.py — Pipeline task wiring.
+tasks.py - Pipeline task wiring.
 
 Context chaining lives here because it is a pipeline concern, not a per-member one.
 
 human_input=True on a task tells CrewAI to pause after the agent finishes and
 prompt the operator for feedback before advancing. Empty feedback (Enter) accepts
 the result; typed feedback re-invokes the agent with that guidance.
+
+Set CYBERSQUAD_HUMAN_INPUT=false to disable all gates for unattended runs.
 """
 
 from __future__ import annotations
 
 from crewai import Task
 
+from config import config
 from squad import build_task
 from squad.disclosure_coordinator import MEMBER as DISCLOSURE_COORDINATOR
 from squad.osint_analyst import MEMBER as OSINT_ANALYST
@@ -22,20 +25,18 @@ from squad.vulnerability_researcher import MEMBER as VULNERABILITY_RESEARCHER
 
 
 def build_tasks(agents: dict) -> list[Task]:
-    # Gate 1: approve or reject the selected programme before any scanning begins.
-    select = build_task(PROGRAMME_MANAGER, agents["programme_manager"], human_input=True)
+    hi = config.human_input
+    select = build_task(PROGRAMME_MANAGER, agents["programme_manager"], human_input=hi)
     recon = build_task(OSINT_ANALYST, agents["osint_analyst"], context=[select])
     pentest = build_task(PENETRATION_TESTER, agents["penetration_tester"], context=[recon])
-    # Gate 2: verify triage conclusions before spending tokens on report writing.
     triage = build_task(
         VULNERABILITY_RESEARCHER,
         agents["vulnerability_researcher"],
         context=[pentest, select],
-        human_input=True,
+        human_input=hi,
     )
-    # Gate 3: review the finished report before it is submitted to H1.
     write = build_task(
-        TECHNICAL_AUTHOR, agents["technical_author"], context=[triage, select], human_input=True
+        TECHNICAL_AUTHOR, agents["technical_author"], context=[triage, select], human_input=hi
     )
     submit = build_task(DISCLOSURE_COORDINATOR, agents["disclosure_coordinator"], context=[write])
     return [select, recon, pentest, triage, write, submit]

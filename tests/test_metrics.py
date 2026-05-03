@@ -1,4 +1,4 @@
-"""tests/test_metrics.py — unit tests for tools/metrics.py."""
+"""tests/test_metrics.py - unit tests for tools/metrics.py."""
 
 from __future__ import annotations
 

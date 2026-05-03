@@ -1,5 +1,5 @@
 """
-tools/report_tools.py — Report generation for the Technical Author agent.
+tools/report_tools.py - Report generation for the Technical Author agent.
 
 Produces structured, professional H1-compatible Markdown reports from
 verified vulnerabilities.
@@ -14,9 +14,7 @@ from pathlib import Path
 from config import config
 from models import DisclosureReport, Severity, VerifiedVulnerability
 
-# ---------------------------------------------------------------------------
 # CWE quick-reference
-# ---------------------------------------------------------------------------
 
 _VULN_CLASS_TO_CWE: dict[str, int] = {
     "SQLi": 89,

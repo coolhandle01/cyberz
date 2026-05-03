@@ -1,5 +1,5 @@
 """
-tools/h1_api.py — HackerOne API wrapper.
+tools/h1_api.py - HackerOne API wrapper.
 
 Covers everything the pipeline needs:
   - Listing & ranking programmes
@@ -32,9 +32,7 @@ from models import (
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Severity mapping — H1 uses strings, we use our enum
-# ---------------------------------------------------------------------------
+# Severity mapping - H1 uses strings, we use our enum
 _H1_SEVERITY_MAP: dict[str, Severity] = {
     "none": Severity.INFORMATIONAL,
     "low": Severity.LOW,
@@ -75,9 +73,7 @@ class H1Client:
             }
         )
 
-    # ------------------------------------------------------------------
     # Internal helpers
-    # ------------------------------------------------------------------
 
     def _get(self, path: str, params: dict | None = None) -> dict:
         url = f"{self._base}{path}"
@@ -91,9 +87,7 @@ class H1Client:
         resp.raise_for_status()
         return cast(dict, resp.json())
 
-    # ------------------------------------------------------------------
     # Programme discovery
-    # ------------------------------------------------------------------
 
     def list_programmes(self, page_size: int = 25) -> list[dict]:
         """
@@ -120,9 +114,7 @@ class H1Client:
         """Fetch the structured scope (in/out) for a programme."""
         return self._get(f"/programs/{handle}/structured_scopes")
 
-    # ------------------------------------------------------------------
     # Data parsers
-    # ------------------------------------------------------------------
 
     def parse_programme(self, raw: dict, scope_data: dict) -> Programme:
         """Convert raw H1 API dicts into a typed Programme model."""
@@ -170,9 +162,7 @@ class H1Client:
             allows_automated_scanning=allows_auto,
         )
 
-    # ------------------------------------------------------------------
     # Report submission
-    # ------------------------------------------------------------------
 
     def submit_report(self, report: DisclosureReport) -> SubmissionResult:
         """
@@ -193,7 +183,7 @@ class H1Client:
                     "program": {
                         "data": {
                             "type": "program",
-                            # FIX: was {"attributes": {"handle": ...}} → 422 on every submit
+                            # FIX: was {"attributes": {"handle": ...}} -> 422 on every submit
                             "id": report.programme_handle,
                         }
                     }
@@ -234,7 +224,5 @@ class H1Client:
         return status_map.get(state, SubmissionStatus.PENDING)
 
 
-# ---------------------------------------------------------------------------
-# Module-level singleton — import this rather than H1Client directly
-# ---------------------------------------------------------------------------
+# Module-level singleton - import this rather than H1Client directly
 h1 = H1Client()

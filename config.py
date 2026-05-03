@@ -1,5 +1,5 @@
 """
-config.py — Central configuration for the Bounty Squad pipeline.
+config.py - Central configuration for the Bounty Squad pipeline.
 Load secrets from environment variables; never hardcode credentials.
 """
 
@@ -15,7 +15,7 @@ class H1Config:
     api_token: str = field(default_factory=lambda: os.environ["H1_API_TOKEN"])
     base_url: str = "https://api.hackerone.com/v1"
     # FIX: use default_factory so os.getenv is called at instantiation time,
-    # not at class-definition time — allows monkeypatch to work in tests
+    # not at class-definition time - allows monkeypatch to work in tests
     min_bounty_threshold: int = field(
         default_factory=lambda: int(os.getenv("H1_MIN_BOUNTY", "500"))
     )
@@ -73,7 +73,7 @@ class ScanConfig:
 
 @dataclass
 class AppConfig:
-    """Top-level application config — compose all sub-configs here."""
+    """Top-level application config - compose all sub-configs here."""
 
     h1: H1Config = field(default_factory=H1Config)
     llm: LLMConfig = field(default_factory=LLMConfig)
@@ -81,7 +81,10 @@ class AppConfig:
     scan: ScanConfig = field(default_factory=ScanConfig)
     reports_dir: str = field(default_factory=lambda: os.getenv("REPORTS_DIR", "./reports"))
     verbose: bool = field(default_factory=lambda: os.getenv("VERBOSE", "false").lower() == "true")
+    human_input: bool = field(
+        default_factory=lambda: os.getenv("CYBERSQUAD_HUMAN_INPUT", "true").lower() == "true"
+    )
 
 
-# Singleton — import this everywhere rather than re-instantiating
+# Singleton - import this everywhere rather than re-instantiating
 config = AppConfig()

@@ -1,9 +1,9 @@
 """
-tools/vuln_tools.py — Penetration testing and vulnerability research tooling.
+tools/vuln_tools.py - Penetration testing and vulnerability research tooling.
 
 Two layers:
-  1. Penetration Tester  — automated scanning with nuclei, sqlmap, custom checks
-  2. Vulnerability Researcher — triage, CVSS scoring, scope validation
+  1. Penetration Tester  - automated scanning with nuclei, sqlmap, custom checks
+  2. Vulnerability Researcher - triage, CVSS scoring, scope validation
 
 External dependencies:
     nuclei   https://github.com/projectdiscovery/nuclei
@@ -29,9 +29,7 @@ from models import (
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
 # Severity helpers
-# ---------------------------------------------------------------------------
 
 _NUCLEI_SEVERITY_MAP: dict[str, Severity] = {
     "info": Severity.INFORMATIONAL,
@@ -67,9 +65,7 @@ def _run(cmd: list[str], timeout: int = 300) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
 
 
-# ---------------------------------------------------------------------------
 # Nuclei scanner
-# ---------------------------------------------------------------------------
 
 
 def run_nuclei(endpoints: list[Endpoint]) -> list[RawFinding]:
@@ -104,7 +100,7 @@ def run_nuclei(endpoints: list[Endpoint]) -> list[RawFinding]:
                 config.scan.min_severity,
                 "-json",
                 "-silent",
-                # FIX: was hardcoded "10" — now reads from config
+                # FIX: was hardcoded "10" - now reads from config
                 "-rate-limit",
                 str(config.scan.nuclei_rate_limit),
             ],
@@ -140,9 +136,7 @@ def run_nuclei(endpoints: list[Endpoint]) -> list[RawFinding]:
     return findings
 
 
-# ---------------------------------------------------------------------------
 # SQLMap scanner
-# ---------------------------------------------------------------------------
 
 
 def run_sqlmap(endpoints: list[Endpoint]) -> list[RawFinding]:
@@ -167,7 +161,7 @@ def run_sqlmap(endpoints: list[Endpoint]) -> list[RawFinding]:
                 str(config.scan.sqlmap_level),
                 "--risk",
                 str(config.scan.sqlmap_risk),
-                # FIX: was hardcoded "/tmp/sqlmap-output" — now reads from config
+                # FIX: was hardcoded "/tmp/sqlmap-output" - now reads from config
                 "--output-dir",
                 config.scan.sqlmap_output_dir,
                 "--forms",
@@ -178,7 +172,7 @@ def run_sqlmap(endpoints: list[Endpoint]) -> list[RawFinding]:
         if "sqlmap identified the following injection point" in result.stdout:
             findings.append(
                 RawFinding(
-                    title=f"SQL Injection — {ep.url}",
+                    title=f"SQL Injection - {ep.url}",
                     vuln_class="SQLi",
                     target=ep.url,
                     evidence=result.stdout[-2000:],
@@ -191,14 +185,12 @@ def run_sqlmap(endpoints: list[Endpoint]) -> list[RawFinding]:
     return findings
 
 
-# ---------------------------------------------------------------------------
 # Custom checks
-# ---------------------------------------------------------------------------
 
 
 def check_cors_misconfiguration(endpoints: list[Endpoint]) -> list[RawFinding]:
     """
-    Simple CORS misconfiguration check — sends a crafted Origin header
+    Simple CORS misconfiguration check - sends a crafted Origin header
     and inspects the Access-Control-Allow-Origin response header.
     """
     import time
@@ -222,7 +214,7 @@ def check_cors_misconfiguration(endpoints: list[Endpoint]) -> list[RawFinding]:
                 sev = Severity.HIGH if acac.lower() == "true" else Severity.MEDIUM
                 findings.append(
                     RawFinding(
-                        title=f"CORS Misconfiguration — {ep.url}",
+                        title=f"CORS Misconfiguration - {ep.url}",
                         vuln_class="CORS",
                         target=ep.url,
                         evidence=(
@@ -242,9 +234,7 @@ def check_cors_misconfiguration(endpoints: list[Endpoint]) -> list[RawFinding]:
     return findings
 
 
-# ---------------------------------------------------------------------------
 # Penetration Tester orchestration
-# ---------------------------------------------------------------------------
 
 
 def run_pentest(recon: ReconResult) -> list[RawFinding]:
@@ -261,13 +251,11 @@ def run_pentest(recon: ReconResult) -> list[RawFinding]:
         key=lambda f: _SEVERITY_FLOOR_ORDER.index(f.severity_hint),
         reverse=True,
     )
-    logger.info("Pentest complete — %d raw findings", len(all_findings))
+    logger.info("Pentest complete - %d raw findings", len(all_findings))
     return all_findings
 
 
-# ---------------------------------------------------------------------------
-# Vulnerability Researcher — triage & CVSS
-# ---------------------------------------------------------------------------
+# Vulnerability Researcher - triage & CVSS
 
 _CVSS_DEFAULTS: dict[str, dict[Severity, tuple[float, str]]] = {
     "SQLi": {
@@ -345,13 +333,13 @@ def triage_findings(
                     finding.evidence,
                 ],
                 evidence=finding.evidence,
-                impact=f"Potential {finding.vuln_class} impact — pending manual review.",
+                impact=f"Potential {finding.vuln_class} impact - pending manual review.",
                 remediation=f"Refer to OWASP guidance for {finding.vuln_class} remediation.",
             )
         )
 
     logger.info(
-        "Triage complete — %d/%d findings verified",
+        "Triage complete - %d/%d findings verified",
         len(verified),
         len(raw_findings),
     )

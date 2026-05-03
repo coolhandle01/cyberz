@@ -1,5 +1,5 @@
 """
-tests/conftest.py — shared fixtures for the Bounty Squad test suite.
+tests/conftest.py - shared fixtures for the Bounty Squad test suite.
 """
 
 from __future__ import annotations
@@ -18,9 +18,8 @@ from models import (
     VerifiedVulnerability,
 )
 
-# ── Programme fixtures ────────────────────────────────────────────────────────
 
-
+# Programme fixtures
 @pytest.fixture()
 def scope_item_url() -> ScopeItem:
     return ScopeItem(
@@ -57,9 +56,7 @@ def programme(scope_item_url, scope_item_wildcard) -> Programme:
     )
 
 
-# ── Recon fixtures ────────────────────────────────────────────────────────────
-
-
+# Recon fixtures
 @pytest.fixture()
 def endpoint() -> Endpoint:
     return Endpoint(
@@ -82,13 +79,11 @@ def recon_result(programme, endpoint) -> ReconResult:
     )
 
 
-# ── Vulnerability fixtures ────────────────────────────────────────────────────
-
-
+# Vulnerability fixtures
 @pytest.fixture()
 def raw_finding_high() -> RawFinding:
     return RawFinding(
-        title="SQL Injection — https://api.example.com/search",
+        title="SQL Injection - https://api.example.com/search",
         vuln_class="SQLi",
         target="https://api.example.com/search",
         evidence="sqlmap identified injection at parameter 'q'",
@@ -113,7 +108,7 @@ def raw_finding_low() -> RawFinding:
 def raw_finding_oos() -> RawFinding:
     """A finding whose target is outside programme scope."""
     return RawFinding(
-        title="XSS — https://other.com/search",
+        title="XSS - https://other.com/search",
         vuln_class="XSS",
         target="https://other.com/search",
         evidence="<script>alert(1)</script> reflected",
@@ -125,7 +120,7 @@ def raw_finding_oos() -> RawFinding:
 @pytest.fixture()
 def verified_vuln() -> VerifiedVulnerability:
     return VerifiedVulnerability(
-        title="SQL Injection — https://api.example.com/search",
+        title="SQL Injection - https://api.example.com/search",
         vuln_class="SQLi",
         target="https://api.example.com/search",
         severity=Severity.HIGH,

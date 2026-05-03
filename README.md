@@ -1,41 +1,26 @@
 # cybersquad
 
-An autonomous bug bounty pipeline powered by [CrewAI](https://github.com/crewAIInc/crewAI) and Claude. Six AI agents model a full-stack security team: they select HackerOne programmes, map attack surface, run vulnerability scans, triage findings, write professional disclosure reports, and submit them — all in a sequential, auditable pipeline with human approval gates.
+An autonomous bug bounty pipeline powered by [CrewAI](https://github.com/crewAIInc/crewAI) and Claude. Six AI agents model a full-stack security team: they select HackerOne programmes, map attack surface, run vulnerability scans, triage findings, write professional disclosure reports, and submit them - all in a sequential, auditable pipeline.
 
-> **Legal notice** — You are solely responsible for ensuring every target is in scope, every scan is authorised, and every submission is accurate. Never disable or bypass the approval checkpoints.
+> **Legal notice** - You are solely responsible for ensuring every target is in scope, every scan is authorised, and every submission is accurate. Never disable or bypass the approval checkpoints.
 
 ---
 
 ## How it works
 
 ```
-Programme Manager ──▶ [selection gate] ──▶ OSINT Analyst ──▶ Penetration Tester
-                                                                        │
-                                                                        ▼
-                                          [triage gate] ◀── Vulnerability Researcher
-                                                 │
-                                                 ▼
-                                         Technical Author
-                                                 │
-                                                 ▼
-                                       [submission gate]
-                                                 │
-                                                 ▼
-                                      Disclosure Coordinator
-                                                 │
-                                                 ▼
-                                           HackerOne API
+Programme Manager --> OSINT Analyst --> Penetration Tester --> Vulnerability Researcher --> Technical Author --> Disclosure Coordinator --> HackerOne API
 ```
 
-At each approval gate the pipeline pauses, renders a summary of what the agent produced, and waits for your explicit confirmation before continuing.
+With `CYBERSQUAD_HUMAN_INPUT=true` (the default) the pipeline pauses after programme selection, triage, and report writing, and waits for your confirmation before continuing. Set it to `false` for unattended runs.
 
 | Agent | Responsibility | Tools |
 |---|---|---|
 | Programme Manager | Ranks H1 programmes by bounty value; verifies automated scanning is permitted | HackerOne API |
 | OSINT Analyst | Enumerates subdomains, live endpoints, and open ports | subfinder, httpx, nmap |
 | Penetration Tester | Runs templated and targeted scans against discovered surface | nuclei, sqlmap |
-| Vulnerability Researcher | Triages raw findings, assigns CVSS 3.1 scores, validates scope | — |
-| Technical Author | Renders complete HackerOne-format Markdown disclosure reports | — |
+| Vulnerability Researcher | Triages raw findings, assigns CVSS 3.1 scores, validates scope | - |
+| Technical Author | Renders complete HackerOne-format Markdown disclosure reports | - |
 | Disclosure Coordinator | Submits reports via H1 API and records submission metadata | HackerOne API |
 
 ---
@@ -44,7 +29,7 @@ At each approval gate the pipeline pauses, renders a summary of what the agent p
 
 **Python 3.12+**
 
-**External binaries** — install and ensure each is on your `PATH`:
+**External binaries** - install and ensure each is on your `PATH`:
 
 | Binary | Purpose |
 |---|---|
@@ -89,7 +74,7 @@ H1_API_TOKEN=your-h1-api-token
 ANTHROPIC_API_KEY=your-anthropic-key
 ```
 
-**Key tunables** (all have sensible defaults — see `.env.example` for the full list):
+**Key tunables** (all have sensible defaults - see `.env.example` for the full list):
 
 | Variable | Default | Purpose |
 |---|---|---|
@@ -100,23 +85,25 @@ ANTHROPIC_API_KEY=your-anthropic-key
 | `SCAN_DELAY` | `0.5` | Seconds between scan requests |
 | `NUCLEI_RATE_LIMIT` | `10` | Nuclei requests per second |
 | `REPORTS_DIR` | `./reports` | Directory for generated report files |
+| `CYBERSQUAD_HUMAN_INPUT` | `true` | Pause for operator approval between stages; set `false` for automated runs |
 
 ---
 
 ## Running the pipeline
 
 ```bash
-# Preview agents, tools, and pipeline order — no execution, no API calls
+# Preview agents, tools, and pipeline order - no execution, no API calls
 python main.py --dry-run
 
-# Full run with interactive approval checkpoints
+# Full run (pauses for human approval at each stage by default)
 python main.py
+
+# Fully automated - no pauses
+CYBERSQUAD_HUMAN_INPUT=false python main.py
 
 # Verbose LLM output
 python main.py --verbose
 ```
-
-The pipeline pauses three times: after programme selection (before any scanning begins), after triage (before spending tokens on report writing), and after the report is written (before submission to H1). At each checkpoint a summary panel is displayed and you must explicitly approve to continue.
 
 Generated reports are saved to `REPORTS_DIR` as Markdown files.
 
@@ -126,33 +113,33 @@ Generated reports are saved to `REPORTS_DIR` as Markdown files.
 
 ```
 cybersquad/
-├── main.py            # CLI entrypoint
-├── crew.py            # Assembles LLM, agents, tasks, and approval gates
-├── tasks.py           # Pipeline wiring — context chaining and approval gates
-├── config.py          # Env-var-backed configuration (singleton: config.*)
-├── models.py          # Pydantic data contracts between agents
-│
-├── squad/             # One sub-package per agent
-│   ├── __init__.py    # SquadMember dataclass + build_agent() / build_task() helpers
-│   └── <member>/
-│       ├── __init__.py        # @tool functions + MEMBER = SquadMember(...) constant
-│       ├── role.md            # Agent role line
-│       ├── goal.md            # Agent goal (edit to tune behaviour)
-│       ├── backstory.md       # Agent backstory
-│       ├── description.md     # Task description
-│       └── expected_output.md # Task expected output
-│
-├── tools/
-│   ├── h1_api.py      # HackerOne REST client
-│   ├── metrics.py     # Token usage and cost tracking
-│   ├── recon_tools.py # subfinder / httpx / nmap wrappers + scope guard
-│   ├── report_tools.py# Markdown report renderer and file writer
-│   └── vuln_tools.py  # nuclei / sqlmap / custom check wrappers
-│
-├── tests/             # pytest unit tests (@pytest.mark.unit)
-├── proposals/         # Design proposals for upcoming features
-├── pyproject.toml
-└── .env.example
++-- main.py            # CLI entrypoint
++-- crew.py            # Assembles LLM, agents, tasks, and approval gates
++-- tasks.py           # Pipeline wiring - context chaining and approval gates
++-- config.py          # Env-var-backed configuration (singleton: config.*)
++-- models.py          # Pydantic data contracts between agents
+|
++-- squad/             # One sub-package per agent
+|   +-- __init__.py    # SquadMember dataclass + build_agent() / build_task() helpers
+|   +-- <member>/
+|       +-- __init__.py        # @tool functions + MEMBER = SquadMember(...) constant
+|       +-- role.md            # Agent role line
+|       +-- goal.md            # Agent goal (edit to tune behaviour)
+|       +-- backstory.md       # Agent backstory
+|       +-- description.md     # Task description
+|       +-- expected_output.md # Task expected output
+|
++-- tools/
+|   +-- h1_api.py      # HackerOne REST client
+|   +-- metrics.py     # Token usage and cost tracking
+|   +-- recon_tools.py # subfinder / httpx / nmap wrappers + scope guard
+|   +-- report_tools.py# Markdown report renderer and file writer
+|   +-- vuln_tools.py  # nuclei / sqlmap / custom check wrappers
+|
++-- tests/             # pytest unit tests (@pytest.mark.unit)
++-- proposals/         # Design proposals for upcoming features
++-- pyproject.toml
++-- .env.example
 ```
 
 ---
@@ -162,7 +149,7 @@ cybersquad/
 ### Tests
 
 ```bash
-# Unit tests — no network, no binaries, all mocked
+# Unit tests - no network, no binaries, all mocked
 H1_API_USERNAME=test H1_API_TOKEN=test pytest -m unit
 
 # With coverage
@@ -198,10 +185,10 @@ Edit any of the five prose files in `squad/<member>/`: `role.md`, `goal.md`, `ba
 
 ## Contributing
 
-- **Branch naming** — `feat/`, `fix/`, `chore/`, or `docs/` prefixes.
-- **One concern per PR** — a new agent, a new tool, a config change — not all three.
-- **No secrets in code** — credentials belong in `.env` (gitignored). New config fields go in `config.py` and must be documented in `.env.example`.
-- **Scope and safety** — changes to scanning behaviour must preserve rate-limiting and the scope guard in `recon_tools.py`. `filter_in_scope()` is a hard safety boundary; do not weaken it.
+- **Branch naming** - `feat/`, `fix/`, `chore/`, or `docs/` prefixes.
+- **One concern per PR** - a new agent, a new tool, a config change - not all three.
+- **No secrets in code** - credentials belong in `.env` (gitignored). New config fields go in `config.py` and must be documented in `.env.example`.
+- **Scope and safety** - changes to scanning behaviour must preserve rate-limiting and the scope guard in `recon_tools.py`. `filter_in_scope()` is a hard safety boundary; do not weaken it.
 
 ### CI jobs
 
@@ -217,12 +204,12 @@ Edit any of the five prose files in `squad/<member>/`: `role.md`, `goal.md`, `ba
 
 - **Only scan authorised targets.** The Programme Manager filters for programmes that explicitly permit automated scanning. Do not remove or weaken this check.
 - **Respect rate limits.** `SCAN_DELAY` and `NUCLEI_RATE_LIMIT` exist for a reason. Aggressive scanning can violate programme terms and get you banned.
-- **Read before you approve.** The approval checkpoints are not decorative. Review the programme selection and the report carefully before confirming each gate.
+- **Read before you approve.** When running with `CYBERSQUAD_HUMAN_INPUT=true`, review the programme selection and the report carefully before confirming each pause.
 - **Check for duplicates.** Submitting a known duplicate wastes triage time and reflects poorly on the submission record.
-- **Handle reports carefully.** The `reports/` directory contains vulnerability details and evidence. It is gitignored — do not commit or share its contents.
+- **Handle reports carefully.** The `reports/` directory contains vulnerability details and evidence. It is gitignored - do not commit or share its contents.
 
 ---
 
 ## Licence
 
-MIT — see `LICENSE`.
+MIT - see `LICENSE`.

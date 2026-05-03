@@ -1,7 +1,7 @@
 """
-tests/test_h1_api.py — unit tests for tools/h1_api.py
+tests/test_h1_api.py - unit tests for tools/h1_api.py
 
-All HTTP calls are mocked — no real H1 API calls made.
+All HTTP calls are mocked - no real H1 API calls made.
 """
 
 from __future__ import annotations
@@ -32,9 +32,7 @@ def h1_client(monkeypatch):
     return h1_module.H1Client()
 
 
-# ── parse_programme ───────────────────────────────────────────────────────────
-
-
+# parse_programme
 class TestParseProgramme:
     def _raw_programme(self):
         return {
@@ -97,9 +95,7 @@ class TestParseProgramme:
         assert len(prog.out_of_scope) == 1
 
 
-# ── submit_report ─────────────────────────────────────────────────────────────
-
-
+# submit_report
 class TestSubmitReport:
     def test_successful_submission(self, h1_client, disclosure_report):
         mock_response = MagicMock()
@@ -115,7 +111,7 @@ class TestSubmitReport:
         assert result.submitted_at is not None
 
     def test_submission_payload_uses_id_not_attributes(self, h1_client, disclosure_report):
-        """Regression: payload previously used attributes:{handle:} → 422."""
+        """Regression: payload previously used attributes:{handle:} -> 422."""
         mock_response = MagicMock()
         mock_response.json.return_value = {"data": {"id": "999"}}
         mock_response.raise_for_status = MagicMock()

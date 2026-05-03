@@ -1,5 +1,5 @@
 """
-tests/test_report_tools.py — unit tests for tools/report_tools.py
+tests/test_report_tools.py - unit tests for tools/report_tools.py
 """
 
 from __future__ import annotations
