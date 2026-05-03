@@ -198,3 +198,84 @@ class TestListProgrammes:
 
         assert result == {"data": []}
         assert "/programs/acme/structured_scopes" in mock_get.call_args[0][0]
+
+
+class TestGetProgrammeStats:
+    def test_returns_parsed_fields(self, h1_client):
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {
+            "data": {
+                "attributes": {
+                    "response_efficiency_percentage": 95,
+                    "average_time_to_first_programme_response_in_minutes": 120,
+                    "average_time_to_bounty_in_minutes": 14400,
+                    "average_time_to_resolution_in_minutes": 43200,
+                    "total_bounties_paid_in_cents": 500000,
+                    "state": "public_mode",
+                }
+            }
+        }
+
+        with patch.object(h1_client._session, "get", return_value=mock_response):
+            stats = h1_client.get_programme_stats("acme")
+
+        assert stats["handle"] == "acme"
+        assert stats["response_efficiency_pct"] == 95
+        assert stats["avg_time_to_bounty_minutes"] == 14400
+        assert stats["total_bounties_paid_cents"] == 500000
+
+    def test_accepting_reports_true_when_public_mode(self, h1_client):
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {"data": {"attributes": {"state": "public_mode"}}}
+
+        with patch.object(h1_client._session, "get", return_value=mock_response):
+            stats = h1_client.get_programme_stats("acme")
+
+        assert stats["accepting_reports"] is True
+
+    def test_accepting_reports_false_when_not_public_mode(self, h1_client):
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {"data": {"attributes": {"state": "private_mode"}}}
+
+        with patch.object(h1_client._session, "get", return_value=mock_response):
+            stats = h1_client.get_programme_stats("acme")
+
+        assert stats["accepting_reports"] is False
+
+
+class TestListReports:
+    def test_passes_programme_filter_param(self, h1_client):
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {"data": [{"id": "42"}]}
+
+        with patch.object(h1_client._session, "get", return_value=mock_response) as mock_get:
+            h1_client.list_reports("acme", page_size=10)
+
+        call_kwargs = mock_get.call_args
+        params = call_kwargs.kwargs.get("params") or call_kwargs[1].get("params", {})
+        assert params.get("filter[program][]") == "acme"
+        assert params.get("page[size]") == 10
+
+    def test_returns_data_list(self, h1_client):
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {"data": [{"id": "1"}, {"id": "2"}]}
+
+        with patch.object(h1_client._session, "get", return_value=mock_response):
+            result = h1_client.list_reports("acme")
+
+        assert result == [{"id": "1"}, {"id": "2"}]
+
+    def test_empty_data_returns_empty_list(self, h1_client):
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {"data": []}
+
+        with patch.object(h1_client._session, "get", return_value=mock_response):
+            result = h1_client.list_reports("acme")
+
+        assert result == []

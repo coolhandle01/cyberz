@@ -69,6 +69,7 @@ class ScanConfig:
     )
     min_severity: str = field(default_factory=lambda: os.getenv("MIN_SEVERITY", "medium"))
     request_delay: float = field(default_factory=lambda: float(os.getenv("SCAN_DELAY", "0.5")))
+    nvd_api_key: str | None = field(default_factory=lambda: os.getenv("NVD_API_KEY"))
 
 
 @dataclass

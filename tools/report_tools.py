@@ -98,6 +98,67 @@ _REPORT_TEMPLATE = """\
 """
 
 
+def calculate_cvss_score(vector: str) -> float:
+    """
+    Compute the CVSS 3.1 base score from a vector string.
+
+    Implements the CVSS 3.1 specification formula. Returns a value in 0.0-10.0.
+    Raises ValueError for unrecognised metric abbreviations or missing metrics.
+    """
+    # Metric value tables from CVSS 3.1 specification
+    _AV = {"N": 0.85, "A": 0.62, "L": 0.55, "P": 0.20}
+    _AC = {"L": 0.77, "H": 0.44}
+    _PR_U = {"N": 0.85, "L": 0.62, "H": 0.27}  # Scope: Unchanged
+    _PR_C = {"N": 0.85, "L": 0.68, "H": 0.50}  # Scope: Changed
+    _UI = {"N": 0.85, "R": 0.62}
+    _CIA = {"N": 0.00, "L": 0.22, "H": 0.56}
+
+    parts = vector.split("/")
+    if not parts or parts[0] not in ("CVSS:3.0", "CVSS:3.1"):
+        raise ValueError(f"Unrecognised CVSS version prefix in: {vector!r}")
+
+    metrics: dict[str, str] = {}
+    for part in parts[1:]:
+        if ":" not in part:
+            raise ValueError(f"Malformed metric component: {part!r}")
+        key, val = part.split(":", 1)
+        metrics[key] = val
+
+    try:
+        scope = metrics["S"]
+        av = _AV[metrics["AV"]]
+        ac = _AC[metrics["AC"]]
+        pr = (_PR_C if scope == "C" else _PR_U)[metrics["PR"]]
+        ui = _UI[metrics["UI"]]
+        c = _CIA[metrics["C"]]
+        i = _CIA[metrics["I"]]
+        a = _CIA[metrics["A"]]
+    except KeyError as exc:
+        raise ValueError(f"Missing or unknown CVSS metric: {exc}") from exc
+
+    iss = 1.0 - (1.0 - c) * (1.0 - i) * (1.0 - a)
+    if scope == "U":
+        impact = 6.42 * iss
+    else:
+        impact = 7.52 * (iss - 0.029) - 3.25 * ((iss - 0.02) ** 15)
+
+    if impact <= 0:
+        return 0.0
+
+    exploitability = 8.22 * av * ac * pr * ui
+
+    if scope == "U":
+        raw = min(impact + exploitability, 10.0)
+    else:
+        raw = min(1.08 * (impact + exploitability), 10.0)
+
+    # CVSS Roundup: round up to nearest tenth
+    import math
+
+    rounded = math.ceil(raw * 10) / 10
+    return round(rounded, 1)
+
+
 def _format_steps(steps: list[str]) -> str:
     return "\n".join(f"{i + 1}. {step}" for i, step in enumerate(steps))
 

@@ -209,6 +209,30 @@ class H1Client:
                 error=str(exc),
             )
 
+    def get_programme_stats(self, handle: str) -> dict:
+        """Return response efficiency and payout stats for a programme."""
+        data = self._get(f"/programs/{handle}")
+        attrs = data.get("data", {}).get("attributes", {})
+        return {
+            "handle": handle,
+            "response_efficiency_pct": attrs.get("response_efficiency_percentage"),
+            "avg_time_to_first_response_minutes": attrs.get(
+                "average_time_to_first_programme_response_in_minutes"
+            ),
+            "avg_time_to_bounty_minutes": attrs.get("average_time_to_bounty_in_minutes"),
+            "avg_time_to_resolution_minutes": attrs.get("average_time_to_resolution_in_minutes"),
+            "total_bounties_paid_cents": attrs.get("total_bounties_paid_in_cents"),
+            "accepting_reports": attrs.get("state") == "public_mode",
+        }
+
+    def list_reports(self, programme_handle: str, page_size: int = 25) -> list[dict]:
+        """List recent reports for a programme - used for duplicate detection."""
+        data = self._get(
+            "/reports",
+            params={"filter[program][]": programme_handle, "page[size]": page_size},
+        )
+        return list(data.get("data", []))
+
     def get_report_status(self, report_id: str) -> SubmissionStatus:
         """Poll the status of a previously submitted report."""
         data = self._get(f"/reports/{report_id}")

@@ -22,8 +22,28 @@ def submit_report_tool(report_json: str) -> dict:
     return result.model_dump()
 
 
+@tool("Check H1 Duplicate")
+def check_duplicate_tool(programme_handle: str, title: str) -> list[dict]:
+    """
+    Last-chance duplicate check before submission. Lists recent reports on this
+    programme whose titles resemble the given title. A match means another
+    researcher may have already submitted this finding.
+    """
+    reports = h1.list_reports(programme_handle, page_size=25)
+    title_lower = title.lower()
+    return [
+        {
+            "report_id": r.get("id"),
+            "title": r.get("attributes", {}).get("title"),
+            "state": r.get("attributes", {}).get("state"),
+        }
+        for r in reports
+        if title_lower[:30] in (r.get("attributes", {}).get("title") or "").lower()
+    ]
+
+
 MEMBER = SquadMember(
     slug="disclosure_coordinator",
     dir=Path(__file__).parent,
-    tools=[submit_report_tool],
+    tools=[submit_report_tool, check_duplicate_tool],
 )

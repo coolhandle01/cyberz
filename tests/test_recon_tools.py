@@ -13,9 +13,11 @@ import pytest
 
 from models import Programme
 from tools.recon_tools import (
+    cert_transparency,
     enumerate_subdomains,
     extract_domain,
     filter_in_scope,
+    historical_urls,
     port_scan,
     probe_endpoints,
 )
@@ -243,3 +245,92 @@ class TestPortScan:
         with patch("shutil.which", return_value=None):
             with pytest.raises(EnvironmentError, match="nmap"):
                 port_scan(["example.com"])
+
+
+# cert_transparency
+class TestCertTransparency:
+    def _crtsh_response(self):
+        return [
+            {"name_value": "api.example.com\nstage.example.com"},
+            {"name_value": "*.example.com"},
+            {"name_value": "other.notexample.com"},
+        ]
+
+    def test_returns_subdomains_ending_in_domain(self):
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.json.return_value = self._crtsh_response()
+
+        with patch("requests.get", return_value=mock_resp):
+            result = cert_transparency("example.com")
+
+        assert "api.example.com" in result
+        assert "stage.example.com" in result
+
+    def test_strips_wildcard_prefix(self):
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.json.return_value = [{"name_value": "*.example.com"}]
+
+        with patch("requests.get", return_value=mock_resp):
+            result = cert_transparency("example.com")
+
+        assert all(not n.startswith("*.") for n in result)
+
+    def test_filters_off_domain_names(self):
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.json.return_value = [{"name_value": "other.notexample.com"}]
+
+        with patch("requests.get", return_value=mock_resp):
+            result = cert_transparency("example.com")
+
+        assert result == []
+
+    def test_deduplicates_results(self):
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.json.return_value = [
+            {"name_value": "api.example.com"},
+            {"name_value": "api.example.com"},
+        ]
+
+        with patch("requests.get", return_value=mock_resp):
+            result = cert_transparency("example.com")
+
+        assert result.count("api.example.com") == 1
+
+
+# historical_urls
+class TestHistoricalUrls:
+    def test_returns_urls_from_binary_output(self):
+        mock_proc = MagicMock()
+        mock_proc.stdout = "https://example.com/old-path\nhttps://example.com/another\n"
+        mock_proc.returncode = 0
+
+        with (
+            patch("shutil.which", return_value="/usr/bin/waybackurls"),
+            patch("subprocess.run", return_value=mock_proc),
+        ):
+            result = historical_urls("example.com")
+
+        assert "https://example.com/old-path" in result
+        assert "https://example.com/another" in result
+
+    def test_missing_binary_raises(self):
+        with patch("shutil.which", return_value=None):
+            with pytest.raises(OSError, match="waybackurls"):
+                historical_urls("example.com")
+
+    def test_empty_output_returns_empty_list(self):
+        mock_proc = MagicMock()
+        mock_proc.stdout = ""
+        mock_proc.returncode = 0
+
+        with (
+            patch("shutil.which", return_value="/usr/bin/waybackurls"),
+            patch("subprocess.run", return_value=mock_proc),
+        ):
+            result = historical_urls("example.com")
+
+        assert result == []

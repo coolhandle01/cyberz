@@ -183,6 +183,41 @@ def filter_in_scope(hosts: list[str], programme: Programme) -> list[str]:
     return allowed
 
 
+# Certificate transparency
+
+
+def cert_transparency(domain: str) -> list[str]:
+    """Query crt.sh certificate transparency logs to discover subdomains."""
+    import requests
+
+    resp = requests.get(
+        "https://crt.sh/",
+        params={"q": f"%.{domain}", "output": "json"},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    names: list[str] = []
+    for entry in resp.json():
+        for name in entry.get("name_value", "").splitlines():
+            cleaned = name.strip().lstrip("*.")
+            if cleaned and (cleaned == domain or cleaned.endswith("." + domain)):
+                names.append(cleaned)
+    logger.info("crt.sh found %d names for %s", len(names), domain)
+    return list(dict.fromkeys(names))
+
+
+# Historical URL discovery
+
+
+def historical_urls(domain: str) -> list[str]:
+    """Use waybackurls to discover historical endpoints from the Wayback Machine."""
+    binary = _require_binary("waybackurls")
+    result = _run([binary, domain], timeout=180)
+    urls = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    logger.info("waybackurls found %d historical URLs for %s", len(urls), domain)
+    return urls
+
+
 # Orchestration - called by the OSINT Analyst agent task
 
 

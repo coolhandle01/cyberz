@@ -234,6 +234,113 @@ def check_cors_misconfiguration(endpoints: list[Endpoint]) -> list[RawFinding]:
     return findings
 
 
+# SSRF probe
+
+
+def check_ssrf(endpoints: list[Endpoint]) -> list[RawFinding]:
+    """
+    Probe parameterised endpoints for SSRF by injecting internal address payloads
+    into URL parameters and flagging responses that contain cloud metadata markers.
+    """
+    import time
+
+    import requests
+
+    _SSRF_PAYLOADS = [
+        "http://169.254.169.254/latest/meta-data/",
+        "http://127.0.0.1/",
+        "http://[::1]/",
+    ]
+    _SSRF_MARKERS = ["ami-id", "instance-id", "iam/security-credentials", "metadata"]
+
+    findings: list[RawFinding] = []
+
+    for ep in endpoints:
+        if not ep.parameters:
+            continue
+        for param in ep.parameters:
+            for payload in _SSRF_PAYLOADS:
+                try:
+                    test_url = f"{ep.url}?{param}={payload}"
+                    resp = requests.get(
+                        test_url,
+                        timeout=config.recon.http_timeout,
+                        allow_redirects=False,
+                    )
+                    body = resp.text[:500]
+                    if any(marker in body for marker in _SSRF_MARKERS):
+                        findings.append(
+                            RawFinding(
+                                title=f"SSRF - {ep.url}",
+                                vuln_class="SSRF",
+                                target=ep.url,
+                                evidence=(
+                                    f"Parameter: {param}\nPayload: {payload}\nResponse: {body}"
+                                ),
+                                tool="custom_ssrf_probe",
+                                severity_hint=Severity.CRITICAL,
+                            )
+                        )
+                        break
+                    time.sleep(config.scan.request_delay)
+                except Exception as exc:
+                    logger.debug("SSRF probe failed for %s: %s", ep.url, exc)
+
+    logger.info("SSRF probe found %d findings", len(findings))
+    return findings
+
+
+# Header injection check
+
+
+def check_header_injection(endpoints: list[Endpoint]) -> list[RawFinding]:
+    """
+    Check for CRLF/header injection by sending CR LF sequences in common
+    request headers and inspecting whether injected names appear in the response.
+    """
+    import time
+
+    import requests
+
+    _INJECT_HEADERS = ["X-Forwarded-For", "X-Real-IP", "Referer"]
+    _CANARY = "BountySquadCanary"
+    _CRLF_PAYLOAD = f"127.0.0.1\r\n{_CANARY}: yes"
+
+    findings: list[RawFinding] = []
+
+    for ep in endpoints:
+        try:
+            for header_name in _INJECT_HEADERS:
+                resp = requests.get(
+                    ep.url,
+                    headers={header_name: _CRLF_PAYLOAD},
+                    timeout=config.recon.http_timeout,
+                    allow_redirects=False,
+                )
+                if _CANARY in resp.headers or _CANARY.lower() in resp.text.lower():
+                    findings.append(
+                        RawFinding(
+                            title=f"Header Injection - {ep.url}",
+                            vuln_class="HeaderInjection",
+                            target=ep.url,
+                            evidence=(
+                                f"Header: {header_name}\n"
+                                f"Payload: {_CRLF_PAYLOAD!r}\n"
+                                f"Response headers: {dict(resp.headers)}"
+                            ),
+                            tool="custom_header_injection",
+                            severity_hint=Severity.MEDIUM,
+                        )
+                    )
+                    break
+            time.sleep(config.scan.request_delay)
+        except Exception as exc:
+            logger.debug("Header injection check failed for %s: %s", ep.url, exc)
+
+    logger.info("Header injection check found %d findings", len(findings))
+    return findings
+
+
 # Penetration Tester orchestration
 
 
@@ -246,6 +353,8 @@ def run_pentest(recon: ReconResult) -> list[RawFinding]:
     all_findings.extend(run_nuclei(recon.endpoints))
     all_findings.extend(run_sqlmap(recon.endpoints))
     all_findings.extend(check_cors_misconfiguration(recon.endpoints))
+    all_findings.extend(check_ssrf(recon.endpoints))
+    all_findings.extend(check_header_injection(recon.endpoints))
 
     all_findings.sort(
         key=lambda f: _SEVERITY_FLOOR_ORDER.index(f.severity_hint),
@@ -344,3 +453,57 @@ def triage_findings(
         len(raw_findings),
     )
     return verified
+
+
+# CVE lookup for Vulnerability Researcher
+
+
+def lookup_cve(keyword: str) -> list[dict]:
+    """
+    Query the NVD API for CVEs matching a keyword to validate CVSS scores.
+    Returns up to 5 results as {id, cvss_score, cvss_vector, description} dicts.
+    Returns [] on any network or parse error so the pipeline is never blocked.
+    """
+    import requests
+
+    params: dict[str, str | int] = {"keywordSearch": keyword, "resultsPerPage": 5}
+    headers: dict[str, str] = {}
+    if config.scan.nvd_api_key:
+        headers["apiKey"] = config.scan.nvd_api_key
+
+    try:
+        resp = requests.get(
+            "https://services.nvd.nist.gov/rest/json/cves/2.0",
+            params=params,
+            headers=headers,
+            timeout=30,
+        )
+        resp.raise_for_status()
+        results: list[dict] = []
+        for vuln in resp.json().get("vulnerabilities", []):
+            cve = vuln.get("cve", {})
+            cve_id = cve.get("id", "")
+            metrics = cve.get("metrics", {})
+            cvss_score: float | None = None
+            cvss_vector: str | None = None
+            for key in ("cvssMetricV31", "cvssMetricV30", "cvssMetricV2"):
+                if metrics.get(key):
+                    m = metrics[key][0].get("cvssData", {})
+                    cvss_score = m.get("baseScore")
+                    cvss_vector = m.get("vectorString")
+                    break
+            descriptions = [
+                d["value"] for d in cve.get("descriptions", []) if d.get("lang") == "en"
+            ]
+            results.append(
+                {
+                    "id": cve_id,
+                    "cvss_score": cvss_score,
+                    "cvss_vector": cvss_vector,
+                    "description": descriptions[0] if descriptions else "",
+                }
+            )
+        return results
+    except Exception as exc:
+        logger.warning("NVD CVE lookup failed for '%s': %s", keyword, exc)
+        return []
