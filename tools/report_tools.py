@@ -14,9 +14,7 @@ from pathlib import Path
 from config import config
 from models import DisclosureReport, Severity, VerifiedVulnerability
 
-# ---------------------------------------------------------------------------
 # CWE quick-reference
-# ---------------------------------------------------------------------------
 
 _VULN_CLASS_TO_CWE: dict[str, int] = {
     "SQLi": 89,

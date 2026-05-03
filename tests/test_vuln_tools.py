@@ -20,9 +20,7 @@ from tools.vuln_tools import (
 pytestmark = pytest.mark.unit
 
 
-# -- _above_floor --------------------------------------------------------------
-
-
+# _above_floor
 class TestAboveFloor:
     def test_medium_above_medium_floor(self, monkeypatch):
         monkeypatch.setenv("MIN_SEVERITY", "medium")
@@ -61,9 +59,7 @@ class TestAboveFloor:
         assert vt._above_floor(Severity.INFORMATIONAL) is False
 
 
-# -- _lookup_cvss --------------------------------------------------------------
-
-
+# _lookup_cvss
 class TestLookupCvss:
     def test_sqli_critical(self):
         score, vector = _lookup_cvss("SQLi", Severity.CRITICAL)
@@ -84,9 +80,7 @@ class TestLookupCvss:
         assert len(result) == 2
 
 
-# -- is_in_scope ---------------------------------------------------------------
-
-
+# is_in_scope
 class TestIsInScope:
     def test_in_scope_finding(self, raw_finding_high, programme):
         assert is_in_scope(raw_finding_high, programme) is True
@@ -95,9 +89,7 @@ class TestIsInScope:
         assert is_in_scope(raw_finding_oos, programme) is False
 
 
-# -- triage_findings -----------------------------------------------------------
-
-
+# triage_findings
 class TestTriageFindings:
     def test_filters_out_of_scope(self, raw_finding_high, raw_finding_oos, programme):
         results = triage_findings([raw_finding_high, raw_finding_oos], programme)
@@ -140,9 +132,7 @@ class TestTriageFindings:
         assert results[0].target == raw_finding_high.target
 
 
-# -- run_nuclei ----------------------------------------------------------------
-
-
+# run_nuclei
 class TestRunNuclei:
     def test_parses_nuclei_json_output(self):
         import json
@@ -180,9 +170,7 @@ class TestRunNuclei:
                 run_nuclei(endpoints)
 
 
-# -- check_cors_misconfiguration -----------------------------------------------
-
-
+# check_cors_misconfiguration
 class TestCheckCorsMisconfiguration:
     def test_detects_wildcard_cors(self):
         mock_response = MagicMock()

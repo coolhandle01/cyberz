@@ -18,9 +18,7 @@ from models import (
     VerifiedVulnerability,
 )
 
-# -- Programme fixtures --------------------------------------------------------
-
-
+# Programme fixtures
 @pytest.fixture()
 def scope_item_url() -> ScopeItem:
     return ScopeItem(
@@ -57,9 +55,7 @@ def programme(scope_item_url, scope_item_wildcard) -> Programme:
     )
 
 
-# -- Recon fixtures ------------------------------------------------------------
-
-
+# Recon fixtures
 @pytest.fixture()
 def endpoint() -> Endpoint:
     return Endpoint(
@@ -82,9 +78,7 @@ def recon_result(programme, endpoint) -> ReconResult:
     )
 
 
-# -- Vulnerability fixtures ----------------------------------------------------
-
-
+# Vulnerability fixtures
 @pytest.fixture()
 def raw_finding_high() -> RawFinding:
     return RawFinding(

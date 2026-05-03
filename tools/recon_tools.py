@@ -23,9 +23,7 @@ from models import Endpoint, Programme, ReconResult, ScopeType
 logger = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 
 def _require_binary(name: str) -> str:
@@ -58,9 +56,7 @@ def _run(
     return result
 
 
-# ---------------------------------------------------------------------------
 # Subdomain enumeration
-# ---------------------------------------------------------------------------
 
 
 def enumerate_subdomains(domain: str) -> list[str]:
@@ -78,9 +74,7 @@ def enumerate_subdomains(domain: str) -> list[str]:
     return list(dict.fromkeys(subdomains))[: config.recon.max_subdomains]
 
 
-# ---------------------------------------------------------------------------
 # HTTP probing
-# ---------------------------------------------------------------------------
 
 
 def probe_endpoints(hosts: list[str]) -> list[Endpoint]:
@@ -124,9 +118,7 @@ def probe_endpoints(hosts: list[str]) -> list[Endpoint]:
     return endpoints
 
 
-# ---------------------------------------------------------------------------
 # Port scanning
-# ---------------------------------------------------------------------------
 
 
 def port_scan(hosts: list[str]) -> dict[str, list[int]]:
@@ -157,9 +149,7 @@ def port_scan(hosts: list[str]) -> dict[str, list[int]]:
     return results
 
 
-# ---------------------------------------------------------------------------
 # Scope guard
-# ---------------------------------------------------------------------------
 
 
 def extract_domain(identifier: str) -> str:
@@ -193,9 +183,7 @@ def filter_in_scope(hosts: list[str], programme: Programme) -> list[str]:
     return allowed
 
 
-# ---------------------------------------------------------------------------
 # Orchestration - called by the OSINT Analyst agent task
-# ---------------------------------------------------------------------------
 
 
 def run_recon(programme: Programme) -> ReconResult:

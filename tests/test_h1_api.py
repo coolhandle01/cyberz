@@ -32,9 +32,7 @@ def h1_client(monkeypatch):
     return h1_module.H1Client()
 
 
-# -- parse_programme -----------------------------------------------------------
-
-
+# parse_programme
 class TestParseProgramme:
     def _raw_programme(self):
         return {
@@ -97,9 +95,7 @@ class TestParseProgramme:
         assert len(prog.out_of_scope) == 1
 
 
-# -- submit_report -------------------------------------------------------------
-
-
+# submit_report
 class TestSubmitReport:
     def test_successful_submission(self, h1_client, disclosure_report):
         mock_response = MagicMock()

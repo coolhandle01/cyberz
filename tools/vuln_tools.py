@@ -29,9 +29,7 @@ from models import (
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
 # Severity helpers
-# ---------------------------------------------------------------------------
 
 _NUCLEI_SEVERITY_MAP: dict[str, Severity] = {
     "info": Severity.INFORMATIONAL,
@@ -67,9 +65,7 @@ def _run(cmd: list[str], timeout: int = 300) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
 
 
-# ---------------------------------------------------------------------------
 # Nuclei scanner
-# ---------------------------------------------------------------------------
 
 
 def run_nuclei(endpoints: list[Endpoint]) -> list[RawFinding]:
@@ -140,9 +136,7 @@ def run_nuclei(endpoints: list[Endpoint]) -> list[RawFinding]:
     return findings
 
 
-# ---------------------------------------------------------------------------
 # SQLMap scanner
-# ---------------------------------------------------------------------------
 
 
 def run_sqlmap(endpoints: list[Endpoint]) -> list[RawFinding]:
@@ -191,9 +185,7 @@ def run_sqlmap(endpoints: list[Endpoint]) -> list[RawFinding]:
     return findings
 
 
-# ---------------------------------------------------------------------------
 # Custom checks
-# ---------------------------------------------------------------------------
 
 
 def check_cors_misconfiguration(endpoints: list[Endpoint]) -> list[RawFinding]:
@@ -242,9 +234,7 @@ def check_cors_misconfiguration(endpoints: list[Endpoint]) -> list[RawFinding]:
     return findings
 
 
-# ---------------------------------------------------------------------------
 # Penetration Tester orchestration
-# ---------------------------------------------------------------------------
 
 
 def run_pentest(recon: ReconResult) -> list[RawFinding]:
@@ -265,9 +255,7 @@ def run_pentest(recon: ReconResult) -> list[RawFinding]:
     return all_findings
 
 
-# ---------------------------------------------------------------------------
 # Vulnerability Researcher - triage & CVSS
-# ---------------------------------------------------------------------------
 
 _CVSS_DEFAULTS: dict[str, dict[Severity, tuple[float, str]]] = {
     "SQLi": {
