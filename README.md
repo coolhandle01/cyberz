@@ -1,4 +1,4 @@
-# Bounty Squad
+# cybersquad
 
 An autonomous bug bounty pipeline powered by [CrewAI](https://github.com/crewAIInc/crewAI) and Claude. Six AI agents model a full-stack security team: they select HackerOne programmes, map attack surface, run vulnerability scans, triage findings, write professional disclosure reports, and submit them — all in a sequential, auditable pipeline with human approval gates.
 
