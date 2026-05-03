@@ -75,9 +75,7 @@ jobs:
       - name: semgrep - SAST scan
         run: >
           semgrep scan
-          --config=p/python
-          --config=p/security-audit
-          --config=p/owasp-top-ten
+          --config=.semgrep.yml
           --error
           --quiet
         env:
