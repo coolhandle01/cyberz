@@ -311,7 +311,7 @@ def check_header_injection(endpoints: list[Endpoint]) -> list[RawFinding]:
     for ep in endpoints:
         try:
             for header_name in _INJECT_HEADERS:
-                resp = requests.get(
+                resp = requests.get(  # nosemgrep
                     ep.url,
                     headers={header_name: _CRLF_PAYLOAD},
                     timeout=config.recon.http_timeout,
