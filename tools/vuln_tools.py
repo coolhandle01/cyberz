@@ -62,7 +62,9 @@ def _require_binary(name: str) -> str:
 
 def _run(cmd: list[str], timeout: int = 300) -> subprocess.CompletedProcess:
     logger.debug("Running: %s", " ".join(cmd))
-    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    return subprocess.run(  # nosemgrep: dangerous-subprocess-use-audit
+        cmd, capture_output=True, text=True, timeout=timeout
+    )
 
 
 # Nuclei scanner

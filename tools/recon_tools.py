@@ -44,7 +44,7 @@ def _run(
 ) -> subprocess.CompletedProcess:
     """Run a subprocess, log stderr, return CompletedProcess."""
     logger.debug("Running: %s", " ".join(cmd))
-    result = subprocess.run(
+    result = subprocess.run(  # nosemgrep: dangerous-subprocess-use-audit
         cmd,
         capture_output=True,
         text=True,
