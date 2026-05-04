@@ -76,6 +76,9 @@ jobs:
         run: >
           semgrep scan
           --config=.semgrep.yml
+          --config=p/python
+          --config=p/security-audit
+          --config=p/owasp-top-ten
           --error
           --quiet
         env:

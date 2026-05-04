@@ -1,15 +1,4 @@
-configs:
-  - p/python
-  - p/security-audit
-  - p/owasp-top-ten
-
-rules:
-  - id: ignore-b108-tmp-sqlmap
-    patterns:
-      - pattern: |
-          os.getenv("SQLMAP_OUTPUT_DIR", "/tmp/sqlmap-output")
-    message: "B108 is a false positive for default config values"
-    languages: [python]
-    severity: INFO
-    metadata:
-      semgrep.ignore: true
+# Local semgrep rules for cybersquad.
+# CI applies these alongside p/python, p/security-audit, and p/owasp-top-ten.
+# Add project-specific rules here as needed.
+rules: []

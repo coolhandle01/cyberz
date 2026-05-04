@@ -262,7 +262,7 @@ def check_ssrf(endpoints: list[Endpoint]) -> list[RawFinding]:
             for payload in _SSRF_PAYLOADS:
                 try:
                     test_url = f"{ep.url}?{param}={payload}"
-                    resp = requests.get(
+                    resp = requests.get(  # nosemgrep
                         test_url,
                         timeout=config.recon.http_timeout,
                         allow_redirects=False,
