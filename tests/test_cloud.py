@@ -312,3 +312,149 @@ class TestCheckExposedServicesAdminPanels:
         with patch("requests.get", side_effect=Exception("conn refused")):
             results = check_exposed_services(minimal_recon)
         assert results == []
+
+
+class TestCheckExposedServicesPanels:
+    """Brand-specific control panel detection on non-standard ports."""
+
+    def _make_recon(self, programme, host="app.example.com"):
+        return ReconResult(
+            programme=programme,
+            subdomains=[host],
+            endpoints=[Endpoint(url=f"https://{host}/", status_code=200)],
+            open_ports={},
+            technologies=[],
+        )
+
+    def _panel_mock(self, port: int, marker: str):
+        """Return a requests.get side_effect that 200s only on the target port."""
+        from urllib.parse import urlparse as _up
+
+        def fake_get(url, **kwargs):
+            resp = MagicMock()
+            if _up(url).port == port:
+                resp.status_code = 200
+                resp.text = f"<html><title>{marker}</title></html>"
+            else:
+                resp.status_code = 404
+                resp.text = "Not Found"
+            return resp
+
+        return fake_get
+
+    def test_detects_cpanel_on_port_2083(self, programme):
+        recon = self._make_recon(programme)
+        with patch("requests.get", side_effect=self._panel_mock(2083, "cPanel")):
+            results = check_exposed_services(recon)
+        panel = [r for r in results if "cPanel" in r.title]
+        assert len(panel) >= 1
+        assert panel[0].severity_hint == Severity.HIGH
+        assert panel[0].vuln_class == "ExposedAdminPanel"
+
+    def test_detects_cpanel_on_port_2082(self, programme):
+        recon = self._make_recon(programme)
+        with patch("requests.get", side_effect=self._panel_mock(2082, "cPanel")):
+            results = check_exposed_services(recon)
+        panel = [r for r in results if "cPanel" in r.title]
+        assert len(panel) >= 1
+
+    def test_detects_whm_on_port_2087(self, programme):
+        recon = self._make_recon(programme)
+        with patch("requests.get", side_effect=self._panel_mock(2087, "WebHost Manager")):
+            results = check_exposed_services(recon)
+        panel = [r for r in results if "WHM" in r.title]
+        assert len(panel) >= 1
+        assert panel[0].severity_hint == Severity.HIGH
+
+    def test_detects_whm_on_port_2086(self, programme):
+        recon = self._make_recon(programme)
+        with patch("requests.get", side_effect=self._panel_mock(2086, "WebHost Manager")):
+            results = check_exposed_services(recon)
+        panel = [r for r in results if "WHM" in r.title]
+        assert len(panel) >= 1
+
+    def test_detects_plesk_on_port_8443(self, programme):
+        recon = self._make_recon(programme)
+        with patch("requests.get", side_effect=self._panel_mock(8443, "Plesk")):
+            results = check_exposed_services(recon)
+        panel = [r for r in results if "Plesk" in r.title]
+        assert len(panel) >= 1
+        assert panel[0].severity_hint == Severity.HIGH
+
+    def test_detects_plesk_on_port_8880(self, programme):
+        recon = self._make_recon(programme)
+        with patch("requests.get", side_effect=self._panel_mock(8880, "Plesk")):
+            results = check_exposed_services(recon)
+        panel = [r for r in results if "Plesk" in r.title]
+        assert len(panel) >= 1
+
+    def test_detects_directadmin_on_port_2222(self, programme):
+        recon = self._make_recon(programme)
+        with patch("requests.get", side_effect=self._panel_mock(2222, "DirectAdmin")):
+            results = check_exposed_services(recon)
+        panel = [r for r in results if "DirectAdmin" in r.title]
+        assert len(panel) >= 1
+        assert panel[0].severity_hint == Severity.HIGH
+
+    def test_detects_webmin_on_port_10000(self, programme):
+        recon = self._make_recon(programme)
+        with patch("requests.get", side_effect=self._panel_mock(10000, "Webmin")):
+            results = check_exposed_services(recon)
+        panel = [r for r in results if "Webmin" in r.title]
+        assert len(panel) >= 1
+        assert panel[0].severity_hint == Severity.HIGH
+
+    def test_no_finding_when_port_returns_404(self, programme):
+        recon = self._make_recon(programme)
+
+        def always_404(url, **kwargs):
+            resp = MagicMock()
+            resp.status_code = 404
+            resp.text = "Not Found"
+            return resp
+
+        with patch("requests.get", side_effect=always_404):
+            results = check_exposed_services(recon)
+        panel = [r for r in results if r.vuln_class == "ExposedAdminPanel"]
+        assert panel == []
+
+    def test_panel_exception_is_swallowed(self, programme):
+        recon = self._make_recon(programme)
+        with patch("requests.get", side_effect=Exception("connection refused")):
+            results = check_exposed_services(recon)
+        assert results == []
+
+    def test_deduplicates_by_hostname(self, programme):
+        recon = ReconResult(
+            programme=programme,
+            subdomains=["app.example.com"],
+            endpoints=[
+                Endpoint(url="https://app.example.com/page1", status_code=200),
+                Endpoint(url="https://app.example.com/page2", status_code=200),
+            ],
+            open_ports={},
+            technologies=[],
+        )
+        seen_ports: list[int] = []
+
+        def recording_get(url, **kwargs):
+            from urllib.parse import urlparse as _up
+
+            p = _up(url).port
+            if p:
+                seen_ports.append(p)
+            resp = MagicMock()
+            resp.status_code = 404
+            resp.text = ""
+            return resp
+
+        with patch("requests.get", side_effect=recording_get):
+            check_exposed_services(recon)
+
+        # Each panel port should appear exactly once despite two endpoints sharing
+        # the same hostname
+        from collections import Counter
+
+        counts = Counter(seen_ports)
+        for count in counts.values():
+            assert count == 1

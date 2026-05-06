@@ -63,6 +63,19 @@ _ADMIN_CONTENT_MARKERS = [
     "consul",
 ]
 
+# Brand-specific control panels that live on non-standard ports.
+# Tuple: (scheme, port, path, response_content_marker, panel_name)
+_PANEL_CHECKS: list[tuple[str, int, str, str, str]] = [
+    ("http", 2082, "/", "cPanel", "cPanel"),
+    ("https", 2083, "/", "cPanel", "cPanel"),
+    ("http", 2086, "/", "WebHost Manager", "WHM"),
+    ("https", 2087, "/", "WebHost Manager", "WHM"),
+    ("http", 8880, "/", "Plesk", "Plesk"),
+    ("https", 8443, "/login.php", "Plesk", "Plesk"),
+    ("http", 2222, "/login.php", "DirectAdmin", "DirectAdmin"),
+    ("https", 10000, "/", "Webmin", "Webmin"),
+]
+
 
 def _origin(url: str) -> str:
     p = urlparse(url)
@@ -177,6 +190,37 @@ def check_exposed_services(recon: ReconResult) -> list[RawFinding]:
                     )
             except Exception as exc:
                 logger.debug("Sensitive file check failed for %s: %s", target_url, exc)
+
+    # --- Branded control panels on non-standard ports ---
+    seen_panel_hosts: set[str] = set()
+    for ep in recon.endpoints:
+        hostname = urlparse(ep.url).hostname or ""
+        if not hostname or hostname in seen_panel_hosts:
+            continue
+        seen_panel_hosts.add(hostname)
+
+        for scheme, port, path, marker, panel_name in _PANEL_CHECKS:
+            url = f"{scheme}://{hostname}:{port}{path}"
+            try:
+                resp = requests.get(  # nosemgrep
+                    url,
+                    timeout=5,
+                    verify=False,  # nosec B501  # noqa: S501
+                    allow_redirects=True,
+                )
+                if resp.status_code == 200 and marker.lower() in resp.text.lower():
+                    findings.append(
+                        RawFinding(
+                            title=f"Exposed {panel_name} Panel - {url}",
+                            vuln_class="ExposedAdminPanel",
+                            target=url,
+                            evidence=f"HTTP 200 with {panel_name} content at {url}",
+                            tool="exposed_services_check",
+                            severity_hint=Severity.HIGH,
+                        )
+                    )
+            except Exception as exc:
+                logger.debug("%s panel check failed for %s: %s", panel_name, url, exc)
 
     logger.info("Exposed services check found %d findings", len(findings))
     return findings
