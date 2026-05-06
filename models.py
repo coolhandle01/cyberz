@@ -52,6 +52,7 @@ class ScopeItem(BaseModel):
     asset_type: ScopeType
     eligible_for_bounty: bool = True
     instruction: str | None = None
+    max_severity: Severity | None = None
 
 
 class Programme(BaseModel):
@@ -64,6 +65,11 @@ class Programme(BaseModel):
     in_scope: list[ScopeItem]
     out_of_scope: list[ScopeItem]
     allows_automated_scanning: bool
+    offers_bounties: bool = True
+    accepts_new_reports: bool = True
+    response_efficiency_pct: float | None = None
+    avg_time_to_bounty_days: float | None = None
+    total_bounties_paid_usd: int | None = None
     priority_score: float = 0.0
     selected_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 

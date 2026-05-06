@@ -7,13 +7,15 @@ Subprocess calls are mocked so tests run without binaries installed.
 
 from __future__ import annotations
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from models import Programme
+from models import Endpoint, Programme
 from tools.recon import (
     cert_transparency,
+    discover_paths,
     enumerate_subdomains,
     extract_domain,
     filter_in_scope,
@@ -333,4 +335,98 @@ class TestHistoricalUrls:
         ):
             result = historical_urls("example.com")
 
+        assert result == []
+
+
+# discover_paths
+class TestDiscoverPaths:
+    def _ffuf_side_effect(self, results):
+        """Return a subprocess.run side effect that writes ffuf JSON to the -o path."""
+
+        def fake_run(cmd, *args, **kwargs):
+            out_path = cmd[cmd.index("-o") + 1]
+            with open(out_path, "w") as fh:
+                json.dump({"results": results}, fh)
+            return MagicMock(returncode=0, stdout="", stderr="")
+
+        return fake_run
+
+    def test_returns_discovered_endpoints(self):
+        endpoints = [Endpoint(url="https://example.com/", status_code=200)]
+        hits = [
+            {"url": "https://example.com/admin", "status": 200},
+            {"url": "https://example.com/api", "status": 200},
+        ]
+        with (
+            patch("shutil.which", return_value="/usr/bin/ffuf"),
+            patch("subprocess.run", side_effect=self._ffuf_side_effect(hits)),
+        ):
+            result = discover_paths(endpoints)
+
+        urls = [ep.url for ep in result]
+        assert "https://example.com/admin" in urls
+        assert "https://example.com/api" in urls
+
+    def test_deduplicates_known_urls(self):
+        endpoints = [
+            Endpoint(url="https://example.com/", status_code=200),
+            Endpoint(url="https://example.com/admin", status_code=200),
+        ]
+        hits = [
+            {"url": "https://example.com/admin", "status": 200},
+            {"url": "https://example.com/new-path", "status": 200},
+        ]
+        with (
+            patch("shutil.which", return_value="/usr/bin/ffuf"),
+            patch("subprocess.run", side_effect=self._ffuf_side_effect(hits)),
+        ):
+            result = discover_paths(endpoints)
+
+        urls = [ep.url for ep in result]
+        assert "https://example.com/admin" not in urls
+        assert "https://example.com/new-path" in urls
+
+    def test_empty_endpoints_returns_empty(self):
+        assert discover_paths([]) == []
+
+    def test_skips_endpoints_with_500_status(self):
+        endpoints = [Endpoint(url="https://example.com/", status_code=500)]
+        with patch("shutil.which", return_value="/usr/bin/ffuf"):
+            result = discover_paths(endpoints)
+        assert result == []
+
+    def test_missing_binary_raises_oserror(self):
+        endpoints = [Endpoint(url="https://example.com/", status_code=200)]
+        with patch("shutil.which", return_value=None):
+            with pytest.raises(OSError, match="ffuf"):
+                discover_paths(endpoints)
+
+    def test_ffuf_exception_is_swallowed(self):
+        endpoints = [Endpoint(url="https://example.com/", status_code=200)]
+        with (
+            patch("shutil.which", return_value="/usr/bin/ffuf"),
+            patch("subprocess.run", side_effect=Exception("connection refused")),
+        ):
+            result = discover_paths(endpoints)
+        assert result == []
+
+    def test_respects_status_codes_from_results(self):
+        endpoints = [Endpoint(url="https://example.com/", status_code=200)]
+        hits = [{"url": "https://example.com/protected", "status": 403}]
+        with (
+            patch("shutil.which", return_value="/usr/bin/ffuf"),
+            patch("subprocess.run", side_effect=self._ffuf_side_effect(hits)),
+        ):
+            result = discover_paths(endpoints)
+
+        assert len(result) == 1
+        assert result[0].status_code == 403
+
+    def test_empty_ffuf_results_returns_empty(self):
+        endpoints = [Endpoint(url="https://example.com/", status_code=200)]
+        with (
+            patch("shutil.which", return_value="/usr/bin/ffuf"),
+            patch("subprocess.run", side_effect=self._ffuf_side_effect([])),
+        ):
+            result = discover_paths(endpoints)
         assert result == []

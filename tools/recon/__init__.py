@@ -10,6 +10,7 @@ import logging
 
 from models import Programme, ReconResult, ScopeType
 from tools.recon.cert_transparency import cert_transparency
+from tools.recon.dirfuzz import discover_paths
 from tools.recon.httpx import probe_endpoints
 from tools.recon.nmap import port_scan
 from tools.recon.scope import extract_domain, filter_in_scope
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     "cert_transparency",
+    "discover_paths",
     "enumerate_subdomains",
     "extract_domain",
     "filter_in_scope",
@@ -47,6 +49,9 @@ def run_recon(programme: Programme) -> ReconResult:
     endpoints = probe_endpoints(in_scope_hosts)
     live_hosts = [ep.url for ep in endpoints if ep.status_code and ep.status_code < 500]
     open_ports = port_scan(live_hosts[:20])
+
+    discovered = discover_paths(endpoints)
+    endpoints = endpoints + discovered
 
     all_tech: list[str] = []
     for ep in endpoints:

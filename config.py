@@ -5,6 +5,9 @@ Load secrets from environment variables; never hardcode credentials.
 
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
+
+_BUNDLE_WORDLIST = str(Path(__file__).parent / "data" / "wordlists" / "common.txt")
 
 
 @dataclass
@@ -70,6 +73,17 @@ class ScanConfig:
     min_severity: str = field(default_factory=lambda: os.getenv("MIN_SEVERITY", "medium"))
     request_delay: float = field(default_factory=lambda: float(os.getenv("SCAN_DELAY", "0.5")))
     nvd_api_key: str | None = field(default_factory=lambda: os.getenv("NVD_API_KEY"))
+    dirfuzz_wordlist: str = field(
+        default_factory=lambda: os.getenv("DIRFUZZ_WORDLIST", _BUNDLE_WORDLIST)
+    )
+    dirfuzz_threads: int = field(default_factory=lambda: int(os.getenv("DIRFUZZ_THREADS", "40")))
+    dirfuzz_rate_limit: int = field(
+        default_factory=lambda: int(os.getenv("DIRFUZZ_RATE_LIMIT", "20"))
+    )
+    dirfuzz_timeout: int = field(default_factory=lambda: int(os.getenv("DIRFUZZ_TIMEOUT", "120")))
+    dirfuzz_max_targets: int = field(
+        default_factory=lambda: int(os.getenv("DIRFUZZ_MAX_TARGETS", "10"))
+    )
 
 
 @dataclass

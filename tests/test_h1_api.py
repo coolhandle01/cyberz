@@ -94,6 +94,81 @@ class TestParseProgramme:
         assert len(prog.in_scope) == 0
         assert len(prog.out_of_scope) == 1
 
+    def test_offers_bounties_false_when_vdp(self, h1_client):
+        raw = self._raw_programme()
+        raw["attributes"]["offers_bounties"] = False
+        prog = h1_client.parse_programme(raw, self._raw_scope())
+        assert prog.offers_bounties is False
+
+    def test_offers_bounties_defaults_true_when_missing(self, h1_client):
+        prog = h1_client.parse_programme(self._raw_programme(), self._raw_scope())
+        assert prog.offers_bounties is True
+
+    def test_accepts_new_reports_false_when_closed(self, h1_client):
+        raw = self._raw_programme()
+        raw["attributes"]["submission_state"] = "closed"
+        prog = h1_client.parse_programme(raw, self._raw_scope())
+        assert prog.accepts_new_reports is False
+
+    def test_accepts_new_reports_true_when_open(self, h1_client):
+        raw = self._raw_programme()
+        raw["attributes"]["submission_state"] = "open"
+        prog = h1_client.parse_programme(raw, self._raw_scope())
+        assert prog.accepts_new_reports is True
+
+    def test_accepts_new_reports_defaults_true_when_missing(self, h1_client):
+        prog = h1_client.parse_programme(self._raw_programme(), self._raw_scope())
+        assert prog.accepts_new_reports is True
+
+    def test_parses_response_efficiency_pct(self, h1_client):
+        raw = self._raw_programme()
+        raw["attributes"]["response_efficiency_percentage"] = 87.5
+        prog = h1_client.parse_programme(raw, self._raw_scope())
+        assert prog.response_efficiency_pct == 87.5
+
+    def test_parses_avg_time_to_bounty_days(self, h1_client):
+        raw = self._raw_programme()
+        # 2880 minutes = 2 days exactly
+        raw["attributes"]["average_time_to_bounty_in_minutes"] = 2880
+        prog = h1_client.parse_programme(raw, self._raw_scope())
+        assert prog.avg_time_to_bounty_days == 2.0
+
+    def test_avg_time_to_bounty_days_none_when_missing(self, h1_client):
+        prog = h1_client.parse_programme(self._raw_programme(), self._raw_scope())
+        assert prog.avg_time_to_bounty_days is None
+
+    def test_parses_total_bounties_paid_usd(self, h1_client):
+        raw = self._raw_programme()
+        raw["attributes"]["total_bounties_paid_in_cents"] = 1_500_000
+        prog = h1_client.parse_programme(raw, self._raw_scope())
+        assert prog.total_bounties_paid_usd == 15_000
+
+    def test_total_bounties_paid_usd_none_when_missing(self, h1_client):
+        prog = h1_client.parse_programme(self._raw_programme(), self._raw_scope())
+        assert prog.total_bounties_paid_usd is None
+
+    def test_parses_scope_item_max_severity(self, h1_client):
+        scope = {
+            "data": [
+                {
+                    "attributes": {
+                        "asset_identifier": "api.acme.com",
+                        "asset_type": "URL",
+                        "eligible_for_bounty": True,
+                        "eligible_for_submission": True,
+                        "instruction": None,
+                        "max_severity": "medium",
+                    }
+                }
+            ]
+        }
+        prog = h1_client.parse_programme(self._raw_programme(), scope)
+        assert prog.in_scope[0].max_severity == Severity.MEDIUM
+
+    def test_scope_item_max_severity_none_when_missing(self, h1_client):
+        prog = h1_client.parse_programme(self._raw_programme(), self._raw_scope())
+        assert prog.in_scope[0].max_severity is None
+
 
 # submit_report
 class TestSubmitReport:
