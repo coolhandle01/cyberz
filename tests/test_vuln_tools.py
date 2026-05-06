@@ -9,13 +9,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from models import Endpoint, Severity, VerifiedVulnerability
-from tools.vuln_tools import (
-    _lookup_cvss,
-    check_cors_misconfiguration,
-    is_in_scope,
-    run_nuclei,
-    triage_findings,
-)
+from tools.pentest import check_cors_misconfiguration, is_in_scope, run_nuclei, triage_findings
+from tools.pentest.triage import _lookup_cvss
 
 pytestmark = pytest.mark.unit
 
@@ -26,7 +21,7 @@ class TestAboveFloor:
         monkeypatch.setenv("MIN_SEVERITY", "medium")
         import importlib
 
-        import tools.vuln_tools as vt
+        import tools.pentest.triage as vt
 
         importlib.reload(vt)
         assert vt._above_floor(Severity.MEDIUM) is True
@@ -35,7 +30,7 @@ class TestAboveFloor:
         monkeypatch.setenv("MIN_SEVERITY", "medium")
         import importlib
 
-        import tools.vuln_tools as vt
+        import tools.pentest.triage as vt
 
         importlib.reload(vt)
         assert vt._above_floor(Severity.LOW) is False
@@ -44,7 +39,7 @@ class TestAboveFloor:
         monkeypatch.setenv("MIN_SEVERITY", "high")
         import importlib
 
-        import tools.vuln_tools as vt
+        import tools.pentest.triage as vt
 
         importlib.reload(vt)
         assert vt._above_floor(Severity.CRITICAL) is True
@@ -53,7 +48,7 @@ class TestAboveFloor:
         monkeypatch.setenv("MIN_SEVERITY", "low")
         import importlib
 
-        import tools.vuln_tools as vt
+        import tools.pentest.triage as vt
 
         importlib.reload(vt)
         assert vt._above_floor(Severity.INFORMATIONAL) is False
@@ -102,7 +97,7 @@ class TestTriageFindings:
         monkeypatch.setenv("MIN_SEVERITY", "medium")
         import importlib
 
-        import tools.vuln_tools as vt
+        import tools.pentest.triage as vt
 
         importlib.reload(vt)
         results = vt.triage_findings([raw_finding_high, raw_finding_low], programme)
@@ -228,7 +223,7 @@ class TestCheckCorsMisconfiguration:
 # check_ssrf
 class TestCheckSsrf:
     def test_detects_aws_metadata_in_response(self):
-        from tools.vuln_tools import check_ssrf
+        from tools.pentest import check_ssrf
 
         endpoint = Endpoint(
             url="https://api.example.com/fetch",
@@ -246,7 +241,7 @@ class TestCheckSsrf:
         assert results[0].severity_hint == Severity.CRITICAL
 
     def test_skips_endpoints_without_parameters(self):
-        from tools.vuln_tools import check_ssrf
+        from tools.pentest import check_ssrf
 
         endpoint = Endpoint(url="https://api.example.com/static", status_code=200)
 
@@ -257,7 +252,7 @@ class TestCheckSsrf:
         assert results == []
 
     def test_safe_response_produces_no_finding(self):
-        from tools.vuln_tools import check_ssrf
+        from tools.pentest import check_ssrf
 
         endpoint = Endpoint(
             url="https://api.example.com/fetch",
@@ -273,7 +268,7 @@ class TestCheckSsrf:
         assert results == []
 
     def test_request_exception_is_swallowed(self):
-        from tools.vuln_tools import check_ssrf
+        from tools.pentest import check_ssrf
 
         endpoint = Endpoint(
             url="https://api.example.com/fetch",
@@ -290,7 +285,7 @@ class TestCheckSsrf:
 # check_header_injection
 class TestCheckHeaderInjection:
     def test_detects_reflected_canary_in_headers(self):
-        from tools.vuln_tools import check_header_injection
+        from tools.pentest import check_header_injection
 
         endpoint = Endpoint(url="https://api.example.com/", status_code=200)
         mock_resp = MagicMock()
@@ -304,7 +299,7 @@ class TestCheckHeaderInjection:
         assert results[0].vuln_class == "HeaderInjection"
 
     def test_detects_canary_in_response_body(self):
-        from tools.vuln_tools import check_header_injection
+        from tools.pentest import check_header_injection
 
         endpoint = Endpoint(url="https://api.example.com/", status_code=200)
         mock_resp = MagicMock()
@@ -317,7 +312,7 @@ class TestCheckHeaderInjection:
         assert len(results) == 1
 
     def test_clean_response_produces_no_finding(self):
-        from tools.vuln_tools import check_header_injection
+        from tools.pentest import check_header_injection
 
         endpoint = Endpoint(url="https://api.example.com/", status_code=200)
         mock_resp = MagicMock()
@@ -330,7 +325,7 @@ class TestCheckHeaderInjection:
         assert results == []
 
     def test_request_exception_is_swallowed(self):
-        from tools.vuln_tools import check_header_injection
+        from tools.pentest import check_header_injection
 
         endpoint = Endpoint(url="https://api.example.com/", status_code=200)
 
@@ -367,7 +362,7 @@ class TestLookupCve:
         }
 
     def test_returns_parsed_cve_results(self):
-        from tools.vuln_tools import lookup_cve
+        from tools.pentest import lookup_cve
 
         mock_resp = MagicMock()
         mock_resp.raise_for_status = MagicMock()
@@ -382,7 +377,7 @@ class TestLookupCve:
         assert results[0]["description"] == "Log4Shell RCE"
 
     def test_returns_empty_list_on_network_error(self):
-        from tools.vuln_tools import lookup_cve
+        from tools.pentest import lookup_cve
 
         with patch("requests.get", side_effect=Exception("network down")):
             results = lookup_cve("sqli")
@@ -402,7 +397,7 @@ class TestLookupCve:
         mock_resp.json.return_value = {"vulnerabilities": []}
 
         with patch("requests.get", return_value=mock_resp) as mock_get:
-            import tools.vuln_tools as vt_module
+            import tools.pentest.triage as vt_module
 
             importlib.reload(vt_module)
             vt_module.lookup_cve("xss")

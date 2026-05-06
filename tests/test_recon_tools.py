@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from models import Programme
-from tools.recon_tools import (
+from tools.recon import (
     cert_transparency,
     enumerate_subdomains,
     extract_domain,

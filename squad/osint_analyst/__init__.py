@@ -8,7 +8,7 @@ from crewai.tools import tool
 
 from squad import SquadMember
 from tools.h1_api import h1
-from tools.recon_tools import cert_transparency, historical_urls, run_recon
+from tools.recon import cert_transparency, historical_urls, run_recon
 
 
 @tool("Run Recon")
