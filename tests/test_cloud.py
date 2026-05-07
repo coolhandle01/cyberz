@@ -12,8 +12,8 @@ import pytest
 
 from models import Endpoint, Programme, ReconResult, Severity
 from tools.cloud.aws import check_s3_buckets
+from tools.cloud.azure import check_azure_storage
 from tools.cloud.services import check_exposed_services
-from tools.cloud.storage import check_azure_storage
 
 pytestmark = pytest.mark.unit
 
