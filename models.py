@@ -70,6 +70,7 @@ class Programme(BaseModel):
     response_efficiency_pct: float | None = None
     avg_time_to_bounty_days: float | None = None
     total_bounties_paid_usd: int | None = None
+    policy_text: str = ""
     priority_score: float = 0.0
     selected_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 

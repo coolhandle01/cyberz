@@ -169,6 +169,18 @@ class TestParseProgramme:
         prog = h1_client.parse_programme(self._raw_programme(), self._raw_scope())
         assert prog.in_scope[0].max_severity is None
 
+    def test_policy_text_stored_on_programme(self, h1_client):
+        raw = self._raw_programme()
+        raw["attributes"]["policy"] = "Automated scanning is permitted with rate limiting."
+        prog = h1_client.parse_programme(raw, self._raw_scope())
+        assert "Automated scanning is permitted" in prog.policy_text
+
+    def test_policy_text_empty_string_when_missing(self, h1_client):
+        raw = self._raw_programme()
+        raw["attributes"].pop("policy", None)
+        prog = h1_client.parse_programme(raw, self._raw_scope())
+        assert prog.policy_text == ""
+
 
 # submit_report
 class TestSubmitReport:

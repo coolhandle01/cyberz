@@ -180,6 +180,7 @@ class H1Client:
             response_efficiency_pct=response_efficiency_pct,
             avg_time_to_bounty_days=avg_time_to_bounty_days,
             total_bounties_paid_usd=total_bounties_paid_usd,
+            policy_text=policy_text,
         )
 
     # Report submission
