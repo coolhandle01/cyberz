@@ -1,4 +1,8 @@
-"""Live host probing via the httpx CLI."""
+"""Live host probing via the httpx CLI binary (projectdiscovery/httpx).
+
+Note: this wraps the *binary* `httpx`, not the Python httpx library. The
+Python HTTP library used throughout the project is `requests`.
+"""
 
 from __future__ import annotations
 

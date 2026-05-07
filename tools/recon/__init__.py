@@ -11,8 +11,8 @@ import logging
 from models import Programme, ReconResult, ScopeType
 from tools.recon.cert_transparency import cert_transparency
 from tools.recon.dirfuzz import discover_paths
-from tools.recon.httpx import probe_endpoints
 from tools.recon.nmap import port_scan
+from tools.recon.probe import probe_endpoints
 from tools.recon.scope import extract_domain, filter_in_scope
 from tools.recon.subfinder import enumerate_subdomains
 from tools.recon.waybackurls import historical_urls
