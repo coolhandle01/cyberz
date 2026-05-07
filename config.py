@@ -84,6 +84,8 @@ class ScanConfig:
     dirfuzz_max_targets: int = field(
         default_factory=lambda: int(os.getenv("DIRFUZZ_MAX_TARGETS", "10"))
     )
+    tls_max_targets: int = field(default_factory=lambda: int(os.getenv("TLS_MAX_TARGETS", "10")))
+    testssl_timeout: int = field(default_factory=lambda: int(os.getenv("TESTSSL_TIMEOUT", "300")))
 
 
 @dataclass
