@@ -1,4 +1,4 @@
-"""tests/test_tls.py - unit tests for tools/pentest/tls.py"""
+"""tests/test_tls.py - unit tests for tools/recon/tls.py"""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from models import Endpoint, Severity
-from tools.pentest.tls import (
+from tools.recon.tls import (
     _get_dmarc,
     _get_spf,
     _root_domain,
@@ -74,7 +74,7 @@ class TestCheckTls:
             return CompletedProcess(cmd, 0, "", "")
 
         with patch("shutil.which", return_value="/usr/bin/testssl.sh"):
-            with patch("tools.pentest.tls._run", side_effect=fake_run):
+            with patch("tools.recon.tls._run", side_effect=fake_run):
                 results = check_tls([ep])
 
         assert len(results) == 2
@@ -100,7 +100,7 @@ class TestCheckTls:
             return CompletedProcess(cmd, 0, "", "")
 
         with patch("shutil.which", return_value="/usr/bin/testssl.sh"):
-            with patch("tools.pentest.tls._run", side_effect=fake_run):
+            with patch("tools.recon.tls._run", side_effect=fake_run):
                 results = check_tls([ep])
 
         assert results == []
@@ -121,7 +121,7 @@ class TestCheckTls:
             return CompletedProcess(cmd, 0, "", "")
 
         with patch("shutil.which", return_value="/usr/bin/testssl.sh"):
-            with patch("tools.pentest.tls._run", side_effect=fake_run):
+            with patch("tools.recon.tls._run", side_effect=fake_run):
                 check_tls(endpoints)
 
         assert call_count == 1
@@ -129,7 +129,7 @@ class TestCheckTls:
     def test_skips_non_200_endpoints(self):
         ep = Endpoint(url="https://app.example.com/", status_code=500)
         with patch("shutil.which", return_value="/usr/bin/testssl.sh"):
-            with patch("tools.pentest.tls._run") as mock_run:
+            with patch("tools.recon.tls._run") as mock_run:
                 results = check_tls([ep])
         mock_run.assert_not_called()
         assert results == []
@@ -137,7 +137,7 @@ class TestCheckTls:
     def test_handles_run_exception(self):
         ep = Endpoint(url="https://app.example.com/", status_code=200)
         with patch("shutil.which", return_value="/usr/bin/testssl.sh"):
-            with patch("tools.pentest.tls._run", side_effect=Exception("timeout")):
+            with patch("tools.recon.tls._run", side_effect=Exception("timeout")):
                 results = check_tls([ep])
         assert results == []
 
@@ -149,7 +149,7 @@ class TestCheckTls:
             return CompletedProcess(cmd, 1, "", "error")
 
         with patch("shutil.which", return_value="/usr/bin/testssl.sh"):
-            with patch("tools.pentest.tls._run", side_effect=fake_run):
+            with patch("tools.recon.tls._run", side_effect=fake_run):
                 results = check_tls([ep])
         assert results == []
 
@@ -212,8 +212,8 @@ class TestGetDmarc:
 
 class TestCheckDnsEmailSecurity:
     def test_flags_missing_spf(self):
-        with patch("tools.pentest.tls._get_spf", return_value=None):
-            with patch("tools.pentest.tls._get_dmarc", return_value="v=DMARC1; p=reject"):
+        with patch("tools.recon.tls._get_spf", return_value=None):
+            with patch("tools.recon.tls._get_dmarc", return_value="v=DMARC1; p=reject"):
                 results = check_dns_email_security(["example.com"])
 
         spf_findings = [r for r in results if "SPF" in r.title and "Missing" in r.title]
@@ -221,8 +221,8 @@ class TestCheckDnsEmailSecurity:
         assert spf_findings[0].severity_hint == Severity.MEDIUM
 
     def test_flags_permissive_spf(self):
-        with patch("tools.pentest.tls._get_spf", return_value="v=spf1 +all"):
-            with patch("tools.pentest.tls._get_dmarc", return_value="v=DMARC1; p=reject"):
+        with patch("tools.recon.tls._get_spf", return_value="v=spf1 +all"):
+            with patch("tools.recon.tls._get_dmarc", return_value="v=DMARC1; p=reject"):
                 results = check_dns_email_security(["example.com"])
 
         spf_findings = [r for r in results if "+all" in r.title]
@@ -230,8 +230,8 @@ class TestCheckDnsEmailSecurity:
         assert spf_findings[0].severity_hint == Severity.HIGH
 
     def test_flags_missing_dmarc(self):
-        with patch("tools.pentest.tls._get_spf", return_value="v=spf1 include:_ ~all"):
-            with patch("tools.pentest.tls._get_dmarc", return_value=None):
+        with patch("tools.recon.tls._get_spf", return_value="v=spf1 include:_ ~all"):
+            with patch("tools.recon.tls._get_dmarc", return_value=None):
                 results = check_dns_email_security(["example.com"])
 
         dmarc_findings = [r for r in results if "DMARC" in r.title and "Missing" in r.title]
@@ -240,8 +240,8 @@ class TestCheckDnsEmailSecurity:
 
     def test_flags_dmarc_p_none(self):
         dmarc = "v=DMARC1; p=none; rua=mailto:x@y.com"
-        with patch("tools.pentest.tls._get_spf", return_value="v=spf1 include:_ ~all"):
-            with patch("tools.pentest.tls._get_dmarc", return_value=dmarc):
+        with patch("tools.recon.tls._get_spf", return_value="v=spf1 include:_ ~all"):
+            with patch("tools.recon.tls._get_dmarc", return_value=dmarc):
                 results = check_dns_email_security(["example.com"])
 
         none_findings = [r for r in results if "p=none" in r.title]
@@ -249,8 +249,8 @@ class TestCheckDnsEmailSecurity:
         assert none_findings[0].severity_hint == Severity.LOW
 
     def test_no_finding_when_spf_and_dmarc_ok(self):
-        with patch("tools.pentest.tls._get_spf", return_value="v=spf1 include:_ ~all"):
-            with patch("tools.pentest.tls._get_dmarc", return_value="v=DMARC1; p=reject"):
+        with patch("tools.recon.tls._get_spf", return_value="v=spf1 include:_ ~all"):
+            with patch("tools.recon.tls._get_dmarc", return_value="v=DMARC1; p=reject"):
                 results = check_dns_email_security(["example.com"])
         assert results == []
 
@@ -261,8 +261,8 @@ class TestCheckDnsEmailSecurity:
             calls.append(domain)
             return "v=spf1 include:_ ~all"
 
-        with patch("tools.pentest.tls._get_spf", side_effect=tracking_spf):
-            with patch("tools.pentest.tls._get_dmarc", return_value="v=DMARC1; p=reject"):
+        with patch("tools.recon.tls._get_spf", side_effect=tracking_spf):
+            with patch("tools.recon.tls._get_dmarc", return_value="v=DMARC1; p=reject"):
                 check_dns_email_security(["app.example.com", "api.example.com", "example.com"])
 
         # All three hostnames collapse to example.com - only one DNS call

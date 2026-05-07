@@ -92,7 +92,7 @@ class TestBuildTasks:
         select, recon, pentest, triage, write, submit = tasks
         assert recon.context == [select]
         assert pentest.context == [recon]
-        assert triage.context == [pentest, select]
+        assert triage.context == [pentest, recon, select]
         assert write.context == [triage, select]
         assert submit.context == [write]
 

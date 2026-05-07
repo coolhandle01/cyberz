@@ -1,12 +1,13 @@
 """
 tools/recon - OSINT and reconnaissance tooling for the OSINT Analyst.
 
-External binaries required: subfinder, httpx (CLI), nmap, waybackurls
+External binaries required: subfinder, httpx (CLI), nmap, waybackurls, testssl.sh
 """
 
 from __future__ import annotations
 
 import logging
+from urllib.parse import urlparse
 
 from models import Programme, ReconResult, ScopeType
 from tools.recon.cert_transparency import cert_transparency
@@ -15,12 +16,15 @@ from tools.recon.nmap import port_scan
 from tools.recon.probe import probe_endpoints
 from tools.recon.scope import extract_domain, filter_in_scope
 from tools.recon.subfinder import enumerate_subdomains
+from tools.recon.tls import check_dns_email_security, check_tls
 from tools.recon.waybackurls import historical_urls
 
 logger = logging.getLogger(__name__)
 
 __all__ = [
     "cert_transparency",
+    "check_dns_email_security",
+    "check_tls",
     "discover_paths",
     "enumerate_subdomains",
     "extract_domain",
@@ -57,11 +61,19 @@ def run_recon(programme: Programme) -> ReconResult:
     for ep in endpoints:
         all_tech.extend(ep.technologies)
 
+    # Passive findings: TLS and DNS checks run here so all downstream agents
+    # have this context without the Penetration Tester needing to repeat them.
+    passive_findings = list(check_tls(endpoints))
+    ep_hosts = [urlparse(ep.url).hostname or "" for ep in endpoints]
+    all_domains = list(dict.fromkeys(ep_hosts + in_scope_hosts))
+    passive_findings.extend(check_dns_email_security(all_domains))
+
     return ReconResult(
         programme=programme,
         subdomains=in_scope_hosts,
         endpoints=endpoints,
         open_ports=open_ports,
         technologies=list(dict.fromkeys(all_tech)),
+        passive_findings=passive_findings,
         notes=f"Seeded from {seed_domains}. {len(in_scope_hosts)} in-scope hosts.",
     )

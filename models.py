@@ -96,6 +96,9 @@ class ReconResult(BaseModel):
     open_ports: dict[str, list[int]] = Field(default_factory=dict)
     technologies: list[str] = Field(default_factory=list)
     notes: str = ""
+    # Findings collected passively during recon (TLS issues, DNS misconfigs, etc.)
+    # Available to all downstream agents without requiring a separate pentest pass.
+    passive_findings: list[RawFinding] = Field(default_factory=list)
     completed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
