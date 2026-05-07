@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from models import Endpoint, Severity
-from tools.pentest.sourcemaps import check_js_source_maps
+from tools.pentest.sourcemaps import _scan_with_gitleaks, check_js_source_maps
 
 pytestmark = pytest.mark.unit
 
@@ -28,7 +28,102 @@ def _map_payload(sources: list[str], sources_content: list[str]) -> dict:
     }
 
 
+def _make_gitleaks_report(findings: list[dict]) -> str:
+    """Serialise a list of mock gitleaks findings to JSON."""
+    return json.dumps(findings)
+
+
+class TestScanWithGitleaks:
+    def test_returns_empty_when_gitleaks_missing(self):
+        with patch("shutil.which", return_value=None):
+            result = _scan_with_gitleaks(["/src/app.ts"], ["const x = 1;"])
+        assert result == []
+
+    def test_parses_gitleaks_report(self, tmp_path):
+        report = [{"RuleID": "aws-access-key", "Match": "AKIAIOSFODNN7EXAMPLE"}]
+
+        def fake_run(cmd, **kwargs):
+            # Write the mock report to the path gitleaks would have used
+            report_path = cmd[cmd.index("--report-path") + 1]
+            with open(report_path, "w") as fh:
+                json.dump(report, fh)
+            proc = MagicMock()
+            proc.returncode = 1  # gitleaks exit code 1 = leaks found
+            return proc
+
+        with patch("shutil.which", return_value="/usr/bin/gitleaks"):
+            with patch("subprocess.run", side_effect=fake_run):
+                result = _scan_with_gitleaks(
+                    ["/src/config.ts"], ["const key = 'AKIAIOSFODNN7EXAMPLE';"]
+                )
+
+        assert len(result) == 1
+        assert "aws-access-key" in result[0]
+        assert "AKIAIOSFODNN7EXAMPLE" in result[0]
+
+    def test_returns_empty_when_no_report_file(self):
+        def fake_run(cmd, **kwargs):
+            # Do not write the report file (simulates no findings)
+            proc = MagicMock()
+            proc.returncode = 0
+            return proc
+
+        with patch("shutil.which", return_value="/usr/bin/gitleaks"):
+            with patch("subprocess.run", side_effect=fake_run):
+                result = _scan_with_gitleaks(["/src/clean.ts"], ["const x = 1;"])
+
+        assert result == []
+
+    def test_handles_subprocess_exception(self):
+        with patch("shutil.which", return_value="/usr/bin/gitleaks"):
+            with patch("subprocess.run", side_effect=OSError("binary exploded")):
+                result = _scan_with_gitleaks(["/src/app.ts"], ["const x = 1;"])
+        assert result == []
+
+    def test_skips_empty_chunks(self, tmp_path):
+        def fake_run(cmd, **kwargs):
+            proc = MagicMock()
+            proc.returncode = 0
+            return proc
+
+        with patch("shutil.which", return_value="/usr/bin/gitleaks"):
+            with patch("subprocess.run", side_effect=fake_run) as mock_run:
+                _scan_with_gitleaks(["/src/app.ts"], [""])
+
+        # subprocess.run was still called (gitleaks ran, just found nothing)
+        mock_run.assert_called_once()
+
+
 class TestCheckJsSourceMaps:
+    def _patch_gitleaks_no_findings(self):
+        """Context manager: gitleaks present but finds nothing."""
+
+        def fake_run(cmd, **kwargs):
+            proc = MagicMock()
+            proc.returncode = 0
+            return proc
+
+        return (
+            patch("shutil.which", return_value="/usr/bin/gitleaks"),
+            patch("subprocess.run", side_effect=fake_run),
+        )
+
+    def _patch_gitleaks_with_findings(self, findings: list[dict]):
+        """Context manager: gitleaks returns the given findings."""
+
+        def fake_run(cmd, **kwargs):
+            report_path = cmd[cmd.index("--report-path") + 1]
+            with open(report_path, "w") as fh:
+                json.dump(findings, fh)
+            proc = MagicMock()
+            proc.returncode = 1
+            return proc
+
+        return (
+            patch("shutil.which", return_value="/usr/bin/gitleaks"),
+            patch("subprocess.run", side_effect=fake_run),
+        )
+
     def test_detects_exposed_map_with_internal_paths(self):
         ep = Endpoint(url="https://app.example.com/", status_code=200)
 
@@ -50,7 +145,8 @@ class TestCheckJsSourceMaps:
                 resp.text = _html_with_script()
             return resp
 
-        with patch("requests.get", side_effect=fake_get):
+        which_patch, run_patch = self._patch_gitleaks_no_findings()
+        with patch("requests.get", side_effect=fake_get), which_patch, run_patch:
             results = check_js_source_maps([ep])
 
         assert len(results) == 1
@@ -58,12 +154,12 @@ class TestCheckJsSourceMaps:
         assert results[0].severity_hint == Severity.MEDIUM
         assert "/src/server/auth.ts" in results[0].evidence
 
-    def test_detects_critical_finding_when_secrets_present(self):
+    def test_detects_critical_finding_when_gitleaks_finds_secrets(self):
         ep = Endpoint(url="https://app.example.com/", status_code=200)
 
         map_data = _map_payload(
             sources=["/src/app.ts"],
-            sources_content=['const apiKey = "sk-AKIAIOSFODNN7EXAMPLE1234567890AB";'],
+            sources_content=['const apiKey = "sk-realkey";'],
         )
 
         def fake_get(url, **kwargs):
@@ -79,13 +175,17 @@ class TestCheckJsSourceMaps:
                 resp.text = _html_with_script()
             return resp
 
-        with patch("requests.get", side_effect=fake_get):
+        which_patch, run_patch = self._patch_gitleaks_with_findings(
+            [{"RuleID": "generic-api-key", "Match": "sk-realkey"}]
+        )
+        with patch("requests.get", side_effect=fake_get), which_patch, run_patch:
             results = check_js_source_maps([ep])
 
         assert len(results) == 1
         assert results[0].severity_hint == Severity.CRITICAL
+        assert "generic-api-key" in results[0].evidence
 
-    def test_detects_aws_access_key_in_sources(self):
+    def test_detects_aws_access_key_via_gitleaks(self):
         ep = Endpoint(url="https://app.example.com/", status_code=200)
 
         map_data = _map_payload(
@@ -106,7 +206,10 @@ class TestCheckJsSourceMaps:
                 resp.text = _html_with_script()
             return resp
 
-        with patch("requests.get", side_effect=fake_get):
+        which_patch, run_patch = self._patch_gitleaks_with_findings(
+            [{"RuleID": "aws-access-key", "Match": "AKIAIOSFODNN7EXAMPLE"}]
+        )
+        with patch("requests.get", side_effect=fake_get), which_patch, run_patch:
             results = check_js_source_maps([ep])
 
         assert len(results) == 1
@@ -187,7 +290,37 @@ class TestCheckJsSourceMaps:
                 resp.text = _html_with_script()
             return resp
 
-        with patch("requests.get", side_effect=fake_get):
+        which_patch, run_patch = self._patch_gitleaks_no_findings()
+        with patch("requests.get", side_effect=fake_get), which_patch, run_patch:
             check_js_source_maps(endpoints)
 
         assert map_fetch_count == 1
+
+    def test_skips_map_when_gitleaks_missing_and_no_internal_paths(self):
+        ep = Endpoint(url="https://app.example.com/", status_code=200)
+
+        # sources has only 1 entry and no internal path markers -> would be
+        # filtered out anyway; this just confirms nothing crashes without gitleaks
+        map_data = _map_payload(
+            sources=["/public/bundle.ts"],
+            sources_content=['console.log("hi");'],
+        )
+
+        def fake_get(url, **kwargs):
+            resp = MagicMock()
+            resp.status_code = 200
+            resp.headers = {"Content-Type": "text/html"}
+            if url.endswith(".map"):
+                resp.text = json.dumps(map_data)
+                resp.json.return_value = map_data
+            elif url.endswith(".js"):
+                resp.text = ""
+            else:
+                resp.text = _html_with_script()
+            return resp
+
+        with patch("requests.get", side_effect=fake_get):
+            with patch("shutil.which", return_value=None):
+                results = check_js_source_maps([ep])
+
+        assert results == []
