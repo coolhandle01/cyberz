@@ -17,8 +17,8 @@ With `CYBERSQUAD_HUMAN_INPUT=true` (the default) the pipeline pauses after progr
 | Agent | Responsibility | Tools |
 |---|---|---|
 | Programme Manager | Ranks H1 programmes by bounty value; verifies automated scanning is permitted | HackerOne API |
-| OSINT Analyst | Enumerates subdomains, live endpoints, open ports; passive TLS/DNS checks; network path tracing | subfinder, httpx, nmap, testssl.sh, dirfuzz, waybackurls, cert transparency, tracepath |
-| Penetration Tester | 28 targeted checks selected per-engagement based on recon evidence | nuclei (tag-filtered by technology), sqlmap, nosqli, CORS, SSRF, reflected XSS, SRI, header injection, host headers, JS source maps, error disclosure, sensitive files, admin panels, S3, Azure Blob, per-engine database checks (Elasticsearch, CouchDB, Redis, MongoDB, PostgreSQL, MySQL), branded panels (cPanel/WHM, Plesk, DirectAdmin, Webmin, Grafana, Kibana, Portainer, Consul/Vault) |
+| OSINT Analyst | Enumerates subdomains, live endpoints, open ports; passive TLS/DNS checks; network path tracing; LLM endpoint detection | subfinder, httpx, nmap, testssl.sh, dirfuzz, waybackurls, cert transparency, tracepath |
+| Penetration Tester | 30 targeted checks selected per-engagement based on recon evidence | nuclei (tag-filtered by technology), sqlmap, nosqli, prompt injection canary probe, CORS, SSRF, reflected XSS, SRI, header injection, host headers, JS source maps, error disclosure, sensitive files, admin panels, S3, Azure Blob, per-engine database checks (Elasticsearch, CouchDB, Redis, MongoDB, PostgreSQL, MySQL), branded panels (cPanel/WHM, Plesk, DirectAdmin, Webmin, Grafana, Kibana, Portainer, Consul/Vault) |
 | Vulnerability Researcher | Triages raw findings, assigns CVSS 3.1 scores, validates scope | - |
 | Technical Author | Renders complete HackerOne-format Markdown disclosure reports | - |
 | Disclosure Coordinator | Submits reports via H1 API and records submission metadata | HackerOne API |

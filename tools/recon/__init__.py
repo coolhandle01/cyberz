@@ -12,6 +12,7 @@ from urllib.parse import urlparse
 from models import Programme, ReconResult, ScopeType
 from tools.recon.cert_transparency import cert_transparency
 from tools.recon.dirfuzz import discover_paths
+from tools.recon.llm import detect_llm_endpoints
 from tools.recon.nmap import port_scan
 from tools.recon.probe import probe_endpoints
 from tools.recon.scope import extract_domain, filter_in_scope
@@ -26,6 +27,7 @@ __all__ = [
     "cert_transparency",
     "check_dns_email_security",
     "check_tls",
+    "detect_llm_endpoints",
     "discover_paths",
     "enumerate_subdomains",
     "extract_domain",
