@@ -10,13 +10,20 @@ check_exposed_services() is a backwards-compat wrapper that calls all of them.
 from __future__ import annotations
 
 import logging
-import socket
 from urllib.parse import urlparse, urlunparse
 
 import requests
 
 from config import config
 from models import Endpoint, RawFinding, ReconResult, Severity
+from tools.cloud.databases import (
+    check_couchdb,
+    check_elasticsearch,
+    check_mongodb,
+    check_mysql,
+    check_postgresql,
+    check_redis,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -78,41 +85,6 @@ def _unique_hostnames(endpoints: list[Endpoint]) -> list[str]:
             seen.add(h)
             result.append(h)
     return result
-
-
-def _check_redis(host: str) -> bool:
-    """Return True if Redis responds to PING without authentication."""
-    try:
-        with socket.create_connection((host, 6379), timeout=3) as sock:
-            sock.sendall(b"*1\r\n$4\r\nPING\r\n")
-            data = sock.recv(128)
-            return b"+PONG" in data
-    except Exception:
-        return False
-
-
-def _check_mongodb(host: str) -> bool:
-    """Return True if MongoDB answers an isMaster query without authentication."""
-    try:
-        with socket.create_connection((host, 27017), timeout=3) as sock:
-            # Minimal OP_QUERY against admin.$cmd: {isMaster: 1}
-            bson_doc = b"\x13\x00\x00\x00\x10isMaster\x00\x01\x00\x00\x00\x00"
-            header = (
-                b"\x00\x00\x00\x00"  # messageLength placeholder
-                b"\x01\x00\x00\x00"  # requestID
-                b"\x00\x00\x00\x00"  # responseTo
-                b"\xd4\x07\x00\x00"  # opCode OP_QUERY
-                b"\x00\x00\x00\x00"  # flags
-            )
-            coll = b"admin.$cmd\x00"
-            skip_return = b"\x00\x00\x00\x00\x01\x00\x00\x00"
-            body = header + coll + skip_return + bson_doc
-            length = (len(body) + 4).to_bytes(4, "little")
-            sock.sendall(length + body)
-            data = sock.recv(256)
-            return b"ismaster" in data.lower() or b"iswritableprimary" in data.lower()
-    except Exception:
-        return False
 
 
 def _probe_panel(
@@ -190,66 +162,20 @@ def _probe_path(
 
 
 def check_unauthenticated_databases(recon: ReconResult) -> list[RawFinding]:
-    """Check for unauthenticated Elasticsearch (9200), CouchDB (5984), Redis (6379),
-    and MongoDB (27017) on hosts with those ports open."""
-    findings: list[RawFinding] = []
-
-    _http_checks: dict[int, tuple[str, str, str]] = {
-        9200: ("Elasticsearch", "/_cluster/health", "cluster_name"),
-        5984: ("CouchDB", "/_all_dbs", "["),
+    """Aggregate: run all per-engine database checks for hosts with matching open ports."""
+    _port_checks = {
+        9200: check_elasticsearch,
+        5984: check_couchdb,
+        6379: check_redis,
+        27017: check_mongodb,
+        5432: check_postgresql,
+        3306: check_mysql,
     }
-
+    findings: list[RawFinding] = []
     for host, ports in recon.open_ports.items():
-        for port, (db_name, path, marker) in _http_checks.items():
-            if port not in ports:
-                continue
-            url = f"http://{host}:{port}{path}"
-            try:
-                resp = requests.get(url, timeout=5, allow_redirects=False)  # nosemgrep
-                if resp.status_code == 200 and marker in resp.text:
-                    findings.append(
-                        RawFinding(
-                            title=f"Unauthenticated {db_name} - {host}",
-                            vuln_class="ExposedService",
-                            target=url,
-                            evidence=(
-                                f"{db_name} responded without authentication.\n"
-                                f"Response: {resp.text[:300]}"
-                            ),
-                            tool="unauthenticated_databases_check",
-                            severity_hint=Severity.CRITICAL,
-                        )
-                    )
-            except Exception as exc:
-                logger.debug("%s check failed for %s: %s", db_name, host, exc)
-
-        if 6379 in ports and _check_redis(host):
-            findings.append(
-                RawFinding(
-                    title=f"Unauthenticated Redis - {host}",
-                    vuln_class="ExposedService",
-                    target=f"redis://{host}:6379",
-                    evidence="Redis responded to PING without authentication.",
-                    tool="unauthenticated_databases_check",
-                    severity_hint=Severity.CRITICAL,
-                )
-            )
-
-        if 27017 in ports and _check_mongodb(host):
-            findings.append(
-                RawFinding(
-                    title=f"Unauthenticated MongoDB - {host}",
-                    vuln_class="ExposedService",
-                    target=f"mongodb://{host}:27017",
-                    evidence=(
-                        "MongoDB accepted a connection and responded to isMaster "
-                        "without authentication."
-                    ),
-                    tool="unauthenticated_databases_check",
-                    severity_hint=Severity.CRITICAL,
-                )
-            )
-
+        for port, fn in _port_checks.items():
+            if port in ports:
+                findings.extend(fn(host))
     logger.info("Unauthenticated databases check found %d findings", len(findings))
     return findings
 

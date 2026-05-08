@@ -13,15 +13,20 @@ from tools.cloud import (
     check_admin_panels,
     check_azure_storage,
     check_consul_vault,
+    check_couchdb,
     check_cpanel,
     check_directadmin,
+    check_elasticsearch,
     check_grafana,
     check_kibana,
+    check_mongodb,
+    check_mysql,
     check_plesk,
     check_portainer,
+    check_postgresql,
+    check_redis,
     check_s3_buckets,
     check_sensitive_files,
-    check_unauthenticated_databases,
     check_webmin,
 )
 from tools.pentest.cors import check_cors_misconfiguration
@@ -213,17 +218,103 @@ def azure_storage_check_tool(recon_result_json: str) -> list[dict]:
     return [f.model_dump() for f in check_azure_storage(recon)]
 
 
-@tool("Unauthenticated Databases Check")
-def unauthenticated_databases_tool(recon_result_json: str) -> list[dict]:
+@tool("Unauthenticated Elasticsearch Check")
+def elasticsearch_tool(recon_result_json: str) -> list[dict]:
     """
-    Check for unauthenticated Elasticsearch (9200), CouchDB (5984), Redis (6379),
-    and MongoDB (27017) instances. Only probes hosts where those ports appear in
-    open_ports from the nmap recon.
-    Use when open_ports shows any of 9200, 5984, 6379, or 27017.
+    Check for an unauthenticated Elasticsearch instance on port 9200.
+    Probes /_cluster/health - a 200 response with cluster_name confirms no auth.
+    Use when open_ports shows 9200, or when technologies mention Elasticsearch.
     Pass the full serialised ReconResult. Returns raw findings as dicts.
     """
     recon = ReconResult.model_validate_json(recon_result_json)
-    return [f.model_dump() for f in check_unauthenticated_databases(recon)]
+    findings = []
+    for host, ports in recon.open_ports.items():
+        if 9200 in ports:
+            findings.extend(check_elasticsearch(host))
+    return [f.model_dump() for f in findings]
+
+
+@tool("Unauthenticated CouchDB Check")
+def couchdb_tool(recon_result_json: str) -> list[dict]:
+    """
+    Check for an unauthenticated CouchDB instance on port 5984.
+    Probes /_all_dbs - a 200 response listing databases confirms no auth.
+    Use when open_ports shows 5984.
+    Pass the full serialised ReconResult. Returns raw findings as dicts.
+    """
+    recon = ReconResult.model_validate_json(recon_result_json)
+    findings = []
+    for host, ports in recon.open_ports.items():
+        if 5984 in ports:
+            findings.extend(check_couchdb(host))
+    return [f.model_dump() for f in findings]
+
+
+@tool("Unauthenticated Redis Check")
+def redis_tool(recon_result_json: str) -> list[dict]:
+    """
+    Check for an unauthenticated Redis instance on port 6379 via a PING command.
+    A +PONG response without sending AUTH confirms no password is set.
+    Use when open_ports shows 6379.
+    Pass the full serialised ReconResult. Returns raw findings as dicts.
+    """
+    recon = ReconResult.model_validate_json(recon_result_json)
+    findings = []
+    for host, ports in recon.open_ports.items():
+        if 6379 in ports:
+            findings.extend(check_redis(host))
+    return [f.model_dump() for f in findings]
+
+
+@tool("Unauthenticated MongoDB Check")
+def mongodb_tool(recon_result_json: str) -> list[dict]:
+    """
+    Check for an unauthenticated MongoDB instance on port 27017.
+    Sends a minimal isMaster wire-protocol query - a valid response without
+    error confirms the instance accepts connections without credentials.
+    Use when open_ports shows 27017.
+    Pass the full serialised ReconResult. Returns raw findings as dicts.
+    """
+    recon = ReconResult.model_validate_json(recon_result_json)
+    findings = []
+    for host, ports in recon.open_ports.items():
+        if 27017 in ports:
+            findings.extend(check_mongodb(host))
+    return [f.model_dump() for f in findings]
+
+
+@tool("Exposed PostgreSQL Check")
+def postgresql_tool(recon_result_json: str) -> list[dict]:
+    """
+    Check for PostgreSQL on port 5432. Returns CRITICAL if trust authentication
+    allows connection without a password; MEDIUM if the port is exposed but
+    credentials are required (unnecessary internet exposure).
+    Use when open_ports shows 5432.
+    Pass the full serialised ReconResult. Returns raw findings as dicts.
+    """
+    recon = ReconResult.model_validate_json(recon_result_json)
+    findings = []
+    for host, ports in recon.open_ports.items():
+        if 5432 in ports:
+            findings.extend(check_postgresql(host))
+    return [f.model_dump() for f in findings]
+
+
+@tool("Exposed MySQL/MariaDB Check")
+def mysql_tool(recon_result_json: str) -> list[dict]:
+    """
+    Check for MySQL or MariaDB on port 3306. Returns MEDIUM if the port is
+    reachable and the server responds with a valid handshake (unnecessary
+    internet exposure; verify anonymous login is disabled).
+    Use when open_ports shows 3306.
+    Pass the full serialised ReconResult. Returns raw findings as dicts.
+    """
+    recon = ReconResult.model_validate_json(recon_result_json)
+    findings = []
+    for host, ports in recon.open_ports.items():
+        if 3306 in ports:
+            findings.extend(check_mysql(host))
+    return [f.model_dump() for f in findings]
 
 
 @tool("Sensitive Files Check")
@@ -371,7 +462,12 @@ MEMBER = SquadMember(
         error_disclosure_tool,
         s3_check_tool,
         azure_storage_check_tool,
-        unauthenticated_databases_tool,
+        elasticsearch_tool,
+        couchdb_tool,
+        redis_tool,
+        mongodb_tool,
+        postgresql_tool,
+        mysql_tool,
         sensitive_files_tool,
         admin_panels_tool,
         cpanel_tool,

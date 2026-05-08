@@ -533,7 +533,11 @@ class TestCheckUnauthenticatedDatabases:
             open_ports={"cache.example.com": [6379]},
             technologies=[],
         )
-        with patch("tools.cloud.services._check_redis", return_value=True):
+        mock_sock = MagicMock()
+        mock_sock.recv.return_value = b"+PONG\r\n"
+        mock_sock.__enter__ = lambda s: s
+        mock_sock.__exit__ = MagicMock(return_value=False)
+        with patch("tools.cloud.databases.redis.socket.create_connection", return_value=mock_sock):
             results = check_unauthenticated_databases(recon)
         redis = [r for r in results if "Redis" in r.title]
         assert len(redis) == 1
@@ -547,7 +551,13 @@ class TestCheckUnauthenticatedDatabases:
             open_ports={"mongo.example.com": [27017]},
             technologies=[],
         )
-        with patch("tools.cloud.services._check_mongodb", return_value=True):
+        mock_sock = MagicMock()
+        mock_sock.recv.return_value = b"\x00" * 20 + b"ismaster" + b"\x00" * 10
+        mock_sock.__enter__ = lambda s: s
+        mock_sock.__exit__ = MagicMock(return_value=False)
+        with patch(
+            "tools.cloud.databases.mongodb.socket.create_connection", return_value=mock_sock
+        ):
             results = check_unauthenticated_databases(recon)
         mongo = [r for r in results if "MongoDB" in r.title]
         assert len(mongo) == 1

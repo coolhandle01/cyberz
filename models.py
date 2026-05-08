@@ -99,6 +99,9 @@ class ReconResult(BaseModel):
     # Findings collected passively during recon (TLS issues, DNS misconfigs, etc.)
     # Available to all downstream agents without requiring a separate pentest pass.
     passive_findings: list[RawFinding] = Field(default_factory=list)
+    # hostname -> ordered list of public hop IPs from traceroute.
+    # Useful for identifying origin IPs behind CDNs/WAFs (CDN bypass vector).
+    network_hops: dict[str, list[str]] = Field(default_factory=dict)
     completed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 

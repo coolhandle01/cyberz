@@ -17,6 +17,7 @@ from tools.recon.probe import probe_endpoints
 from tools.recon.scope import extract_domain, filter_in_scope
 from tools.recon.subfinder import enumerate_subdomains
 from tools.recon.tls import check_dns_email_security, check_tls
+from tools.recon.traceroute import run_traceroute
 from tools.recon.waybackurls import historical_urls
 
 logger = logging.getLogger(__name__)
@@ -33,6 +34,7 @@ __all__ = [
     "port_scan",
     "probe_endpoints",
     "run_recon",
+    "run_traceroute",
 ]
 
 
@@ -68,6 +70,8 @@ def run_recon(programme: Programme) -> ReconResult:
     all_domains = list(dict.fromkeys(ep_hosts + in_scope_hosts))
     passive_findings.extend(check_dns_email_security(all_domains))
 
+    network_hops = run_traceroute(in_scope_hosts[:20])
+
     return ReconResult(
         programme=programme,
         subdomains=in_scope_hosts,
@@ -75,5 +79,6 @@ def run_recon(programme: Programme) -> ReconResult:
         open_ports=open_ports,
         technologies=list(dict.fromkeys(all_tech)),
         passive_findings=passive_findings,
+        network_hops=network_hops,
         notes=f"Seeded from {seed_domains}. {len(in_scope_hosts)} in-scope hosts.",
     )
