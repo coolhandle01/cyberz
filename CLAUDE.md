@@ -31,6 +31,23 @@ This file is for AI assistants working on this codebase. It covers the architect
 
 3. **Never push a change you haven't actually executed.** A passing mypy run after a `type: ignore` removal means nothing if the file wasn't reachable. Run the tests.
 
+4. **Read the relevant source files and docs before planning any change.** Do not rely on a summary or prior context. Read the actual file. Check `proposals/` for in-flight design work that may affect your approach.
+
+5. **Never include session URLs in commit messages.** Links of the form `https://claude.ai/code/session_...` embed a reference to a private conversation and must not appear in commit history. Use a plain one- or two-sentence description instead.
+
+---
+
+## Git workflow
+
+The remote can change under you at any time - PRs get merged, branches get rebased, force-pushes happen. Before starting work or opening a PR:
+
+```bash
+git fetch origin
+git log --oneline origin/main..HEAD   # confirm only your commits are ahead
+```
+
+If the session assigns you a branch, verify it is actually current with `origin/main` before committing to it. If a PR has been merged since the branch was cut, create a fresh branch from updated main rather than pushing on top of a stale one. A `git diff origin/main --stat` before any push is a fast sanity check.
+
 ---
 
 ## What this project does
@@ -162,14 +179,6 @@ Tools are `@tool`-decorated functions in a `squad/<agent>/__init__.py`. The docs
 One concern per tool. The PT agent selects tools based on nmap evidence and detected technologies; bundling unrelated checks removes that selectivity.
 
 Tests must mock all network and binary calls. Patch `socket.create_connection` at the module path where it is imported (e.g. `tools.cloud.databases.redis.socket.create_connection`), not at the top-level `socket` module.
-
----
-
-## Adding a new config value
-
-1. Add a field to the appropriate dataclass in `config.py` using `default_factory=lambda: os.getenv(...)`.
-2. Document it in `.env.example` with a comment explaining valid values.
-3. If the value is used in a tool, thread it through via `config.<section>.<field>` - do not hardcode fallback values in the tool.
 
 ---
 
