@@ -4,7 +4,6 @@ branded control panels / monitoring tools.
 
 Each public function is a focused check that the Penetration Tester agent invokes
 selectively based on nmap open_ports data and detected technologies.
-check_exposed_services() is a backwards-compat wrapper that calls all of them.
 """
 
 from __future__ import annotations
@@ -336,27 +335,4 @@ def check_consul_vault(recon: ReconResult) -> list[RawFinding]:
     findings += _probe_path(origins, "/consul/ui", "Consul", "Consul", "consul_vault_check")
     findings += _probe_path(origins, "/vault/ui", "Vault", "Vault", "consul_vault_check")
     logger.info("Consul/Vault check found %d findings", len(findings))
-    return findings
-
-
-# ---------------------------------------------------------------------------
-# Backwards-compat aggregate
-# ---------------------------------------------------------------------------
-
-
-def check_exposed_services(recon: ReconResult) -> list[RawFinding]:
-    """Run all exposed-service checks in one call. Prefer individual targeted checks
-    via the PT agent tools when you have nmap or technology context to be selective."""
-    findings: list[RawFinding] = []
-    findings.extend(check_unauthenticated_databases(recon))
-    findings.extend(check_sensitive_files(recon.endpoints))
-    findings.extend(check_admin_panels(recon.endpoints))
-    findings.extend(check_cpanel(recon))
-    findings.extend(check_plesk(recon))
-    findings.extend(check_directadmin(recon))
-    findings.extend(check_webmin(recon))
-    findings.extend(check_grafana(recon))
-    findings.extend(check_kibana(recon))
-    findings.extend(check_portainer(recon))
-    findings.extend(check_consul_vault(recon))
     return findings
