@@ -31,6 +31,7 @@ from tools.cloud import (
 )
 from tools.pentest.cors import check_cors_misconfiguration
 from tools.pentest.errors import check_error_disclosure
+from tools.pentest.nosqli import run_nosqli
 from tools.pentest.nuclei import run_nuclei
 from tools.pentest.sourcemaps import check_js_source_maps
 from tools.pentest.sqlmap import run_sqlmap
@@ -446,6 +447,24 @@ def consul_vault_tool(recon_result_json: str) -> list[dict]:
     return [f.model_dump() for f in check_consul_vault(recon)]
 
 
+@tool("NoSQL Injection Scan")
+def nosqli_tool(endpoints_json: str) -> list[dict]:
+    """
+    Run nosqli against parameterised endpoints to detect NoSQL injection vulnerabilities.
+
+    endpoints_json: JSON array of endpoint objects. Prioritise endpoints that have
+      parameters AND where any of the following apply:
+      - Technologies mention MongoDB, DocumentDB, Mongoose, or similar document stores
+      - Parameters include id, user, username, filter, query, or similar lookup keys
+      - Error disclosure findings mention BSON, ObjectId, or a MongoDB driver
+      - Auth routes (login, signup, profile) with parameter-bearing URLs
+      Example: '[{"url": "https://example.com/api/login", "parameters": ["username", "password"]}]'
+
+    Returns raw findings as dicts.
+    """
+    return [f.model_dump() for f in run_nosqli(_parse_endpoints(endpoints_json))]
+
+
 MEMBER = SquadMember(
     slug="penetration_tester",
     dir=Path(__file__).parent,
@@ -478,5 +497,6 @@ MEMBER = SquadMember(
         kibana_tool,
         portainer_tool,
         consul_vault_tool,
+        nosqli_tool,
     ],
 )

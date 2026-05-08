@@ -18,7 +18,7 @@ With `CYBERSQUAD_HUMAN_INPUT=true` (the default) the pipeline pauses after progr
 |---|---|---|
 | Programme Manager | Ranks H1 programmes by bounty value; verifies automated scanning is permitted | HackerOne API |
 | OSINT Analyst | Enumerates subdomains, live endpoints, open ports; passive TLS/DNS checks; network path tracing | subfinder, httpx, nmap, testssl.sh, dirfuzz, waybackurls, cert transparency, tracepath |
-| Penetration Tester | 28 targeted checks selected per-engagement based on recon evidence | nuclei (tag-filtered by technology), sqlmap, CORS, SSRF, reflected XSS, SRI, header injection, host headers, JS source maps, error disclosure, sensitive files, admin panels, S3, Azure Blob, per-engine database checks (Elasticsearch, CouchDB, Redis, MongoDB, PostgreSQL, MySQL), branded panels (cPanel/WHM, Plesk, DirectAdmin, Webmin, Grafana, Kibana, Portainer, Consul/Vault) |
+| Penetration Tester | 28 targeted checks selected per-engagement based on recon evidence | nuclei (tag-filtered by technology), sqlmap, nosqli, CORS, SSRF, reflected XSS, SRI, header injection, host headers, JS source maps, error disclosure, sensitive files, admin panels, S3, Azure Blob, per-engine database checks (Elasticsearch, CouchDB, Redis, MongoDB, PostgreSQL, MySQL), branded panels (cPanel/WHM, Plesk, DirectAdmin, Webmin, Grafana, Kibana, Portainer, Consul/Vault) |
 | Vulnerability Researcher | Triages raw findings, assigns CVSS 3.1 scores, validates scope | - |
 | Technical Author | Renders complete HackerOne-format Markdown disclosure reports | - |
 | Disclosure Coordinator | Submits reports via H1 API and records submission metadata | HackerOne API |
@@ -38,6 +38,7 @@ With `CYBERSQUAD_HUMAN_INPUT=true` (the default) the pipeline pauses after progr
 | [nmap](https://nmap.org) | Port scanning |
 | [nuclei](https://github.com/projectdiscovery/nuclei) | Template-based vulnerability scanning |
 | [sqlmap](https://sqlmap.org) | SQL injection detection |
+| [nosqli](https://github.com/Charlie-belmer/nosqli) | NoSQL injection detection |
 | [testssl.sh](https://testssl.sh) | TLS configuration and certificate assessment |
 | [gitleaks](https://github.com/gitleaks/gitleaks) | Secret scanning in exposed JS source maps |
 | [ffuf](https://github.com/ffuf/ffuf) | Directory and path fuzzing |
