@@ -53,8 +53,11 @@ Bounty Squad is a six-agent CrewAI pipeline that autonomously selects HackerOne 
 | `squad/<member>/{description,expected_output}.md` | Two single-purpose files driving the Task description and expected output. |
 | `squad/<member>/__init__.py` | Tool functions (`@tool`) + a module-level `MEMBER = SquadMember(...)` constant. |
 | `tools/h1_api.py` | HackerOne REST client. Singleton: `from tools.h1_api import h1`. |
-| `tools/recon_tools.py` | Wraps subfinder, httpx, nmap. Contains the scope guard. |
-| `tools/vuln_tools.py` | Wraps nuclei, sqlmap, custom checks. |
+| `tools/recon/` | Recon tools: subfinder, httpx, nmap, TLS, DNS, dirfuzz, waybackurls, cert transparency, traceroute, scope guard. |
+| `tools/recon/scope.py` | `filter_in_scope()` - hard scope enforcement boundary. Do not weaken. |
+| `tools/pentest/` | Pentest tools: nuclei, sqlmap, CORS, SSRF, XSS, SRI, header injection, source maps, error disclosure. |
+| `tools/cloud/` | Cloud/service checks: S3, Azure Blob, per-engine databases, admin panels, branded panels. |
+| `tools/cloud/databases/` | Per-engine unauthenticated database checks: one file per engine. |
 | `tools/report_tools.py` | Renders Markdown reports and writes them to disk. |
 
 ---
@@ -102,7 +105,7 @@ Each agent's prose lives in five single-purpose markdown files inside its packag
 
 ## Safety invariants - do not break these
 
-**Scope enforcement** - `filter_in_scope()` in `recon_tools.py` uses an exact-match or dot-boundary check:
+**Scope enforcement** - `filter_in_scope()` in `tools/recon/scope.py` uses an exact-match or dot-boundary check:
 
 ```python
 if host == pattern or host.endswith("." + pattern):
@@ -141,6 +144,24 @@ Coverage floor is 70%. Every new public function in `tools/` needs a test. Every
 2. Import the new `MEMBER` into `_SQUAD` in `crew.py`.
 3. Wire its task into `build_tasks()` in `tasks.py` with correct `context` dependencies.
 4. Add unit tests covering the new tool's logic.
+
+---
+
+## Adding a new config value
+
+1. Add a field to the appropriate dataclass in `config.py` using `default_factory=lambda: os.getenv(...)`.
+2. Document it in `.env.example` with a comment explaining valid values.
+3. If the value is used in a tool, thread it through via `config.<section>.<field>` - do not hardcode fallback values in the tool.
+
+---
+
+## Adding a new tool
+
+Tools are `@tool`-decorated functions in a `squad/<agent>/__init__.py`. The docstring is the agent's only guidance for when and how to call the tool - write it as an instruction, not a description.
+
+One concern per tool. The PT agent selects tools based on nmap evidence and detected technologies; bundling unrelated checks removes that selectivity.
+
+Tests must mock all network and binary calls. Patch `socket.create_connection` at the module path where it is imported (e.g. `tools.cloud.databases.redis.socket.create_connection`), not at the top-level `socket` module.
 
 ---
 
