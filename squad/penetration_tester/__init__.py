@@ -31,7 +31,7 @@ from tools.cloud import (
 )
 from tools.pentest.cors import check_cors_misconfiguration
 from tools.pentest.errors import check_error_disclosure
-from tools.pentest.nosql import check_nosql_injection
+from tools.pentest.nosqli import run_nosqli
 from tools.pentest.nuclei import run_nuclei
 from tools.pentest.sourcemaps import check_js_source_maps
 from tools.pentest.sqlmap import run_sqlmap
@@ -447,11 +447,10 @@ def consul_vault_tool(recon_result_json: str) -> list[dict]:
     return [f.model_dump() for f in check_consul_vault(recon)]
 
 
-@tool("NoSQL Injection Probe")
-def nosql_probe_tool(endpoints_json: str) -> list[dict]:
+@tool("NoSQL Injection Scan")
+def nosqli_tool(endpoints_json: str) -> list[dict]:
     """
-    Inject MongoDB operator payloads into URL parameters and POST bodies to detect
-    NoSQL injection and authentication bypass.
+    Run nosqli against parameterised endpoints to detect NoSQL injection vulnerabilities.
 
     endpoints_json: JSON array of endpoint objects. Prioritise endpoints that have
       parameters AND where any of the following apply:
@@ -461,13 +460,9 @@ def nosql_probe_tool(endpoints_json: str) -> list[dict]:
       - Auth routes (login, signup, profile) with parameter-bearing URLs
       Example: '[{"url": "https://example.com/api/login", "parameters": ["username", "password"]}]'
 
-    Severity:
-      - Auth bypass (401/403 -> 200): CRITICAL
-      - Data leakage without full bypass: HIGH
-
     Returns raw findings as dicts.
     """
-    return [f.model_dump() for f in check_nosql_injection(_parse_endpoints(endpoints_json))]
+    return [f.model_dump() for f in run_nosqli(_parse_endpoints(endpoints_json))]
 
 
 MEMBER = SquadMember(
@@ -502,6 +497,6 @@ MEMBER = SquadMember(
         kibana_tool,
         portainer_tool,
         consul_vault_tool,
-        nosql_probe_tool,
+        nosqli_tool,
     ],
 )
