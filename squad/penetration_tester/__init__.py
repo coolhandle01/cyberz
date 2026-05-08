@@ -33,6 +33,7 @@ from tools.pentest.cors import check_cors_misconfiguration
 from tools.pentest.errors import check_error_disclosure
 from tools.pentest.nosqli import run_nosqli
 from tools.pentest.nuclei import run_nuclei
+from tools.pentest.prompt_injection import check_prompt_injection
 from tools.pentest.sourcemaps import check_js_source_maps
 from tools.pentest.sqlmap import run_sqlmap
 from tools.pentest.sri import check_sri
@@ -447,6 +448,27 @@ def consul_vault_tool(recon_result_json: str) -> list[dict]:
     return [f.model_dump() for f in check_consul_vault(recon)]
 
 
+@tool("Prompt Injection Probe")
+def prompt_injection_tool(endpoints_json: str) -> list[dict]:
+    """
+    Probe LLM-backed endpoints for prompt injection by injecting a canary string
+    in multiple request formats (OpenAI chat, generic message, prompt completion).
+
+    endpoints_json: JSON array of endpoint objects. Use this tool when:
+      - The OSINT Analyst's LLM Endpoint Detection tool returned results
+      - Endpoint technologies include 'LLM'
+      - URL paths suggest an AI assistant (/chat, /ask, /ai, /assistant, /copilot)
+      - The target is known to use an AI product or chatbot feature
+
+    Severity:
+      - Canary reflected in response (direct injection): CRITICAL
+      - Response contains system prompt shaped text (leakage): HIGH
+
+    Returns raw findings as dicts.
+    """
+    return [f.model_dump() for f in check_prompt_injection(_parse_endpoints(endpoints_json))]
+
+
 @tool("NoSQL Injection Scan")
 def nosqli_tool(endpoints_json: str) -> list[dict]:
     """
@@ -498,5 +520,6 @@ MEMBER = SquadMember(
         portainer_tool,
         consul_vault_tool,
         nosqli_tool,
+        prompt_injection_tool,
     ],
 )

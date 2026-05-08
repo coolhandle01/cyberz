@@ -6,9 +6,10 @@ from pathlib import Path
 
 from crewai.tools import tool
 
+from models import Endpoint
 from squad import SquadMember
 from tools.h1_api import h1
-from tools.recon import cert_transparency, historical_urls, run_recon
+from tools.recon import cert_transparency, detect_llm_endpoints, historical_urls, run_recon
 
 
 @tool("Run Recon")
@@ -43,8 +44,34 @@ def historical_urls_tool(domain: str) -> list[str]:
     return historical_urls(domain)
 
 
+@tool("LLM Endpoint Detection")
+def llm_detection_tool(endpoints_json: str) -> list[dict]:
+    """
+    Scan a set of live endpoints for signals that they are backed by an LLM or
+    AI assistant. Uses two methods:
+
+    1. URL path inspection - checks path segments against known LLM tokens
+       (chat, ask, ai, assistant, completions, generate, copilot, etc.)
+    2. Response probing - checks HTTP headers (OpenAI gateway headers), content
+       type (text/event-stream for streaming responses), JSON structure
+       (OpenAI-format choices/tokens keys), and body text (AI self-identification
+       phrases).
+
+    endpoints_json: JSON array of endpoint objects from ReconResult. Pass the
+      full endpoint list after run_recon completes - the tool filters internally.
+      Example: '[{"url": "https://example.com/chat", "status_code": 200}]'
+
+    Returns endpoint dicts tagged with 'LLM' in their technologies list. Pass
+    these to the Penetration Tester for prompt injection testing.
+    """
+    import json
+
+    endpoints = [Endpoint.model_validate(e) for e in json.loads(endpoints_json)]
+    return [ep.model_dump() for ep in detect_llm_endpoints(endpoints)]
+
+
 MEMBER = SquadMember(
     slug="osint_analyst",
     dir=Path(__file__).parent,
-    tools=[recon_tool, cert_transparency_tool, historical_urls_tool],
+    tools=[recon_tool, cert_transparency_tool, historical_urls_tool, llm_detection_tool],
 )
