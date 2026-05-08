@@ -39,14 +39,16 @@ This file is for AI assistants working on this codebase. It covers the architect
 
 ## Git workflow
 
-The remote can change under you at any time - PRs get merged, branches get rebased, force-pushes happen. Before starting work or opening a PR:
+Always cut branches fresh from a current main. Do not reuse or rebase a branch that was used for a previous PR - once a PR merges, its commits are in main and rebasing on top of them causes conflicts that require skipping commits. The correct flow every time:
 
 ```bash
 git fetch origin
-git log --oneline origin/main..HEAD   # confirm only your commits are ahead
+git checkout main
+git pull origin main
+git checkout -b feat/your-branch-name
 ```
 
-If the session assigns you a branch, verify it is actually current with `origin/main` before committing to it. If a PR has been merged since the branch was cut, create a fresh branch from updated main rather than pushing on top of a stale one. A `git diff origin/main --stat` before any push is a fast sanity check.
+A `git diff origin/main --stat` before any push is a fast sanity check that only your intended changes are included.
 
 ---
 

@@ -5,7 +5,15 @@ Load secrets from environment variables; never hardcode credentials.
 
 import os
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
+
+
+class ScanMode(StrEnum):
+    STEALTH = "stealth"  # slow and quiet - conservative delays, low rate limits
+    NORMAL = "normal"  # balanced defaults
+    RAID = "raid"  # fast - aggressive rate limits, 429-adaptive backoff
+
 
 _BUNDLE_WORDLIST = str(Path(__file__).parent / "data" / "wordlists" / "common.txt")
 
@@ -59,6 +67,7 @@ class ReconConfig:
 class ScanConfig:
     """Tuning parameters for the penetration testing phase."""
 
+    scan_mode: ScanMode = field(default_factory=lambda: ScanMode(os.getenv("SCAN_MODE", "normal")))
     nuclei_templates_path: str = field(
         default_factory=lambda: os.getenv("NUCLEI_TEMPLATES", "~/.local/nuclei-templates")
     )
@@ -86,6 +95,48 @@ class ScanConfig:
     )
     tls_max_targets: int = field(default_factory=lambda: int(os.getenv("TLS_MAX_TARGETS", "10")))
     testssl_timeout: int = field(default_factory=lambda: int(os.getenv("TESTSSL_TIMEOUT", "300")))
+
+    def __post_init__(self) -> None:
+        # Per-mode rate defaults. Explicit env vars always win; this only fills
+        # in fields that were not set via their own env var.
+        _MODES: dict[ScanMode, dict[str, object]] = {
+            ScanMode.STEALTH: {
+                "request_delay": 2.0,
+                "nuclei_rate_limit": 2,
+                "dirfuzz_rate_limit": 5,
+                "dirfuzz_threads": 5,
+                "sqlmap_level": 1,
+                "sqlmap_risk": 1,
+            },
+            ScanMode.NORMAL: {
+                "request_delay": 0.5,
+                "nuclei_rate_limit": 10,
+                "dirfuzz_rate_limit": 20,
+                "dirfuzz_threads": 40,
+                "sqlmap_level": 2,
+                "sqlmap_risk": 1,
+            },
+            ScanMode.RAID: {
+                "request_delay": 0.05,
+                "nuclei_rate_limit": 100,
+                "dirfuzz_rate_limit": 150,
+                "dirfuzz_threads": 80,
+                "sqlmap_level": 3,
+                "sqlmap_risk": 2,
+            },
+        }
+        _ENV_MAP = {
+            "SCAN_DELAY": "request_delay",
+            "NUCLEI_RATE_LIMIT": "nuclei_rate_limit",
+            "DIRFUZZ_RATE_LIMIT": "dirfuzz_rate_limit",
+            "DIRFUZZ_THREADS": "dirfuzz_threads",
+            "SQLMAP_LEVEL": "sqlmap_level",
+            "SQLMAP_RISK": "sqlmap_risk",
+        }
+        mode_vals = _MODES.get(self.scan_mode, _MODES[ScanMode.NORMAL])
+        for env_var, attr in _ENV_MAP.items():
+            if os.getenv(env_var) is None:
+                setattr(self, attr, mode_vals[attr])
 
 
 @dataclass

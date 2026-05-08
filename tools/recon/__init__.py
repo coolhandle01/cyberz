@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from urllib.parse import urlparse
 
-from models import Programme, ReconResult, ScopeType
+from models import Endpoint, Programme, ReconResult, ScopeType
 from tools.recon.cert_transparency import cert_transparency
 from tools.recon.dirfuzz import discover_paths
 from tools.recon.llm import detect_llm_endpoints
@@ -22,6 +22,41 @@ from tools.recon.traceroute import run_traceroute
 from tools.recon.waybackurls import historical_urls
 
 logger = logging.getLogger(__name__)
+
+# Subdomain prefixes that are high-value dirfuzz targets: more likely to expose
+# admin interfaces, internal APIs, or sensitive paths than generic subdomains.
+_DIRFUZZ_HIGH_VALUE_PREFIXES = frozenset(
+    {
+        "admin",
+        "api",
+        "app",
+        "beta",
+        "console",
+        "dashboard",
+        "dev",
+        "internal",
+        "manage",
+        "portal",
+        "staging",
+        "test",
+    }
+)
+
+
+def _dirfuzz_targets(endpoints: list[Endpoint], seed_domains: list[str]) -> list[Endpoint]:
+    """Sort endpoints for dirfuzz priority: root domains first, high-value subdomains second."""
+    seed_set = set(seed_domains)
+
+    def _priority(ep: Endpoint) -> int:
+        hostname = urlparse(ep.url).hostname or ""
+        if hostname in seed_set:
+            return 0
+        if hostname.split(".")[0].lower() in _DIRFUZZ_HIGH_VALUE_PREFIXES:
+            return 1
+        return 2
+
+    return sorted(endpoints, key=_priority)
+
 
 __all__ = [
     "cert_transparency",
@@ -52,13 +87,14 @@ def run_recon(programme: Programme) -> ReconResult:
     all_subdomains: list[str] = []
     for domain in seed_domains:
         all_subdomains.extend(enumerate_subdomains(domain))
+    all_subdomains = list(dict.fromkeys(all_subdomains))
 
     in_scope_hosts = filter_in_scope(all_subdomains, programme)
     endpoints = probe_endpoints(in_scope_hosts)
     live_hosts = [ep.url for ep in endpoints if ep.status_code and ep.status_code < 500]
     open_ports = port_scan(live_hosts[:20])
 
-    discovered = discover_paths(endpoints)
+    discovered = discover_paths(_dirfuzz_targets(endpoints, seed_domains))
     endpoints = endpoints + discovered
 
     all_tech: list[str] = []

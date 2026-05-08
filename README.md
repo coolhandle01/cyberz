@@ -88,8 +88,7 @@ ANTHROPIC_API_KEY=your-anthropic-key
 | `H1_MIN_BOUNTY` | `500` | Minimum max-bounty in USD to consider a programme |
 | `H1_MAX_PROGRAMMES` | `10` | Number of programmes evaluated per run |
 | `MIN_SEVERITY` | `medium` | Discard findings below this severity |
-| `SCAN_DELAY` | `0.5` | Seconds between scan requests |
-| `NUCLEI_RATE_LIMIT` | `10` | Nuclei requests per second |
+| `SCAN_MODE` | `normal` | Rate-limit profile: `stealth` (2s delay, low rate), `normal` (0.5s), `raid` (0.05s + 429-adaptive backoff). Individual vars (`SCAN_DELAY`, `NUCLEI_RATE_LIMIT`, etc.) override the profile when set. |
 | `REPORTS_DIR` | `./reports` | Directory for generated report files |
 | `CYBERSQUAD_HUMAN_INPUT` | `true` | Pause for operator approval between stages; set `false` for automated runs |
 
@@ -214,7 +213,7 @@ Edit any of the five prose files in `squad/<member>/`: `role.md`, `goal.md`, `ba
 ## Ethical and legal considerations
 
 - **Only scan authorised targets.** The Programme Manager filters for programmes that explicitly permit automated scanning. Do not remove or weaken this check.
-- **Respect rate limits.** `SCAN_DELAY` and `NUCLEI_RATE_LIMIT` exist for a reason. Aggressive scanning can violate programme terms and get you banned.
+- **Respect rate limits.** Use `SCAN_MODE=stealth` or `normal` against live production targets. `raid` mode is for lab environments or programmes that explicitly invite aggressive testing. Hammering a target can violate programme terms and get you banned.
 - **Read before you approve.** When running with `CYBERSQUAD_HUMAN_INPUT=true`, review the programme selection and the report carefully before confirming each pause.
 - **Check for duplicates.** Submitting a known duplicate wastes triage time and reflects poorly on the submission record.
 - **Handle reports carefully.** The `reports/` directory contains vulnerability details and evidence. It is gitignored - do not commit or share its contents.
