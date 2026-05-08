@@ -17,8 +17,8 @@ With `CYBERSQUAD_HUMAN_INPUT=true` (the default) the pipeline pauses after progr
 | Agent | Responsibility | Tools |
 |---|---|---|
 | Programme Manager | Ranks H1 programmes by bounty value; verifies automated scanning is permitted | HackerOne API |
-| OSINT Analyst | Enumerates subdomains, live endpoints, and open ports | subfinder, httpx, nmap |
-| Penetration Tester | Runs templated and targeted scans against discovered surface | nuclei, sqlmap |
+| OSINT Analyst | Enumerates subdomains, live endpoints, open ports; passive TLS/DNS checks; network path tracing | subfinder, httpx, nmap, testssl.sh, dirfuzz, waybackurls, cert transparency, tracepath |
+| Penetration Tester | 28 targeted checks selected per-engagement based on recon evidence | nuclei (tag-filtered by technology), sqlmap, CORS, SSRF, reflected XSS, SRI, header injection, host headers, JS source maps, error disclosure, sensitive files, admin panels, S3, Azure Blob, per-engine database checks (Elasticsearch, CouchDB, Redis, MongoDB, PostgreSQL, MySQL), branded panels (cPanel/WHM, Plesk, DirectAdmin, Webmin, Grafana, Kibana, Portainer, Consul/Vault) |
 | Vulnerability Researcher | Triages raw findings, assigns CVSS 3.1 scores, validates scope | - |
 | Technical Author | Renders complete HackerOne-format Markdown disclosure reports | - |
 | Disclosure Coordinator | Submits reports via H1 API and records submission metadata | HackerOne API |
@@ -38,6 +38,11 @@ With `CYBERSQUAD_HUMAN_INPUT=true` (the default) the pipeline pauses after progr
 | [nmap](https://nmap.org) | Port scanning |
 | [nuclei](https://github.com/projectdiscovery/nuclei) | Template-based vulnerability scanning |
 | [sqlmap](https://sqlmap.org) | SQL injection detection |
+| [testssl.sh](https://testssl.sh) | TLS configuration and certificate assessment |
+| [gitleaks](https://github.com/gitleaks/gitleaks) | Secret scanning in exposed JS source maps |
+| [ffuf](https://github.com/ffuf/ffuf) | Directory and path fuzzing |
+| [waybackurls](https://github.com/tomnomnom/waybackurls) | Historical URL discovery via Wayback Machine |
+| tracepath / traceroute | Network path tracing for CDN/WAF bypass detection |
 
 **API credentials:**
 - A [HackerOne](https://hackerone.com) account with API access
@@ -130,11 +135,16 @@ cybersquad/
 |       +-- expected_output.md # Task expected output
 |
 +-- tools/
-|   +-- h1_api.py      # HackerOne REST client
-|   +-- metrics.py     # Token usage and cost tracking
-|   +-- recon_tools.py # subfinder / httpx / nmap wrappers + scope guard
-|   +-- report_tools.py# Markdown report renderer and file writer
-|   +-- vuln_tools.py  # nuclei / sqlmap / custom check wrappers
+|   +-- h1_api.py          # HackerOne REST client
+|   +-- metrics.py         # Token usage and cost tracking
+|   +-- report_tools.py    # Markdown report renderer and file writer
+|   +-- recon/             # Recon: subfinder, httpx, nmap, TLS, DNS, dirfuzz,
+|   |                      #   waybackurls, cert transparency, traceroute, scope guard
+|   +-- pentest/           # Pentest: nuclei, sqlmap, CORS, SSRF, XSS, SRI,
+|   |                      #   header injection, source maps, error disclosure
+|   +-- cloud/             # Cloud: S3, Azure Blob, exposed services, admin panels,
+|   |   +-- databases/     #   per-engine DB checks (ES, CouchDB, Redis, MongoDB,
+|   |                      #   PostgreSQL, MySQL), branded panels (cPanel, Webmin, ...)
 |
 +-- tests/             # pytest unit tests (@pytest.mark.unit)
 +-- proposals/         # Design proposals for upcoming features
