@@ -15,25 +15,49 @@ logger = logging.getLogger(__name__)
 # URL path segments that strongly suggest an LLM-backed endpoint.
 _LLM_PATH_TOKENS = frozenset(
     {
+        # Model names / providers
+        "claude",
+        "gpt",
+        "gemini",
+        "ollama",
+        "groq",
+        # Generic AI capability paths
+        "ai",
+        "llm",
         "chat",
         "ask",
-        "ai",
         "assistant",
-        "completions",
-        "generate",
-        "llm",
         "bot",
         "copilot",
-        "gpt",
-        "claude",
-        "gemini",
+        # API operation paths
+        "completions",
+        "generate",
         "inference",
         "predict",
+        # MCP (Model Context Protocol) servers
+        "mcp",
+        # Vertex AI (Google Cloud)
+        "vertex",
+        # LangChain / LangServe / LangGraph
+        "langchain",
+        "langgraph",
+        "runnable",
+        # AWS Bedrock
+        "bedrock",
     }
 )
 
 # JSON response keys present in OpenAI-compatible chat completion responses.
 _OPENAI_RESPONSE_KEYS = frozenset({"choices", "prompt_tokens", "completion_tokens"})
+
+# JSON response keys present in other LLM framework responses.
+_FRAMEWORK_RESPONSE_KEYS = frozenset(
+    {
+        "predictions",  # Vertex AI
+        "run_id",  # LangServe
+        "output",  # LangChain / LangGraph
+    }
+)
 
 # HTTP response headers set by common LLM API gateways.
 _LLM_HEADER_TOKENS = ("x-openai-organization", "x-ratelimit-limit-requests", "openai-processing-ms")
@@ -81,11 +105,15 @@ def _probe_for_llm_signals(url: str) -> bool:
 
     try:
         data = json.loads(body)
-        if isinstance(data, dict) and _OPENAI_RESPONSE_KEYS & data.keys():
-            return True
-        model_val = str(data.get("model", "")).lower() if isinstance(data, dict) else ""
-        if any(name in model_val for name in ("gpt", "claude", "gemini", "llama", "mistral")):
-            return True
+        if isinstance(data, dict):
+            if (_OPENAI_RESPONSE_KEYS | _FRAMEWORK_RESPONSE_KEYS) & data.keys():
+                return True
+            model_val = str(data.get("model", "")).lower()
+            if any(
+                name in model_val
+                for name in ("gpt", "claude", "gemini", "llama", "mistral", "vertex", "bedrock")
+            ):
+                return True
     except (json.JSONDecodeError, ValueError):
         pass
 
