@@ -152,3 +152,64 @@ class TestSaveReport:
 
         path = save_report(disclosure_report)
         assert "test-programme" in path.name
+
+
+# calculate_cvss_score
+class TestCalculateCvssScore:
+    def test_known_vector_critical(self):
+        from tools.report_tools import calculate_cvss_score
+
+        # AV:N AC:L PR:N UI:N S:U C:H I:H A:H -> 9.8
+        score = calculate_cvss_score("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
+        assert score == 9.8
+
+    def test_known_vector_medium(self):
+        from tools.report_tools import calculate_cvss_score
+
+        # AV:N AC:L PR:N UI:R S:C C:L I:L A:N -> 6.1
+        score = calculate_cvss_score("CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N")
+        assert score == 6.1
+
+    def test_known_vector_low(self):
+        from tools.report_tools import calculate_cvss_score
+
+        # AV:N AC:H PR:N UI:R S:U C:L I:N A:N -> 3.1
+        score = calculate_cvss_score("CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:L/I:N/A:N")
+        assert score == 3.1
+
+    def test_zero_impact_returns_zero(self):
+        from tools.report_tools import calculate_cvss_score
+
+        # C:N I:N A:N -> ISS=0 -> score=0
+        score = calculate_cvss_score("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N")
+        assert score == 0.0
+
+    def test_version_30_accepted(self):
+        from tools.report_tools import calculate_cvss_score
+
+        score = calculate_cvss_score("CVSS:3.0/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
+        assert score == 9.8
+
+    def test_malformed_version_raises(self):
+        from tools.report_tools import calculate_cvss_score
+
+        with pytest.raises(ValueError, match="Unrecognised CVSS version"):
+            calculate_cvss_score("CVSS:2.0/AV:N/AC:L/Au:N/C:C/I:C/A:C")
+
+    def test_missing_metric_raises(self):
+        from tools.report_tools import calculate_cvss_score
+
+        with pytest.raises(ValueError, match="Missing or unknown CVSS metric"):
+            calculate_cvss_score("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H")
+
+    def test_malformed_component_raises(self):
+        from tools.report_tools import calculate_cvss_score
+
+        with pytest.raises(ValueError, match="Malformed metric"):
+            calculate_cvss_score("CVSS:3.1/AV:N/BADCOMPONENT/PR:N/UI:N/S:U/C:H/I:H/A:H")
+
+    def test_result_in_valid_range(self):
+        from tools.report_tools import calculate_cvss_score
+
+        score = calculate_cvss_score("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
+        assert 0.0 <= score <= 10.0

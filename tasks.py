@@ -32,7 +32,7 @@ def build_tasks(agents: dict) -> list[Task]:
     triage = build_task(
         VULNERABILITY_RESEARCHER,
         agents["vulnerability_researcher"],
-        context=[pentest, select],
+        context=[pentest, recon, select],
         human_input=hi,
     )
     write = build_task(

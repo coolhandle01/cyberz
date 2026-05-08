@@ -133,6 +133,7 @@ class H1Client:
         out_of_scope: list[ScopeItem] = []
         for item in scope_data.get("data", []):
             i_attrs = item.get("attributes", {})
+            max_sev_str = (i_attrs.get("max_severity") or "").lower()
             scope_item = ScopeItem(
                 asset_identifier=i_attrs.get("asset_identifier", ""),
                 asset_type=_H1_SCOPE_TYPE_MAP.get(
@@ -140,6 +141,7 @@ class H1Client:
                 ),
                 eligible_for_bounty=i_attrs.get("eligible_for_bounty", False),
                 instruction=i_attrs.get("instruction"),
+                max_severity=_H1_SEVERITY_MAP.get(max_sev_str) if max_sev_str else None,
             )
             if i_attrs.get("eligible_for_submission", True):
                 in_scope.append(scope_item)
@@ -147,10 +149,23 @@ class H1Client:
                 out_of_scope.append(scope_item)
 
         policy_text: str = attrs.get("policy", "") or ""
+        policy_lower = policy_text.lower()
         allows_auto = not any(
-            kw in policy_text.lower()
+            kw in policy_lower
             for kw in ["no automated", "automated scanning prohibited", "no scanners"]
         )
+
+        offers_bounties: bool = bool(attrs.get("offers_bounties", True))
+        submission_state: str = attrs.get("submission_state", "open") or "open"
+        accepts_new_reports: bool = submission_state == "open"
+
+        response_efficiency_pct: float | None = attrs.get("response_efficiency_percentage")
+        avg_bounty_minutes: float | None = attrs.get("average_time_to_bounty_in_minutes")
+        avg_time_to_bounty_days: float | None = (
+            round(avg_bounty_minutes / (60 * 24), 1) if avg_bounty_minutes else None
+        )
+        total_cents: int | None = attrs.get("total_bounties_paid_in_cents")
+        total_bounties_paid_usd: int | None = total_cents // 100 if total_cents else None
 
         return Programme(
             handle=handle,
@@ -160,6 +175,12 @@ class H1Client:
             in_scope=in_scope,
             out_of_scope=out_of_scope,
             allows_automated_scanning=allows_auto,
+            offers_bounties=offers_bounties,
+            accepts_new_reports=accepts_new_reports,
+            response_efficiency_pct=response_efficiency_pct,
+            avg_time_to_bounty_days=avg_time_to_bounty_days,
+            total_bounties_paid_usd=total_bounties_paid_usd,
+            policy_text=policy_text,
         )
 
     # Report submission
@@ -208,6 +229,30 @@ class H1Client:
                 status=SubmissionStatus.PENDING,
                 error=str(exc),
             )
+
+    def get_programme_stats(self, handle: str) -> dict:
+        """Return response efficiency and payout stats for a programme."""
+        data = self._get(f"/programs/{handle}")
+        attrs = data.get("data", {}).get("attributes", {})
+        return {
+            "handle": handle,
+            "response_efficiency_pct": attrs.get("response_efficiency_percentage"),
+            "avg_time_to_first_response_minutes": attrs.get(
+                "average_time_to_first_programme_response_in_minutes"
+            ),
+            "avg_time_to_bounty_minutes": attrs.get("average_time_to_bounty_in_minutes"),
+            "avg_time_to_resolution_minutes": attrs.get("average_time_to_resolution_in_minutes"),
+            "total_bounties_paid_cents": attrs.get("total_bounties_paid_in_cents"),
+            "accepting_reports": attrs.get("state") == "public_mode",
+        }
+
+    def list_reports(self, programme_handle: str, page_size: int = 25) -> list[dict]:
+        """List recent reports for a programme - used for duplicate detection."""
+        data = self._get(
+            "/reports",
+            params={"filter[program][]": programme_handle, "page[size]": page_size},
+        )
+        return list(data.get("data", []))
 
     def get_report_status(self, report_id: str) -> SubmissionStatus:
         """Poll the status of a previously submitted report."""

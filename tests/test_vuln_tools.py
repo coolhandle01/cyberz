@@ -9,13 +9,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from models import Endpoint, Severity, VerifiedVulnerability
-from tools.vuln_tools import (
-    _lookup_cvss,
-    check_cors_misconfiguration,
-    is_in_scope,
-    run_nuclei,
-    triage_findings,
-)
+from tools.pentest import check_cors_misconfiguration, is_in_scope, run_nuclei, triage_findings
+from tools.pentest.triage import _lookup_cvss
 
 pytestmark = pytest.mark.unit
 
@@ -26,7 +21,7 @@ class TestAboveFloor:
         monkeypatch.setenv("MIN_SEVERITY", "medium")
         import importlib
 
-        import tools.vuln_tools as vt
+        import tools.pentest.triage as vt
 
         importlib.reload(vt)
         assert vt._above_floor(Severity.MEDIUM) is True
@@ -35,7 +30,7 @@ class TestAboveFloor:
         monkeypatch.setenv("MIN_SEVERITY", "medium")
         import importlib
 
-        import tools.vuln_tools as vt
+        import tools.pentest.triage as vt
 
         importlib.reload(vt)
         assert vt._above_floor(Severity.LOW) is False
@@ -44,7 +39,7 @@ class TestAboveFloor:
         monkeypatch.setenv("MIN_SEVERITY", "high")
         import importlib
 
-        import tools.vuln_tools as vt
+        import tools.pentest.triage as vt
 
         importlib.reload(vt)
         assert vt._above_floor(Severity.CRITICAL) is True
@@ -53,7 +48,7 @@ class TestAboveFloor:
         monkeypatch.setenv("MIN_SEVERITY", "low")
         import importlib
 
-        import tools.vuln_tools as vt
+        import tools.pentest.triage as vt
 
         importlib.reload(vt)
         assert vt._above_floor(Severity.INFORMATIONAL) is False
@@ -102,7 +97,7 @@ class TestTriageFindings:
         monkeypatch.setenv("MIN_SEVERITY", "medium")
         import importlib
 
-        import tools.vuln_tools as vt
+        import tools.pentest.triage as vt
 
         importlib.reload(vt)
         results = vt.triage_findings([raw_finding_high, raw_finding_low], programme)
@@ -223,3 +218,189 @@ class TestCheckCorsMisconfiguration:
             results = check_cors_misconfiguration(endpoints)
 
         assert results == []
+
+
+# check_ssrf
+class TestCheckSsrf:
+    def test_detects_aws_metadata_in_response(self):
+        from tools.pentest import check_ssrf
+
+        endpoint = Endpoint(
+            url="https://api.example.com/fetch",
+            status_code=200,
+            parameters=["url"],
+        )
+        mock_resp = MagicMock()
+        mock_resp.text = "ami-id: ami-12345678\ninstance-id: i-abc"
+
+        with patch("requests.get", return_value=mock_resp):
+            results = check_ssrf([endpoint])
+
+        assert len(results) == 1
+        assert results[0].vuln_class == "SSRF"
+        assert results[0].severity_hint == Severity.CRITICAL
+
+    def test_skips_endpoints_without_parameters(self):
+        from tools.pentest import check_ssrf
+
+        endpoint = Endpoint(url="https://api.example.com/static", status_code=200)
+
+        with patch("requests.get") as mock_get:
+            results = check_ssrf([endpoint])
+
+        mock_get.assert_not_called()
+        assert results == []
+
+    def test_safe_response_produces_no_finding(self):
+        from tools.pentest import check_ssrf
+
+        endpoint = Endpoint(
+            url="https://api.example.com/fetch",
+            status_code=200,
+            parameters=["url"],
+        )
+        mock_resp = MagicMock()
+        mock_resp.text = "<html>Normal page</html>"
+
+        with patch("requests.get", return_value=mock_resp):
+            results = check_ssrf([endpoint])
+
+        assert results == []
+
+    def test_request_exception_is_swallowed(self):
+        from tools.pentest import check_ssrf
+
+        endpoint = Endpoint(
+            url="https://api.example.com/fetch",
+            status_code=200,
+            parameters=["url"],
+        )
+
+        with patch("requests.get", side_effect=Exception("timeout")):
+            results = check_ssrf([endpoint])
+
+        assert results == []
+
+
+# check_header_injection
+class TestCheckHeaderInjection:
+    def test_detects_reflected_canary_in_headers(self):
+        from tools.pentest import check_header_injection
+
+        endpoint = Endpoint(url="https://api.example.com/", status_code=200)
+        mock_resp = MagicMock()
+        mock_resp.headers = {"BountySquadCanary": "yes"}
+        mock_resp.text = ""
+
+        with patch("requests.get", return_value=mock_resp):
+            results = check_header_injection([endpoint])
+
+        assert len(results) == 1
+        assert results[0].vuln_class == "HeaderInjection"
+
+    def test_detects_canary_in_response_body(self):
+        from tools.pentest import check_header_injection
+
+        endpoint = Endpoint(url="https://api.example.com/", status_code=200)
+        mock_resp = MagicMock()
+        mock_resp.headers = {}
+        mock_resp.text = "bountysquadcanary injected"
+
+        with patch("requests.get", return_value=mock_resp):
+            results = check_header_injection([endpoint])
+
+        assert len(results) == 1
+
+    def test_clean_response_produces_no_finding(self):
+        from tools.pentest import check_header_injection
+
+        endpoint = Endpoint(url="https://api.example.com/", status_code=200)
+        mock_resp = MagicMock()
+        mock_resp.headers = {"Content-Type": "text/html"}
+        mock_resp.text = "<html>Normal</html>"
+
+        with patch("requests.get", return_value=mock_resp):
+            results = check_header_injection([endpoint])
+
+        assert results == []
+
+    def test_request_exception_is_swallowed(self):
+        from tools.pentest import check_header_injection
+
+        endpoint = Endpoint(url="https://api.example.com/", status_code=200)
+
+        with patch("requests.get", side_effect=Exception("conn error")):
+            results = check_header_injection([endpoint])
+
+        assert results == []
+
+
+# lookup_cve
+class TestLookupCve:
+    def _nvd_response(self):
+        return {
+            "vulnerabilities": [
+                {
+                    "cve": {
+                        "id": "CVE-2021-44228",
+                        "descriptions": [{"lang": "en", "value": "Log4Shell RCE"}],
+                        "metrics": {
+                            "cvssMetricV31": [
+                                {
+                                    "cvssData": {
+                                        "baseScore": 10.0,
+                                        "vectorString": (
+                                            "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H"
+                                        ),
+                                    }
+                                }
+                            ]
+                        },
+                    }
+                }
+            ]
+        }
+
+    def test_returns_parsed_cve_results(self):
+        from tools.pentest import lookup_cve
+
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.json.return_value = self._nvd_response()
+
+        with patch("requests.get", return_value=mock_resp):
+            results = lookup_cve("log4shell")
+
+        assert len(results) == 1
+        assert results[0]["id"] == "CVE-2021-44228"
+        assert results[0]["cvss_score"] == 10.0
+        assert results[0]["description"] == "Log4Shell RCE"
+
+    def test_returns_empty_list_on_network_error(self):
+        from tools.pentest import lookup_cve
+
+        with patch("requests.get", side_effect=Exception("network down")):
+            results = lookup_cve("sqli")
+
+        assert results == []
+
+    def test_sends_api_key_header_when_configured(self, monkeypatch):
+        monkeypatch.setenv("NVD_API_KEY", "test-key-123")
+        import importlib
+
+        import config as cfg_module
+
+        importlib.reload(cfg_module)
+
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.json.return_value = {"vulnerabilities": []}
+
+        with patch("requests.get", return_value=mock_resp) as mock_get:
+            import tools.pentest.triage as vt_module
+
+            importlib.reload(vt_module)
+            vt_module.lookup_cve("xss")
+
+        call_kwargs = mock_get.call_args.kwargs
+        assert call_kwargs.get("headers", {}).get("apiKey") == "test-key-123"

@@ -6,7 +6,7 @@ Each model represents a discrete artefact that agents pass to one another.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 
 from pydantic import BaseModel, Field
@@ -52,6 +52,7 @@ class ScopeItem(BaseModel):
     asset_type: ScopeType
     eligible_for_bounty: bool = True
     instruction: str | None = None
+    max_severity: Severity | None = None
 
 
 class Programme(BaseModel):
@@ -64,8 +65,14 @@ class Programme(BaseModel):
     in_scope: list[ScopeItem]
     out_of_scope: list[ScopeItem]
     allows_automated_scanning: bool
+    offers_bounties: bool = True
+    accepts_new_reports: bool = True
+    response_efficiency_pct: float | None = None
+    avg_time_to_bounty_days: float | None = None
+    total_bounties_paid_usd: int | None = None
+    policy_text: str = ""
     priority_score: float = 0.0
-    selected_at: datetime = Field(default_factory=datetime.utcnow)
+    selected_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 # Recon (OSINT Analyst -> Penetration Tester)
@@ -89,7 +96,13 @@ class ReconResult(BaseModel):
     open_ports: dict[str, list[int]] = Field(default_factory=dict)
     technologies: list[str] = Field(default_factory=list)
     notes: str = ""
-    completed_at: datetime = Field(default_factory=datetime.utcnow)
+    # Findings collected passively during recon (TLS issues, DNS misconfigs, etc.)
+    # Available to all downstream agents without requiring a separate pentest pass.
+    passive_findings: list[RawFinding] = Field(default_factory=list)
+    # hostname -> ordered list of public hop IPs from traceroute.
+    # Useful for identifying origin IPs behind CDNs/WAFs (CDN bypass vector).
+    network_hops: dict[str, list[str]] = Field(default_factory=dict)
+    completed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 # Vulnerability findings (Penetration Tester -> Vulnerability Researcher)
@@ -121,7 +134,7 @@ class VerifiedVulnerability(BaseModel):
     impact: str
     remediation: str
     in_scope: bool = True
-    confirmed_at: datetime = Field(default_factory=datetime.utcnow)
+    confirmed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 # Report (Technical Author -> Disclosure Coordinator)
@@ -139,7 +152,7 @@ class DisclosureReport(BaseModel):
     structured_scope_id: str | None = None
     impact_statement: str
     attachments: list[str] = Field(default_factory=list)
-    authored_at: datetime = Field(default_factory=datetime.utcnow)
+    authored_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 # Submission (Disclosure Coordinator)

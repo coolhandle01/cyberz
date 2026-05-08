@@ -7,15 +7,19 @@ Subprocess calls are mocked so tests run without binaries installed.
 
 from __future__ import annotations
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from models import Programme
-from tools.recon_tools import (
+from models import Endpoint, Programme
+from tools.recon import (
+    cert_transparency,
+    discover_paths,
     enumerate_subdomains,
     extract_domain,
     filter_in_scope,
+    historical_urls,
     port_scan,
     probe_endpoints,
 )
@@ -243,3 +247,186 @@ class TestPortScan:
         with patch("shutil.which", return_value=None):
             with pytest.raises(EnvironmentError, match="nmap"):
                 port_scan(["example.com"])
+
+
+# cert_transparency
+class TestCertTransparency:
+    def _crtsh_response(self):
+        return [
+            {"name_value": "api.example.com\nstage.example.com"},
+            {"name_value": "*.example.com"},
+            {"name_value": "other.notexample.com"},
+        ]
+
+    def test_returns_subdomains_ending_in_domain(self):
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.json.return_value = self._crtsh_response()
+
+        with patch("requests.get", return_value=mock_resp):
+            result = cert_transparency("example.com")
+
+        assert "api.example.com" in result
+        assert "stage.example.com" in result
+
+    def test_strips_wildcard_prefix(self):
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.json.return_value = [{"name_value": "*.example.com"}]
+
+        with patch("requests.get", return_value=mock_resp):
+            result = cert_transparency("example.com")
+
+        assert all(not n.startswith("*.") for n in result)
+
+    def test_filters_off_domain_names(self):
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.json.return_value = [{"name_value": "other.notexample.com"}]
+
+        with patch("requests.get", return_value=mock_resp):
+            result = cert_transparency("example.com")
+
+        assert result == []
+
+    def test_deduplicates_results(self):
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.json.return_value = [
+            {"name_value": "api.example.com"},
+            {"name_value": "api.example.com"},
+        ]
+
+        with patch("requests.get", return_value=mock_resp):
+            result = cert_transparency("example.com")
+
+        assert result.count("api.example.com") == 1
+
+
+# historical_urls
+class TestHistoricalUrls:
+    def test_returns_urls_from_binary_output(self):
+        mock_proc = MagicMock()
+        mock_proc.stdout = "https://example.com/old-path\nhttps://example.com/another\n"
+        mock_proc.returncode = 0
+
+        with (
+            patch("shutil.which", return_value="/usr/bin/waybackurls"),
+            patch("subprocess.run", return_value=mock_proc),
+        ):
+            result = historical_urls("example.com")
+
+        assert "https://example.com/old-path" in result
+        assert "https://example.com/another" in result
+
+    def test_missing_binary_raises(self):
+        with patch("shutil.which", return_value=None):
+            with pytest.raises(OSError, match="waybackurls"):
+                historical_urls("example.com")
+
+    def test_empty_output_returns_empty_list(self):
+        mock_proc = MagicMock()
+        mock_proc.stdout = ""
+        mock_proc.returncode = 0
+
+        with (
+            patch("shutil.which", return_value="/usr/bin/waybackurls"),
+            patch("subprocess.run", return_value=mock_proc),
+        ):
+            result = historical_urls("example.com")
+
+        assert result == []
+
+
+# discover_paths
+class TestDiscoverPaths:
+    def _ffuf_side_effect(self, results):
+        """Return a subprocess.run side effect that writes ffuf JSON to the -o path."""
+
+        def fake_run(cmd, *args, **kwargs):
+            out_path = cmd[cmd.index("-o") + 1]
+            with open(out_path, "w") as fh:
+                json.dump({"results": results}, fh)
+            return MagicMock(returncode=0, stdout="", stderr="")
+
+        return fake_run
+
+    def test_returns_discovered_endpoints(self):
+        endpoints = [Endpoint(url="https://example.com/", status_code=200)]
+        hits = [
+            {"url": "https://example.com/admin", "status": 200},
+            {"url": "https://example.com/api", "status": 200},
+        ]
+        with (
+            patch("shutil.which", return_value="/usr/bin/ffuf"),
+            patch("subprocess.run", side_effect=self._ffuf_side_effect(hits)),
+        ):
+            result = discover_paths(endpoints)
+
+        urls = [ep.url for ep in result]
+        assert "https://example.com/admin" in urls
+        assert "https://example.com/api" in urls
+
+    def test_deduplicates_known_urls(self):
+        endpoints = [
+            Endpoint(url="https://example.com/", status_code=200),
+            Endpoint(url="https://example.com/admin", status_code=200),
+        ]
+        hits = [
+            {"url": "https://example.com/admin", "status": 200},
+            {"url": "https://example.com/new-path", "status": 200},
+        ]
+        with (
+            patch("shutil.which", return_value="/usr/bin/ffuf"),
+            patch("subprocess.run", side_effect=self._ffuf_side_effect(hits)),
+        ):
+            result = discover_paths(endpoints)
+
+        urls = [ep.url for ep in result]
+        assert "https://example.com/admin" not in urls
+        assert "https://example.com/new-path" in urls
+
+    def test_empty_endpoints_returns_empty(self):
+        assert discover_paths([]) == []
+
+    def test_skips_endpoints_with_500_status(self):
+        endpoints = [Endpoint(url="https://example.com/", status_code=500)]
+        with patch("shutil.which", return_value="/usr/bin/ffuf"):
+            result = discover_paths(endpoints)
+        assert result == []
+
+    def test_missing_binary_raises_oserror(self):
+        endpoints = [Endpoint(url="https://example.com/", status_code=200)]
+        with patch("shutil.which", return_value=None):
+            with pytest.raises(OSError, match="ffuf"):
+                discover_paths(endpoints)
+
+    def test_ffuf_exception_is_swallowed(self):
+        endpoints = [Endpoint(url="https://example.com/", status_code=200)]
+        with (
+            patch("shutil.which", return_value="/usr/bin/ffuf"),
+            patch("subprocess.run", side_effect=Exception("connection refused")),
+        ):
+            result = discover_paths(endpoints)
+        assert result == []
+
+    def test_respects_status_codes_from_results(self):
+        endpoints = [Endpoint(url="https://example.com/", status_code=200)]
+        hits = [{"url": "https://example.com/protected", "status": 403}]
+        with (
+            patch("shutil.which", return_value="/usr/bin/ffuf"),
+            patch("subprocess.run", side_effect=self._ffuf_side_effect(hits)),
+        ):
+            result = discover_paths(endpoints)
+
+        assert len(result) == 1
+        assert result[0].status_code == 403
+
+    def test_empty_ffuf_results_returns_empty(self):
+        endpoints = [Endpoint(url="https://example.com/", status_code=200)]
+        with (
+            patch("shutil.which", return_value="/usr/bin/ffuf"),
+            patch("subprocess.run", side_effect=self._ffuf_side_effect([])),
+        ):
+            result = discover_paths(endpoints)
+        assert result == []

@@ -94,6 +94,93 @@ class TestParseProgramme:
         assert len(prog.in_scope) == 0
         assert len(prog.out_of_scope) == 1
 
+    def test_offers_bounties_false_when_vdp(self, h1_client):
+        raw = self._raw_programme()
+        raw["attributes"]["offers_bounties"] = False
+        prog = h1_client.parse_programme(raw, self._raw_scope())
+        assert prog.offers_bounties is False
+
+    def test_offers_bounties_defaults_true_when_missing(self, h1_client):
+        prog = h1_client.parse_programme(self._raw_programme(), self._raw_scope())
+        assert prog.offers_bounties is True
+
+    def test_accepts_new_reports_false_when_closed(self, h1_client):
+        raw = self._raw_programme()
+        raw["attributes"]["submission_state"] = "closed"
+        prog = h1_client.parse_programme(raw, self._raw_scope())
+        assert prog.accepts_new_reports is False
+
+    def test_accepts_new_reports_true_when_open(self, h1_client):
+        raw = self._raw_programme()
+        raw["attributes"]["submission_state"] = "open"
+        prog = h1_client.parse_programme(raw, self._raw_scope())
+        assert prog.accepts_new_reports is True
+
+    def test_accepts_new_reports_defaults_true_when_missing(self, h1_client):
+        prog = h1_client.parse_programme(self._raw_programme(), self._raw_scope())
+        assert prog.accepts_new_reports is True
+
+    def test_parses_response_efficiency_pct(self, h1_client):
+        raw = self._raw_programme()
+        raw["attributes"]["response_efficiency_percentage"] = 87.5
+        prog = h1_client.parse_programme(raw, self._raw_scope())
+        assert prog.response_efficiency_pct == 87.5
+
+    def test_parses_avg_time_to_bounty_days(self, h1_client):
+        raw = self._raw_programme()
+        # 2880 minutes = 2 days exactly
+        raw["attributes"]["average_time_to_bounty_in_minutes"] = 2880
+        prog = h1_client.parse_programme(raw, self._raw_scope())
+        assert prog.avg_time_to_bounty_days == 2.0
+
+    def test_avg_time_to_bounty_days_none_when_missing(self, h1_client):
+        prog = h1_client.parse_programme(self._raw_programme(), self._raw_scope())
+        assert prog.avg_time_to_bounty_days is None
+
+    def test_parses_total_bounties_paid_usd(self, h1_client):
+        raw = self._raw_programme()
+        raw["attributes"]["total_bounties_paid_in_cents"] = 1_500_000
+        prog = h1_client.parse_programme(raw, self._raw_scope())
+        assert prog.total_bounties_paid_usd == 15_000
+
+    def test_total_bounties_paid_usd_none_when_missing(self, h1_client):
+        prog = h1_client.parse_programme(self._raw_programme(), self._raw_scope())
+        assert prog.total_bounties_paid_usd is None
+
+    def test_parses_scope_item_max_severity(self, h1_client):
+        scope = {
+            "data": [
+                {
+                    "attributes": {
+                        "asset_identifier": "api.acme.com",
+                        "asset_type": "URL",
+                        "eligible_for_bounty": True,
+                        "eligible_for_submission": True,
+                        "instruction": None,
+                        "max_severity": "medium",
+                    }
+                }
+            ]
+        }
+        prog = h1_client.parse_programme(self._raw_programme(), scope)
+        assert prog.in_scope[0].max_severity == Severity.MEDIUM
+
+    def test_scope_item_max_severity_none_when_missing(self, h1_client):
+        prog = h1_client.parse_programme(self._raw_programme(), self._raw_scope())
+        assert prog.in_scope[0].max_severity is None
+
+    def test_policy_text_stored_on_programme(self, h1_client):
+        raw = self._raw_programme()
+        raw["attributes"]["policy"] = "Automated scanning is permitted with rate limiting."
+        prog = h1_client.parse_programme(raw, self._raw_scope())
+        assert "Automated scanning is permitted" in prog.policy_text
+
+    def test_policy_text_empty_string_when_missing(self, h1_client):
+        raw = self._raw_programme()
+        raw["attributes"].pop("policy", None)
+        prog = h1_client.parse_programme(raw, self._raw_scope())
+        assert prog.policy_text == ""
+
 
 # submit_report
 class TestSubmitReport:
@@ -198,3 +285,84 @@ class TestListProgrammes:
 
         assert result == {"data": []}
         assert "/programs/acme/structured_scopes" in mock_get.call_args[0][0]
+
+
+class TestGetProgrammeStats:
+    def test_returns_parsed_fields(self, h1_client):
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {
+            "data": {
+                "attributes": {
+                    "response_efficiency_percentage": 95,
+                    "average_time_to_first_programme_response_in_minutes": 120,
+                    "average_time_to_bounty_in_minutes": 14400,
+                    "average_time_to_resolution_in_minutes": 43200,
+                    "total_bounties_paid_in_cents": 500000,
+                    "state": "public_mode",
+                }
+            }
+        }
+
+        with patch.object(h1_client._session, "get", return_value=mock_response):
+            stats = h1_client.get_programme_stats("acme")
+
+        assert stats["handle"] == "acme"
+        assert stats["response_efficiency_pct"] == 95
+        assert stats["avg_time_to_bounty_minutes"] == 14400
+        assert stats["total_bounties_paid_cents"] == 500000
+
+    def test_accepting_reports_true_when_public_mode(self, h1_client):
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {"data": {"attributes": {"state": "public_mode"}}}
+
+        with patch.object(h1_client._session, "get", return_value=mock_response):
+            stats = h1_client.get_programme_stats("acme")
+
+        assert stats["accepting_reports"] is True
+
+    def test_accepting_reports_false_when_not_public_mode(self, h1_client):
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {"data": {"attributes": {"state": "private_mode"}}}
+
+        with patch.object(h1_client._session, "get", return_value=mock_response):
+            stats = h1_client.get_programme_stats("acme")
+
+        assert stats["accepting_reports"] is False
+
+
+class TestListReports:
+    def test_passes_programme_filter_param(self, h1_client):
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {"data": [{"id": "42"}]}
+
+        with patch.object(h1_client._session, "get", return_value=mock_response) as mock_get:
+            h1_client.list_reports("acme", page_size=10)
+
+        call_kwargs = mock_get.call_args
+        params = call_kwargs.kwargs.get("params") or call_kwargs[1].get("params", {})
+        assert params.get("filter[program][]") == "acme"
+        assert params.get("page[size]") == 10
+
+    def test_returns_data_list(self, h1_client):
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {"data": [{"id": "1"}, {"id": "2"}]}
+
+        with patch.object(h1_client._session, "get", return_value=mock_response):
+            result = h1_client.list_reports("acme")
+
+        assert result == [{"id": "1"}, {"id": "2"}]
+
+    def test_empty_data_returns_empty_list(self, h1_client):
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {"data": []}
+
+        with patch.object(h1_client._session, "get", return_value=mock_response):
+            result = h1_client.list_reports("acme")
+
+        assert result == []

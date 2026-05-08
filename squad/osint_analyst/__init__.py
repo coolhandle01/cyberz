@@ -8,7 +8,7 @@ from crewai.tools import tool
 
 from squad import SquadMember
 from tools.h1_api import h1
-from tools.recon_tools import run_recon
+from tools.recon import cert_transparency, historical_urls, run_recon
 
 
 @tool("Run Recon")
@@ -25,8 +25,26 @@ def recon_tool(programme_handle: str) -> dict:
     return result.model_dump()
 
 
+@tool("Certificate Transparency Lookup")
+def cert_transparency_tool(domain: str) -> list[str]:
+    """
+    Query crt.sh certificate transparency logs to discover subdomains not found
+    by active enumeration. Returns deduplicated hostnames.
+    """
+    return cert_transparency(domain)
+
+
+@tool("Historical URL Discovery")
+def historical_urls_tool(domain: str) -> list[str]:
+    """
+    Use waybackurls to find historical endpoints for a domain from the Wayback
+    Machine. Surfaces paths that may no longer be linked but still exist.
+    """
+    return historical_urls(domain)
+
+
 MEMBER = SquadMember(
     slug="osint_analyst",
     dir=Path(__file__).parent,
-    tools=[recon_tool],
+    tools=[recon_tool, cert_transparency_tool, historical_urls_tool],
 )

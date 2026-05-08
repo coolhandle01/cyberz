@@ -24,8 +24,17 @@ def get_scope_tool(handle: str) -> dict:
     return {"policy": policy, "scope": scope}
 
 
+@tool("Get Programme Stats")
+def get_programme_stats_tool(handle: str) -> dict:
+    """
+    Fetch response efficiency, average triage time, and total bounties paid for a
+    programme. Use this to rank programmes by actual payout likelihood.
+    """
+    return h1.get_programme_stats(handle)
+
+
 MEMBER = SquadMember(
     slug="programme_manager",
     dir=Path(__file__).parent,
-    tools=[list_programmes_tool, get_scope_tool],
+    tools=[list_programmes_tool, get_scope_tool, get_programme_stats_tool],
 )
