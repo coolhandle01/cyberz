@@ -20,8 +20,14 @@ class TestScanMode:
 
     def test_stealth_sets_conservative_defaults(self, monkeypatch):
         monkeypatch.setenv("SCAN_MODE", "stealth")
-        for var in ("SCAN_DELAY", "NUCLEI_RATE_LIMIT", "DIRFUZZ_RATE_LIMIT",
-                    "DIRFUZZ_THREADS", "SQLMAP_LEVEL", "SQLMAP_RISK"):
+        for var in (
+            "SCAN_DELAY",
+            "NUCLEI_RATE_LIMIT",
+            "DIRFUZZ_RATE_LIMIT",
+            "DIRFUZZ_THREADS",
+            "SQLMAP_LEVEL",
+            "SQLMAP_RISK",
+        ):
             monkeypatch.delenv(var, raising=False)
         from config import ScanConfig
 
@@ -35,8 +41,14 @@ class TestScanMode:
 
     def test_normal_preserves_existing_defaults(self, monkeypatch):
         monkeypatch.setenv("SCAN_MODE", "normal")
-        for var in ("SCAN_DELAY", "NUCLEI_RATE_LIMIT", "DIRFUZZ_RATE_LIMIT",
-                    "DIRFUZZ_THREADS", "SQLMAP_LEVEL", "SQLMAP_RISK"):
+        for var in (
+            "SCAN_DELAY",
+            "NUCLEI_RATE_LIMIT",
+            "DIRFUZZ_RATE_LIMIT",
+            "DIRFUZZ_THREADS",
+            "SQLMAP_LEVEL",
+            "SQLMAP_RISK",
+        ):
             monkeypatch.delenv(var, raising=False)
         from config import ScanConfig
 
@@ -49,8 +61,14 @@ class TestScanMode:
 
     def test_raid_sets_aggressive_defaults(self, monkeypatch):
         monkeypatch.setenv("SCAN_MODE", "raid")
-        for var in ("SCAN_DELAY", "NUCLEI_RATE_LIMIT", "DIRFUZZ_RATE_LIMIT",
-                    "DIRFUZZ_THREADS", "SQLMAP_LEVEL", "SQLMAP_RISK"):
+        for var in (
+            "SCAN_DELAY",
+            "NUCLEI_RATE_LIMIT",
+            "DIRFUZZ_RATE_LIMIT",
+            "DIRFUZZ_THREADS",
+            "SQLMAP_LEVEL",
+            "SQLMAP_RISK",
+        ):
             monkeypatch.delenv(var, raising=False)
         from config import ScanConfig
 
@@ -70,7 +88,7 @@ class TestScanMode:
 
         c = ScanConfig()
         assert c.nuclei_rate_limit == 50  # explicit wins
-        assert c.request_delay == 2.0     # mode default applies
+        assert c.request_delay == 2.0  # mode default applies
 
     def test_default_mode_is_normal(self, monkeypatch):
         monkeypatch.delenv("SCAN_MODE", raising=False)
