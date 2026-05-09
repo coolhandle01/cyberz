@@ -96,7 +96,7 @@ class H1Client:
         """
         results: list[dict] = []
         params = {"page[size]": page_size}
-        path = "/programs"
+        path = "/hackers/programs"
 
         while path and len(results) < config.h1.max_programmes:
             data = self._get(path, params)
@@ -108,11 +108,11 @@ class H1Client:
 
     def get_programme_policy(self, handle: str) -> dict:
         """Fetch full policy detail for a given programme handle."""
-        return self._get(f"/programs/{handle}")
+        return self._get(f"/hackers/programs/{handle}")
 
     def get_structured_scope(self, handle: str) -> dict:
         """Fetch the structured scope (in/out) for a programme."""
-        return self._get(f"/programs/{handle}/structured_scopes")
+        return self._get(f"/hackers/programs/{handle}/structured_scopes")
 
     # Data parsers
 
@@ -232,7 +232,7 @@ class H1Client:
 
     def get_programme_stats(self, handle: str) -> dict:
         """Return response efficiency and payout stats for a programme."""
-        data = self._get(f"/programs/{handle}")
+        data = self._get(f"/hackers/programs/{handle}")
         attrs = data.get("data", {}).get("attributes", {})
         return {
             "handle": handle,
@@ -249,7 +249,7 @@ class H1Client:
     def list_reports(self, programme_handle: str, page_size: int = 25) -> list[dict]:
         """List recent reports for a programme - used for duplicate detection."""
         data = self._get(
-            "/reports",
+            "/hackers/me/reports",
             params={"filter[program][]": programme_handle, "page[size]": page_size},
         )
         return list(data.get("data", []))
