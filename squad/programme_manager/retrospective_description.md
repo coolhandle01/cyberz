@@ -1,10 +1,22 @@
-The pipeline run is complete. Use the Read Suggestion Box tool to retrieve all
-friction points, tooling gaps, and hallucination urges logged by squad agents
-during this run.
+The pipeline run is complete. Facilitate a retrospective for the programme
+that was worked this run.
 
-Summarise the suggestions for the operator. Group them by category, note which
-agent logged each item, and flag any that indicate a risk to submission quality
-(false_positive_risk, hallucination_urge) as high priority. If the box is
-empty, confirm that the run completed without logged issues.
+Step 1 - Read the suggestion box:
+  Use the Read Suggestion Box tool to retrieve friction points, tooling gaps,
+  and hallucination urges logged by squad agents during this run. Flag any
+  false_positive_risk or hallucination_urge items as high priority.
 
-Do not repeat the full log verbatim - distil it into actionable developer notes.
+Step 2 - Draft the retrospective in Markdown with these sections:
+  - Pipeline Health: one sentence on whether the run completed cleanly or had
+    high-priority issues.
+  - What Went Well: concrete successes from this campaign.
+  - Challenges: what was harder than expected or didn't work.
+  - Unexplored Surface: attack surface areas the squad didn't cover this run.
+  - Next Campaign Recommendations: specific actions for the next run against
+    this programme (different tool config, different scope focus, etc.).
+  - Tooling Action Items: developer-facing items from the suggestion box,
+    grouped by category (missing_tool, tooling_feedback, etc.).
+
+Step 3 - Persist:
+  Call the Write Retrospective tool with the programme handle and the full
+  retrospective text. This builds the squad's institutional memory.

@@ -1,6 +1,12 @@
 Query the HackerOne API to retrieve available bug bounty programmes.
 For each programme, fetch its structured scope, policy, and stats.
 
+Before scoring, check institutional memory: if a candidate programme has
+been worked before, use the Read Previous Retrospectives tool with its
+handle to retrieve what the squad learned. Past retros surface unexplored
+surface, policy quirks, payout behaviour, and recommendations for the next
+campaign. Weight this context when ranking candidates.
+
 Step 1 - Hard filters (discard immediately, do not score):
   - offers_bounties is false (VDP - no payment)
   - accepts_new_reports is false (closed programme)

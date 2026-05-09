@@ -8,6 +8,7 @@ from crewai.tools import tool
 
 from squad import SquadMember
 from tools.h1_api import h1
+from tools.ledger import read_recent_retros, write_retro
 from tools.suggestion_box import get_suggestions, make_suggestion_tool
 
 
@@ -47,6 +48,41 @@ def read_suggestions_tool() -> str:
     return "\n".join(f"[{s.agent}/{s.category}] {s.message}" for s in suggestions)
 
 
+@tool("Write Retrospective")
+def write_retro_tool(handle: str, content: str) -> str:
+    """
+    Persist the retrospective for a programme campaign to disk.
+
+    Call this at the end of the retrospective task after drafting the summary.
+    Writes to reports/programs/<handle>/campaigns/<today>/retrospective.md so
+    future runs of the same programme can read it as institutional memory.
+
+    handle: the HackerOne programme handle (e.g. "acme")
+    content: the full retrospective text in Markdown
+    """
+    path = write_retro(handle, content)
+    return f"Retrospective saved to {path}"
+
+
+@tool("Read Previous Retrospectives")
+def read_recent_retros_tool(handle: str) -> str:
+    """
+    Read the retrospectives from the last three campaigns against a programme.
+
+    Use this when selecting or re-evaluating a programme the squad has worked
+    before - retros capture unexplored surface, programme policy quirks,
+    tooling gaps, and what the squad should do differently next time.
+
+    Returns formatted retro text, newest first, or a note if none exist.
+    handle: the HackerOne programme handle (e.g. "acme")
+    """
+    retros = read_recent_retros(handle)
+    if not retros:
+        return f"No previous retrospectives found for {handle}."
+    sections = [f"## {date}\n\n{content.strip()}" for date, content in retros]
+    return "\n\n---\n\n".join(sections)
+
+
 MEMBER = SquadMember(
     slug="programme_manager",
     dir=Path(__file__).parent,
@@ -56,5 +92,7 @@ MEMBER = SquadMember(
         get_programme_stats_tool,
         make_suggestion_tool("programme_manager"),
         read_suggestions_tool,
+        write_retro_tool,
+        read_recent_retros_tool,
     ],
 )
