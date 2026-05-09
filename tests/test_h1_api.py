@@ -2,6 +2,10 @@
 tests/test_h1_api.py - unit tests for tools/h1_api.py
 
 All HTTP calls are mocked - no real H1 API calls made.
+
+These tests cover the HACKER API (/hackers/* endpoints), not the customer API
+(/programs). Endpoint path assertions explicitly require the /hackers/ prefix
+so a regression back to customer endpoints will fail immediately.
 """
 
 from __future__ import annotations

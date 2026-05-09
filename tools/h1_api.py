@@ -1,13 +1,19 @@
 """
 tools/h1_api.py - HackerOne API wrapper.
 
+Uses the HACKER API (api.hackerone.com/v1/hackers/*), not the customer/company
+API. The hacker API authenticates with a personal H1 API token and returns
+programmes accessible to that hacker (public programmes + private invitations).
+The customer API (/v1/programs) requires company admin credentials and is not
+used here.
+
 Covers everything the pipeline needs:
   - Listing & ranking programmes
   - Fetching programme policy / scope
   - Submitting reports
   - Polling submission status
 
-H1 API docs: https://api.hackerone.com/docs/v1
+H1 hacker API docs: https://api.hackerone.com/hacker-resources/
 """
 
 from __future__ import annotations
@@ -54,8 +60,11 @@ _H1_SCOPE_TYPE_MAP: dict[str, ScopeType] = {
 
 class H1Client:
     """
-    Thin, authenticated wrapper around the HackerOne v1 REST API.
+    Thin, authenticated wrapper around the HackerOne v1 hacker REST API.
     All methods raise on non-2xx responses after logging the error.
+
+    Authenticates as a hacker (personal API token), not as a company/customer.
+    All programme endpoints use the /hackers/ namespace.
     """
 
     def __init__(self) -> None:
@@ -91,7 +100,9 @@ class H1Client:
 
     def list_programmes(self, page_size: int = 25) -> list[dict]:
         """
-        Return raw programme data from /programs.
+        Return raw programme data from /hackers/programs.
+        Returns only programmes accessible to the authenticated hacker -
+        public programmes plus any private invitations.
         Paginates until we have at least config.h1.max_programmes results.
         """
         results: list[dict] = []
