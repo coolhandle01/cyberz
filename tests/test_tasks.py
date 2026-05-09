@@ -108,6 +108,7 @@ class TestBuildTasks:
         monkeypatch.setattr(squad, "Task", _FakeTask)
 
         from tasks import build_tasks as _build_tasks
+
         tasks = _build_tasks(self._agents())
         assert all(t.human_input is True for t in tasks)
 
@@ -123,5 +124,6 @@ class TestBuildTasks:
         monkeypatch.setattr(squad, "Task", _FakeTask)
 
         from tasks import build_tasks as _build_tasks
+
         tasks = _build_tasks(self._agents())
         assert all(t.human_input is False for t in tasks)
