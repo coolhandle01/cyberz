@@ -13,7 +13,7 @@ H1 API docs: https://api.hackerone.com/docs/v1
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import cast
 
 import requests
@@ -221,7 +221,7 @@ class H1Client:
                 status=SubmissionStatus.SUBMITTED,
                 h1_url=f"https://hackerone.com/reports/{report_id}",
                 # FIX: submitted_at was not set, leaving it always None
-                submitted_at=datetime.utcnow(),
+                submitted_at=datetime.now(UTC),
             )
         except requests.HTTPError as exc:
             logger.error("Submission failed: %s", exc.response.text)

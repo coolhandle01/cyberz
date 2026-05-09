@@ -96,13 +96,30 @@ class TestBuildTasks:
         assert write.context == [triage, select]
         assert submit.context == [write]
 
-    def test_human_input_gates(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_human_input_enabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import importlib
+        import config as config_mod
+        import tasks as tasks_mod
+
+        monkeypatch.setenv("CYBERSQUAD_HUMAN_INPUT", "true")
+        importlib.reload(config_mod)
+        importlib.reload(tasks_mod)
         monkeypatch.setattr(squad, "Task", _FakeTask)
-        tasks = build_tasks(self._agents())
-        select, recon, pentest, triage, write, submit = tasks
-        # Three gates: after selection, after triage, after writing.
-        assert select.human_input is True
-        assert triage.human_input is True
-        assert write.human_input is True
-        for task in (recon, pentest, submit):
-            assert task.human_input is False
+
+        from tasks import build_tasks as _build_tasks
+        tasks = _build_tasks(self._agents())
+        assert all(t.human_input is True for t in tasks)
+
+    def test_human_input_disabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import importlib
+        import config as config_mod
+        import tasks as tasks_mod
+
+        monkeypatch.setenv("CYBERSQUAD_HUMAN_INPUT", "false")
+        importlib.reload(config_mod)
+        importlib.reload(tasks_mod)
+        monkeypatch.setattr(squad, "Task", _FakeTask)
+
+        from tasks import build_tasks as _build_tasks
+        tasks = _build_tasks(self._agents())
+        assert all(t.human_input is False for t in tasks)

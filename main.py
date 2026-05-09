@@ -22,7 +22,7 @@ import argparse
 import logging
 import os
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
@@ -116,8 +116,8 @@ def main() -> None:
         dry_run_summary(crew)
         return
 
-    run_id = datetime.utcnow().strftime("%Y%m%d-%H%M%S") + "-" + uuid4().hex[:6]
-    started_at = datetime.utcnow()
+    run_id = datetime.now(UTC).strftime("%Y%m%d-%H%M%S") + "-" + uuid4().hex[:6]
+    started_at = datetime.now(UTC)
 
     console.rule("[bold]Bounty Squad[/bold]")
     logger.info(

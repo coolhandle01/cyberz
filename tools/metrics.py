@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from models import RunMetrics
@@ -45,7 +45,7 @@ def build_run_metrics(
     findings_verified: int = 0,
     submitted: bool = False,
 ) -> RunMetrics:
-    completed_at = datetime.utcnow()
+    completed_at = datetime.now(UTC)
     return RunMetrics(
         run_id=run_id,
         started_at=started_at,

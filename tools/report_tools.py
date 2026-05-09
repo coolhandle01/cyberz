@@ -8,7 +8,7 @@ verified vulnerabilities.
 from __future__ import annotations
 
 import textwrap
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from config import config
@@ -185,7 +185,7 @@ def build_report_markdown(
         evidence=textwrap.indent(vulnerability.evidence[:2000], "  "),
         impact=vulnerability.impact,
         remediation=vulnerability.remediation,
-        timestamp=datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
+        timestamp=datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"),
     )
 
 
@@ -214,7 +214,7 @@ def save_report(report: DisclosureReport) -> Path:
     reports_dir = Path(config.reports_dir)
     reports_dir.mkdir(parents=True, exist_ok=True)
 
-    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     safe_title = report.title.replace(" ", "_").replace("/", "-")[:60]
     filename = reports_dir / f"{timestamp}_{report.programme_handle}_{safe_title}.md"
 

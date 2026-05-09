@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -40,7 +40,7 @@ class TestEstimateCost:
 
 class TestBuildRunMetrics:
     def _started(self) -> datetime:
-        return datetime.utcnow() - timedelta(seconds=10)
+        return datetime.now(UTC) - timedelta(seconds=10)
 
     def test_duration_is_positive(self) -> None:
         m = build_run_metrics("r1", self._started(), "claude-sonnet-4-20250514", 100, 50)
@@ -63,7 +63,7 @@ class TestBuildRunMetrics:
 
 class TestSaveMetrics:
     def test_writes_valid_json(self, tmp_path: Path) -> None:
-        started = datetime.utcnow() - timedelta(seconds=5)
+        started = datetime.now(UTC) - timedelta(seconds=5)
         m = build_run_metrics("test-run", started, "claude-sonnet-4-20250514", 100, 50)
         out = save_metrics(m, str(tmp_path))
         assert out.exists()
@@ -72,7 +72,7 @@ class TestSaveMetrics:
         assert data["total_tokens"] == 150
 
     def test_creates_parent_dirs(self, tmp_path: Path) -> None:
-        started = datetime.utcnow() - timedelta(seconds=1)
+        started = datetime.now(UTC) - timedelta(seconds=1)
         m = build_run_metrics("nested-run", started, "claude-haiku-4-5-20251001", 0, 0)
         out = save_metrics(m, str(tmp_path / "new" / "dir"))
         assert out.exists()
@@ -80,7 +80,7 @@ class TestSaveMetrics:
 
 class TestPrintMetrics:
     def test_prints_without_error(self, capsys: pytest.CaptureFixture) -> None:
-        started = datetime.utcnow() - timedelta(seconds=3)
+        started = datetime.now(UTC) - timedelta(seconds=3)
         m = build_run_metrics(
             "print-test",
             started,
