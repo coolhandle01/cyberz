@@ -98,6 +98,7 @@ class TestBuildTasks:
 
     def test_human_input_enabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import importlib
+
         import config as config_mod
         import tasks as tasks_mod
 
@@ -112,6 +113,7 @@ class TestBuildTasks:
 
     def test_human_input_disabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import importlib
+
         import config as config_mod
         import tasks as tasks_mod
 
