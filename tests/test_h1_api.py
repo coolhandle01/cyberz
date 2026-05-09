@@ -2,6 +2,10 @@
 tests/test_h1_api.py - unit tests for tools/h1_api.py
 
 All HTTP calls are mocked - no real H1 API calls made.
+
+These tests cover the HACKER API (/hackers/* endpoints), not the customer API
+(/programs). Endpoint path assertions explicitly require the /hackers/ prefix
+so a regression back to customer endpoints will fail immediately.
 """
 
 from __future__ import annotations
@@ -258,11 +262,12 @@ class TestListProgrammes:
         for r in responses:
             r.raise_for_status = MagicMock()
 
-        with patch.object(h1_client._session, "get", side_effect=responses):
+        with patch.object(h1_client._session, "get", side_effect=responses) as mock_get:
             result = h1_client.list_programmes(page_size=5)
 
         assert len(result) <= 10
         assert result[0]["id"] == "p0"
+        assert "/hackers/programs" in mock_get.call_args_list[0][0][0]
 
     def test_get_programme_policy_hits_endpoint(self, h1_client):
         mock_response = MagicMock()
@@ -273,7 +278,7 @@ class TestListProgrammes:
             result = h1_client.get_programme_policy("acme")
 
         assert result == {"data": {"attributes": {"handle": "acme"}}}
-        assert "/programs/acme" in mock_get.call_args[0][0]
+        assert "/hackers/programs/acme" in mock_get.call_args[0][0]
 
     def test_get_structured_scope_hits_endpoint(self, h1_client):
         mock_response = MagicMock()
@@ -284,7 +289,7 @@ class TestListProgrammes:
             result = h1_client.get_structured_scope("acme")
 
         assert result == {"data": []}
-        assert "/programs/acme/structured_scopes" in mock_get.call_args[0][0]
+        assert "/hackers/programs/acme/structured_scopes" in mock_get.call_args[0][0]
 
 
 class TestGetProgrammeStats:

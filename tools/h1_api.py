@@ -1,13 +1,19 @@
 """
 tools/h1_api.py - HackerOne API wrapper.
 
+Uses the HACKER API (api.hackerone.com/v1/hackers/*), not the customer/company
+API. The hacker API authenticates with a personal H1 API token and returns
+programmes accessible to that hacker (public programmes + private invitations).
+The customer API (/v1/programs) requires company admin credentials and is not
+used here.
+
 Covers everything the pipeline needs:
   - Listing & ranking programmes
   - Fetching programme policy / scope
   - Submitting reports
   - Polling submission status
 
-H1 API docs: https://api.hackerone.com/docs/v1
+H1 hacker API docs: https://api.hackerone.com/hacker-resources/
 """
 
 from __future__ import annotations
@@ -54,8 +60,11 @@ _H1_SCOPE_TYPE_MAP: dict[str, ScopeType] = {
 
 class H1Client:
     """
-    Thin, authenticated wrapper around the HackerOne v1 REST API.
+    Thin, authenticated wrapper around the HackerOne v1 hacker REST API.
     All methods raise on non-2xx responses after logging the error.
+
+    Authenticates as a hacker (personal API token), not as a company/customer.
+    All programme endpoints use the /hackers/ namespace.
     """
 
     def __init__(self) -> None:
@@ -91,12 +100,14 @@ class H1Client:
 
     def list_programmes(self, page_size: int = 25) -> list[dict]:
         """
-        Return raw programme data from /programs.
+        Return raw programme data from /hackers/programs.
+        Returns only programmes accessible to the authenticated hacker -
+        public programmes plus any private invitations.
         Paginates until we have at least config.h1.max_programmes results.
         """
         results: list[dict] = []
         params = {"page[size]": page_size}
-        path = "/programs"
+        path = "/hackers/programs"
 
         while path and len(results) < config.h1.max_programmes:
             data = self._get(path, params)
@@ -108,11 +119,11 @@ class H1Client:
 
     def get_programme_policy(self, handle: str) -> dict:
         """Fetch full policy detail for a given programme handle."""
-        return self._get(f"/programs/{handle}")
+        return self._get(f"/hackers/programs/{handle}")
 
     def get_structured_scope(self, handle: str) -> dict:
         """Fetch the structured scope (in/out) for a programme."""
-        return self._get(f"/programs/{handle}/structured_scopes")
+        return self._get(f"/hackers/programs/{handle}/structured_scopes")
 
     # Data parsers
 
@@ -232,7 +243,7 @@ class H1Client:
 
     def get_programme_stats(self, handle: str) -> dict:
         """Return response efficiency and payout stats for a programme."""
-        data = self._get(f"/programs/{handle}")
+        data = self._get(f"/hackers/programs/{handle}")
         attrs = data.get("data", {}).get("attributes", {})
         return {
             "handle": handle,
@@ -249,7 +260,7 @@ class H1Client:
     def list_reports(self, programme_handle: str, page_size: int = 25) -> list[dict]:
         """List recent reports for a programme - used for duplicate detection."""
         data = self._get(
-            "/reports",
+            "/hackers/me/reports",
             params={"filter[program][]": programme_handle, "page[size]": page_size},
         )
         return list(data.get("data", []))
