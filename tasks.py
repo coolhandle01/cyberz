@@ -26,17 +26,28 @@ from squad.vulnerability_researcher import MEMBER as VULNERABILITY_RESEARCHER
 
 def build_tasks(agents: dict) -> list[Task]:
     hi = config.human_input
+
     select = build_task(PROGRAMME_MANAGER, agents["programme_manager"], human_input=hi)
-    recon = build_task(OSINT_ANALYST, agents["osint_analyst"], context=[select])
-    pentest = build_task(PENETRATION_TESTER, agents["penetration_tester"], context=[recon])
+
+    recon = build_task(OSINT_ANALYST, agents["osint_analyst"], context=[select], human_input=hi)
+
+    pentest = build_task(
+        PENETRATION_TESTER, agents["penetration_tester"], context=[recon], human_input=hi
+    )
+
     triage = build_task(
         VULNERABILITY_RESEARCHER,
         agents["vulnerability_researcher"],
         context=[pentest, recon, select],
         human_input=hi,
     )
+
     write = build_task(
         TECHNICAL_AUTHOR, agents["technical_author"], context=[triage, select], human_input=hi
     )
-    submit = build_task(DISCLOSURE_COORDINATOR, agents["disclosure_coordinator"], context=[write])
+
+    submit = build_task(
+        DISCLOSURE_COORDINATOR, agents["disclosure_coordinator"], context=[write], human_input=hi
+    )
+
     return [select, recon, pentest, triage, write, submit]

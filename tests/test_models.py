@@ -155,13 +155,13 @@ class TestSubmissionResult:
         assert result.report_id is None
 
     def test_successful_submission(self):
-        from datetime import datetime
+        from datetime import UTC, datetime
 
         result = SubmissionResult(
             report_id="12345",
             status=SubmissionStatus.SUBMITTED,
             h1_url="https://hackerone.com/reports/12345",
-            submitted_at=datetime.utcnow(),
+            submitted_at=datetime.now(UTC),
         )
         assert result.report_id == "12345"
         assert result.submitted_at is not None
