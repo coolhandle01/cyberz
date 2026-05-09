@@ -13,6 +13,7 @@ from tools.report_tools import (
     create_disclosure_report,
     save_report,
 )
+from tools.suggestion_box import make_suggestion_tool
 
 
 @tool("Create Disclosure Report")
@@ -40,5 +41,5 @@ def calculate_cvss_tool(vector: str) -> float:
 MEMBER = SquadMember(
     slug="technical_author",
     dir=Path(__file__).parent,
-    tools=[create_report_tool, calculate_cvss_tool],
+    tools=[create_report_tool, calculate_cvss_tool, make_suggestion_tool("technical_author")],
 )

@@ -74,10 +74,10 @@ class TestBuildTasks:
         ]
         return {role: MagicMock(name=role) for role in roles}
 
-    def test_returns_six_tasks_in_order(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_returns_seven_tasks_in_order(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(squad, "Task", _FakeTask)
         tasks = build_tasks(self._agents())
-        assert len(tasks) == 6
+        assert len(tasks) == 7
 
     def test_each_task_has_description_and_output(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(squad, "Task", _FakeTask)
@@ -89,20 +89,21 @@ class TestBuildTasks:
     def test_context_chaining_wired(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(squad, "Task", _FakeTask)
         tasks = build_tasks(self._agents())
-        select, recon, pentest, triage, write, submit = tasks
+        select, recon, pentest, triage, write, submit, retrospective = tasks
         assert recon.context == [select]
         assert pentest.context == [recon]
         assert triage.context == [pentest, recon, select]
         assert write.context == [triage, select]
         assert submit.context == [write]
+        assert retrospective.context == [submit]
 
     def test_human_input_gates(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(squad, "Task", _FakeTask)
         tasks = build_tasks(self._agents())
-        select, recon, pentest, triage, write, submit = tasks
+        select, recon, pentest, triage, write, submit, retrospective = tasks
         # Three gates: after selection, after triage, after writing.
         assert select.human_input is True
         assert triage.human_input is True
         assert write.human_input is True
-        for task in (recon, pentest, submit):
+        for task in (recon, pentest, submit, retrospective):
             assert task.human_input is False

@@ -50,11 +50,18 @@ def build_task(
     agent: Agent,
     context: list[Task] | None = None,
     human_input: bool = False,
+    description_name: str = "description",
+    expected_output_name: str = "expected_output",
 ) -> Task:
-    """Create a Task from the member's description/expected_output files."""
+    """Create a Task from the member's prose files.
+
+    description_name / expected_output_name let callers point at non-default
+    .md files (e.g. retrospective_description.md) without duplicating the
+    Task construction logic.
+    """
     return Task(
-        description=member.read("description"),
-        expected_output=member.read("expected_output"),
+        description=member.read(description_name),
+        expected_output=member.read(expected_output_name),
         agent=agent,
         context=context or [],
         human_input=human_input,

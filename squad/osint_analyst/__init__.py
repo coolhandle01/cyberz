@@ -10,6 +10,7 @@ from models import Endpoint
 from squad import SquadMember
 from tools.h1_api import h1
 from tools.recon import cert_transparency, detect_llm_endpoints, historical_urls, run_recon
+from tools.suggestion_box import make_suggestion_tool
 
 
 @tool("Run Recon")
@@ -73,5 +74,11 @@ def llm_detection_tool(endpoints_json: str) -> list[dict]:
 MEMBER = SquadMember(
     slug="osint_analyst",
     dir=Path(__file__).parent,
-    tools=[recon_tool, cert_transparency_tool, historical_urls_tool, llm_detection_tool],
+    tools=[
+        recon_tool,
+        cert_transparency_tool,
+        historical_urls_tool,
+        llm_detection_tool,
+        make_suggestion_tool("osint_analyst"),
+    ],
 )

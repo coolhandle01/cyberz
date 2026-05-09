@@ -40,6 +40,7 @@ from tools.pentest.sri import check_sri
 from tools.pentest.ssrf import check_ssrf
 from tools.pentest.webapp_headers import check_header_injection, check_host_headers
 from tools.pentest.xss import check_reflected_xss
+from tools.suggestion_box import make_suggestion_tool
 
 
 def _parse_endpoints(endpoints_json: str) -> list[Endpoint]:
@@ -521,5 +522,6 @@ MEMBER = SquadMember(
         consul_vault_tool,
         nosqli_tool,
         prompt_injection_tool,
+        make_suggestion_tool("penetration_tester"),
     ],
 )

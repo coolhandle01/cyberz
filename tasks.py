@@ -39,4 +39,11 @@ def build_tasks(agents: dict) -> list[Task]:
         TECHNICAL_AUTHOR, agents["technical_author"], context=[triage, select], human_input=hi
     )
     submit = build_task(DISCLOSURE_COORDINATOR, agents["disclosure_coordinator"], context=[write])
-    return [select, recon, pentest, triage, write, submit]
+    retrospective = build_task(
+        PROGRAMME_MANAGER,
+        agents["programme_manager"],
+        context=[submit],
+        description_name="retrospective_description",
+        expected_output_name="retrospective_expected_output",
+    )
+    return [select, recon, pentest, triage, write, submit, retrospective]

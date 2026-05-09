@@ -9,6 +9,7 @@ from crewai.tools import tool
 from squad import SquadMember
 from tools.h1_api import h1
 from tools.report_tools import save_report
+from tools.suggestion_box import make_suggestion_tool
 
 
 @tool("Submit Report")
@@ -45,5 +46,9 @@ def check_duplicate_tool(programme_handle: str, title: str) -> list[dict]:
 MEMBER = SquadMember(
     slug="disclosure_coordinator",
     dir=Path(__file__).parent,
-    tools=[submit_report_tool, check_duplicate_tool],
+    tools=[
+        submit_report_tool,
+        check_duplicate_tool,
+        make_suggestion_tool("disclosure_coordinator"),
+    ],
 )
