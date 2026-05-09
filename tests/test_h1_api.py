@@ -258,11 +258,12 @@ class TestListProgrammes:
         for r in responses:
             r.raise_for_status = MagicMock()
 
-        with patch.object(h1_client._session, "get", side_effect=responses):
+        with patch.object(h1_client._session, "get", side_effect=responses) as mock_get:
             result = h1_client.list_programmes(page_size=5)
 
         assert len(result) <= 10
         assert result[0]["id"] == "p0"
+        assert "/hackers/programs" in mock_get.call_args_list[0][0][0]
 
     def test_get_programme_policy_hits_endpoint(self, h1_client):
         mock_response = MagicMock()
@@ -273,7 +274,7 @@ class TestListProgrammes:
             result = h1_client.get_programme_policy("acme")
 
         assert result == {"data": {"attributes": {"handle": "acme"}}}
-        assert "/programs/acme" in mock_get.call_args[0][0]
+        assert "/hackers/programs/acme" in mock_get.call_args[0][0]
 
     def test_get_structured_scope_hits_endpoint(self, h1_client):
         mock_response = MagicMock()
@@ -284,7 +285,7 @@ class TestListProgrammes:
             result = h1_client.get_structured_scope("acme")
 
         assert result == {"data": []}
-        assert "/programs/acme/structured_scopes" in mock_get.call_args[0][0]
+        assert "/hackers/programs/acme/structured_scopes" in mock_get.call_args[0][0]
 
 
 class TestGetProgrammeStats:
