@@ -33,6 +33,7 @@ from tools.pentest.cors import check_cors_misconfiguration
 from tools.pentest.errors import check_error_disclosure
 from tools.pentest.nosqli import run_nosqli
 from tools.pentest.nuclei import run_nuclei
+from tools.pentest.open_redirect import check_open_redirect
 from tools.pentest.prompt_injection import check_prompt_injection
 from tools.pentest.sourcemaps import check_js_source_maps
 from tools.pentest.sqlmap import run_sqlmap
@@ -150,6 +151,29 @@ def source_maps_tool(recon_result_json: str) -> list[dict]:
     """
     recon = ReconResult.model_validate_json(recon_result_json)
     return [f.model_dump() for f in check_js_source_maps(recon.endpoints)]
+
+
+@tool("Open Redirect Probe")
+def open_redirect_tool(endpoints_json: str) -> list[dict]:
+    """
+    Inject external URL payloads (https, protocol-relative, backslash, userinfo)
+    into URL parameters and check whether the response Location, Refresh header,
+    or meta-refresh tag points to the canary host.
+
+    endpoints_json: JSON array of endpoint objects. Prioritise endpoints that have
+      parameters AND where any of the following apply:
+      - Parameter names look redirect-shaped (redirect, redirect_uri, return,
+        return_to, returnto, next, url, dest, destination, goto, target, link,
+        forward, continue, callback, rurl, r, u)
+      - Path looks like an auth flow (/login, /logout, /signin, /oauth, /sso)
+      - Recon noted a 30x response on the endpoint already
+      Example: '[{"url": "https://example.com/login", "parameters": ["next"]}]'
+
+    Open redirect on its own is typically MEDIUM, but it escalates on OAuth
+    redirect_uri and SSO callback endpoints (token theft) - flag those for VR.
+    Returns raw findings as dicts.
+    """
+    return [f.model_dump() for f in check_open_redirect(_parse_endpoints(endpoints_json))]
 
 
 @tool("Reflected XSS Probe")
@@ -498,6 +522,7 @@ MEMBER = SquadMember(
         header_injection_tool,
         host_header_tool,
         source_maps_tool,
+        open_redirect_tool,
         xss_probe_tool,
         sri_check_tool,
         error_disclosure_tool,
