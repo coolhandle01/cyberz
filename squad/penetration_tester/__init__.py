@@ -34,6 +34,7 @@ from tools.pentest.errors import check_error_disclosure
 from tools.pentest.nosqli import run_nosqli
 from tools.pentest.nuclei import run_nuclei
 from tools.pentest.open_redirect import check_open_redirect
+from tools.pentest.path_traversal import check_path_traversal
 from tools.pentest.prompt_injection import check_prompt_injection
 from tools.pentest.sourcemaps import check_js_source_maps
 from tools.pentest.sqlmap import run_sqlmap
@@ -151,6 +152,32 @@ def source_maps_tool(recon_result_json: str) -> list[dict]:
     """
     recon = ReconResult.model_validate_json(recon_result_json)
     return [f.model_dump() for f in check_js_source_maps(recon.endpoints)]
+
+
+@tool("Path Traversal Probe")
+def path_traversal_tool(endpoints_json: str) -> list[dict]:
+    """
+    Inject directory-traversal payloads (plain, URL-encoded, double-encoded,
+    backslash for Windows, null-byte truncation) into URL parameters and look
+    for unique content markers from OS sentinel files (/etc/passwd,
+    Windows win.ini) in the response body.
+
+    endpoints_json: JSON array of endpoint objects. Prioritise endpoints that
+      have parameters AND where any of the following apply:
+      - Parameter names look filesystem-shaped (file, filename, path, page,
+        template, include, require, download, doc, image, img, src, view)
+      - URL path or query suggests file serving (/download, /view, /preview,
+        /fetch, /report, /export)
+      - The response Content-Type or filename hint shows the server is reading
+        files based on the parameter
+      Example: '[{"url": "https://example.com/download", "parameters": ["file"]}]'
+
+    Read-only sentinel paths only; no writes, no destructive payloads. A
+    confirmed match returns severity HIGH - traversal that yields /etc/passwd
+    or win.ini almost always implies a file-read primitive worth escalating.
+    Returns raw findings as dicts.
+    """
+    return [f.model_dump() for f in check_path_traversal(_parse_endpoints(endpoints_json))]
 
 
 @tool("Open Redirect Probe")
@@ -523,6 +550,7 @@ MEMBER = SquadMember(
         host_header_tool,
         source_maps_tool,
         open_redirect_tool,
+        path_traversal_tool,
         xss_probe_tool,
         sri_check_tool,
         error_disclosure_tool,
