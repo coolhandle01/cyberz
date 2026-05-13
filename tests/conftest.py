@@ -4,9 +4,18 @@ tests/conftest.py - shared fixtures for the Bounty Squad test suite.
 
 from __future__ import annotations
 
-import pytest
+# Seed the env vars that config.py reads at import time so test runs that
+# do not export them on the command line still load the config singleton
+# cleanly. These are placeholders only; production runs supply real values.
+import os
 
-from models import (
+os.environ.setdefault("H1_API_USERNAME", "ci-user")
+os.environ.setdefault("H1_API_TOKEN", "ci-token")
+os.environ.setdefault("CYBERSQUAD_CONTACT_EMAIL", "ci@example.invalid")
+
+import pytest  # noqa: E402
+
+from models import (  # noqa: E402
     DisclosureReport,
     Endpoint,
     Programme,

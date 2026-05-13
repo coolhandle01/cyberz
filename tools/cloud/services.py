@@ -11,10 +11,9 @@ from __future__ import annotations
 import logging
 from urllib.parse import urlparse, urlunparse
 
-import requests
-
 from config import config
 from models import Endpoint, RawFinding, ReconResult, Severity
+from tools import http
 from tools.cloud.databases import (
     check_couchdb,
     check_elasticsearch,
@@ -100,7 +99,7 @@ def _probe_panel(
     for hostname in hostnames:
         url = f"{scheme}://{hostname}:{port}{path}"
         try:
-            resp = requests.get(  # nosemgrep
+            resp = http.get(  # nosemgrep
                 url,
                 timeout=5,
                 verify=False,  # nosec B501  # noqa: S501
@@ -134,7 +133,7 @@ def _probe_path(
     for origin in origins:
         target_url = origin + path
         try:
-            resp = requests.get(  # nosemgrep
+            resp = http.get(  # nosemgrep
                 target_url,
                 timeout=config.recon.http_timeout,
                 allow_redirects=True,
@@ -186,7 +185,7 @@ def check_sensitive_files(endpoints: list[Endpoint]) -> list[RawFinding]:
         for path, marker, title in _SENSITIVE_PATHS:
             target_url = origin + path
             try:
-                resp = requests.get(  # nosemgrep
+                resp = http.get(  # nosemgrep
                     target_url,
                     timeout=config.recon.http_timeout,
                     allow_redirects=False,
@@ -215,7 +214,7 @@ def check_admin_panels(endpoints: list[Endpoint]) -> list[RawFinding]:
         for path in _ADMIN_PATHS:
             target_url = origin + path
             try:
-                resp = requests.get(  # nosemgrep
+                resp = http.get(  # nosemgrep
                     target_url,
                     timeout=config.recon.http_timeout,
                     allow_redirects=False,

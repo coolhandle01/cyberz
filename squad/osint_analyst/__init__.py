@@ -8,6 +8,7 @@ from crewai.tools import tool
 
 from models import Endpoint
 from squad import SquadMember
+from tools import http
 from tools.h1_api import h1
 from tools.recon import cert_transparency, detect_llm_endpoints, historical_urls, run_recon
 
@@ -19,6 +20,7 @@ def recon_tool(programme_handle: str) -> dict:
     against the in-scope assets of the given programme handle.
     Returns a serialised ReconResult.
     """
+    http.set_programme(programme_handle)
     policy = h1.get_programme_policy(programme_handle)
     scope = h1.get_structured_scope(programme_handle)
     programme = h1.parse_programme(policy["data"], scope)

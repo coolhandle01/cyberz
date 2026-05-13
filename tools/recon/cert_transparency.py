@@ -9,9 +9,9 @@ logger = logging.getLogger(__name__)
 
 def cert_transparency(domain: str) -> list[str]:
     """Query crt.sh to discover subdomains not found by active enumeration."""
-    import requests
+    from tools import http
 
-    resp = requests.get(
+    resp = http.get(
         "https://crt.sh/",
         params={"q": f"%.{domain}", "output": "json"},
         timeout=30,

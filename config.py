@@ -147,6 +147,9 @@ class AppConfig:
     llm: LLMConfig = field(default_factory=LLMConfig)
     recon: ReconConfig = field(default_factory=ReconConfig)
     scan: ScanConfig = field(default_factory=ScanConfig)
+    # Operator contact email surfaced in the outbound User-Agent so SOC teams
+    # can reach the operator directly instead of banning the IP. See #46.
+    contact_email: str = field(default_factory=lambda: os.environ["CYBERSQUAD_CONTACT_EMAIL"])
     reports_dir: str = field(default_factory=lambda: os.getenv("REPORTS_DIR", "./reports"))
     verbose: bool = field(default_factory=lambda: os.getenv("VERBOSE", "false").lower() == "true")
     human_input: bool = field(

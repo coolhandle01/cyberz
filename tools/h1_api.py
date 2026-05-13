@@ -35,6 +35,7 @@ from models import (
     SubmissionResult,
     SubmissionStatus,
 )
+from tools import http
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +80,7 @@ class H1Client:
             {
                 "Accept": "application/json",
                 "Content-Type": "application/json",
+                "User-Agent": http.user_agent(),
             }
         )
 

@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import logging
 
-import requests
-
 from models import RawFinding, Severity
+from tools import http
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +16,7 @@ def check_couchdb(host: str) -> list[RawFinding]:
     """Return a CRITICAL finding if CouchDB on port 5984 lists databases without auth."""
     url = f"http://{host}:{PORT}/_all_dbs"
     try:
-        resp = requests.get(url, timeout=5, allow_redirects=False)  # nosemgrep
+        resp = http.get(url, timeout=5, allow_redirects=False)  # nosemgrep
         if resp.status_code == 200 and "[" in resp.text:
             return [
                 RawFinding(

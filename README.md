@@ -78,7 +78,10 @@ $EDITOR .env
 H1_API_USERNAME=your-h1-username
 H1_API_TOKEN=your-h1-api-token
 ANTHROPIC_API_KEY=your-anthropic-key
+CYBERSQUAD_CONTACT_EMAIL=you@example.com
 ```
+
+`CYBERSQUAD_CONTACT_EMAIL` is surfaced in the outbound `User-Agent` on every HTTP request the squad makes (alongside the platform, programme handle, and your H1 username). A SOC operator who sees the traffic can verify the run against their HackerOne dashboard and reach you directly instead of banning the IP.
 
 **Key tunables** (all have sensible defaults - see `.env.example` for the full list):
 
@@ -160,10 +163,10 @@ cybersquad/
 
 ```bash
 # Unit tests - no network, no binaries, all mocked
-H1_API_USERNAME=test H1_API_TOKEN=test pytest -m unit
+H1_API_USERNAME=test H1_API_TOKEN=test CYBERSQUAD_CONTACT_EMAIL=test@example.invalid pytest -m unit
 
 # With coverage
-H1_API_USERNAME=test H1_API_TOKEN=test pytest -m unit --cov --cov-report=term-missing
+H1_API_USERNAME=test H1_API_TOKEN=test CYBERSQUAD_CONTACT_EMAIL=test@example.invalid pytest -m unit --cov --cov-report=term-missing
 ```
 
 Coverage floor is **70%**. Every new public function in `tools/` requires a unit test. Every bug fix requires a regression test.
@@ -174,7 +177,7 @@ Coverage floor is **70%**. Every new public function in `tools/` requires a unit
 ruff check .
 ruff format --check .
 mypy . --ignore-missing-imports
-H1_API_USERNAME=test H1_API_TOKEN=test pytest -m unit --cov --cov-report=term-missing
+H1_API_USERNAME=test H1_API_TOKEN=test CYBERSQUAD_CONTACT_EMAIL=test@example.invalid pytest -m unit --cov --cov-report=term-missing
 bandit -c pyproject.toml -r . -q
 ```
 

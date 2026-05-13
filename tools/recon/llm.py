@@ -5,10 +5,9 @@ from __future__ import annotations
 import json
 import logging
 
-import requests
-
 from config import config
 from models import Endpoint
+from tools import http
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +80,7 @@ def _has_llm_path(url: str) -> bool:
 
 def _probe_for_llm_signals(url: str) -> bool:
     try:
-        resp = requests.get(  # nosemgrep
+        resp = http.get(  # nosemgrep
             url,
             timeout=config.recon.http_timeout,
             allow_redirects=True,

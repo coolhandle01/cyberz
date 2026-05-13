@@ -7,6 +7,7 @@ from pathlib import Path
 from crewai.tools import tool
 
 from squad import SquadMember
+from tools import http
 from tools.h1_api import h1
 from tools.report_tools import save_report
 
@@ -17,6 +18,7 @@ def submit_report_tool(report_json: str) -> dict:
     from models import DisclosureReport
 
     report = DisclosureReport.model_validate_json(report_json)
+    http.set_programme(report.programme_handle)
     save_report(report)
     result = h1.submit_report(report)
     return result.model_dump()
@@ -29,6 +31,7 @@ def check_duplicate_tool(programme_handle: str, title: str) -> list[dict]:
     programme whose titles resemble the given title. A match means another
     researcher may have already submitted this finding.
     """
+    http.set_programme(programme_handle)
     reports = h1.list_reports(programme_handle, page_size=25)
     title_lower = title.lower()
     return [

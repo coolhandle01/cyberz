@@ -8,6 +8,7 @@ from crewai.tools import tool
 
 from models import VerifiedVulnerability
 from squad import SquadMember
+from tools import http
 from tools.report_tools import (
     calculate_cvss_score,
     create_disclosure_report,
@@ -21,6 +22,7 @@ def create_report_tool(programme_handle: str, vulnerability_json: str, summary: 
     Create and save a structured DisclosureReport from a verified vulnerability.
     Returns the serialised report ready for submission.
     """
+    http.set_programme(programme_handle)
     vuln = VerifiedVulnerability.model_validate_json(vulnerability_json)
     report = create_disclosure_report(programme_handle, vuln, summary)
     save_report(report)
