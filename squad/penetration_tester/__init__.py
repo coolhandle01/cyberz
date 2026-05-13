@@ -29,6 +29,7 @@ from tools.cloud import (
     check_sensitive_files,
     check_webmin,
 )
+from tools.pentest.cookies import check_cookies
 from tools.pentest.cors import check_cors_misconfiguration
 from tools.pentest.errors import check_error_disclosure
 from tools.pentest.nosqli import run_nosqli
@@ -90,6 +91,25 @@ def sqlmap_tool(endpoints_json: str) -> list[dict]:
     Returns raw findings as dicts.
     """
     return [f.model_dump() for f in run_sqlmap(_parse_endpoints(endpoints_json))]
+
+
+@tool("Cookie Security Check")
+def cookie_check_tool(recon_result_json: str) -> list[dict]:
+    """
+    Inspect Set-Cookie attributes across the recon surface for: missing
+    Secure on HTTPS cookies, missing HttpOnly on session-shaped cookies,
+    SameSite=None without Secure, Domain attribute scoped broader than the
+    setting host, persistent (Max-Age/Expires) session-shaped cookies, and
+    sensitive data (API keys, JWTs carrying password/secret claims, emails,
+    base64-encoded JSON with sensitive keys) in cookie values.
+
+    Run this broadly - one request per distinct host, findings deduped per
+    (host, cookie name, check class). Especially useful on login, dashboard,
+    and authenticated API endpoints where Set-Cookie is most likely.
+    Pass the full serialised ReconResult. Returns raw findings as dicts.
+    """
+    recon = ReconResult.model_validate_json(recon_result_json)
+    return [f.model_dump() for f in check_cookies(recon.endpoints)]
 
 
 @tool("CORS Misconfiguration Check")
@@ -544,6 +564,7 @@ MEMBER = SquadMember(
     tools=[
         nuclei_scan_tool,
         sqlmap_tool,
+        cookie_check_tool,
         cors_check_tool,
         ssrf_probe_tool,
         header_injection_tool,
