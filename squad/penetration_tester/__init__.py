@@ -33,6 +33,7 @@ from tools.cloud import (
 from tools.pentest.cookies import check_cookies
 from tools.pentest.cors import check_cors_misconfiguration
 from tools.pentest.errors import check_error_disclosure
+from tools.pentest.hpp import check_hpp
 from tools.pentest.nosqli import run_nosqli
 from tools.pentest.nuclei import run_nuclei
 from tools.pentest.open_redirect import check_open_redirect
@@ -212,6 +213,34 @@ def path_traversal_tool(endpoints_json: str) -> list[dict]:
     Returns raw findings as dicts.
     """
     return [f.model_dump() for f in check_path_traversal(_parse_endpoints(endpoints_json))]
+
+
+@tool("HTTP Parameter Pollution Probe")
+def hpp_probe_tool(endpoints_json: str) -> list[dict]:
+    """
+    Detect HTTP Parameter Pollution by sending a baseline request
+    (`?param=1`) and a polluted request (`?param=1&param=2`) and comparing
+    status code + body length. Any divergence proves the server treats
+    duplicate values as distinguishable from a single value - the
+    pre-condition for WAF bypass and access-control bypass exploits.
+
+    endpoints_json: JSON array of endpoint objects. Prioritise endpoints
+      where any of the following apply:
+      - Parameter names look authorisation-shaped (role, admin, is_admin,
+        permission, group, user_id) - HPP is most impactful when it can
+        flip a privilege check
+      - Endpoint sits behind a WAF or rate-limit (HPP is a classic WAF
+        bypass primitive)
+      - Endpoint is part of an auth or admin flow
+      Example: '[{"url": "https://example.com/api/user", "parameters": ["role", "id"]}]'
+
+    Severity LOW on its own - HPP is a class of behaviour that enables
+    further exploitation rather than a vuln in itself. The VR should
+    escalate when the divergence can be chained with another finding
+    (SQLi filter bypass, access-control override, cache poisoning).
+    Returns raw findings as dicts.
+    """
+    return [f.model_dump() for f in check_hpp(_parse_endpoints(endpoints_json))]
 
 
 @tool("Server-Side Template Injection Probe")
@@ -611,6 +640,7 @@ MEMBER = SquadMember(
         host_header_tool,
         source_maps_tool,
         ssti_probe_tool,
+        hpp_probe_tool,
         open_redirect_tool,
         path_traversal_tool,
         xss_probe_tool,
