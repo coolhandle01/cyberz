@@ -34,6 +34,7 @@ from tools.pentest.cookies import check_cookies
 from tools.pentest.cors import check_cors_misconfiguration
 from tools.pentest.errors import check_error_disclosure
 from tools.pentest.hpp import check_hpp
+from tools.pentest.ldap_injection import check_ldap_injection
 from tools.pentest.nosqli import run_nosqli
 from tools.pentest.nuclei import run_nuclei
 from tools.pentest.open_redirect import check_open_redirect
@@ -60,7 +61,7 @@ def _recon_from_json(recon_result_json: str) -> ReconResult:
     programme handle into outbound User-Agent headers without each call site
     having to remember the http.set_programme(...) call.
     """
-    recon = _recon_from_json(recon_result_json)
+    recon = ReconResult.model_validate_json(recon_result_json)
     http.set_programme(recon.programme.handle)
     return recon
 
@@ -627,6 +628,31 @@ def nosqli_tool(endpoints_json: str) -> list[dict]:
     return [f.model_dump() for f in run_nosqli(_parse_endpoints(endpoints_json))]
 
 
+@tool("LDAP Injection Probe")
+def ldap_injection_tool(endpoints_json: str) -> list[dict]:
+    """
+    Inject LDAP bypass and enumeration payloads into URL parameters to detect
+    LDAP injection vulnerabilities against Active Directory or OpenLDAP backends.
+
+    endpoints_json: JSON array of endpoint objects. Prioritise endpoints that have
+      parameters AND where any of the following apply:
+      - Parameter names suggest authentication or directory lookup (username, user,
+        login, email, uid, cn, search, filter, q)
+      - URL path suggests auth or directory (/login, /auth, /search, /directory,
+        /ldap, /user)
+      - Technologies mention LDAP, Active Directory, OpenLDAP, or JNDI
+      Example: '[{"url": "https://example.com/login", "parameters": ["username"]}]'
+
+    Detection tiers:
+      HIGH   - status code change vs baseline suggests auth bypass
+      MEDIUM - LDAP/AD error strings in response body (confirms LDAP backend)
+      MEDIUM - server error (500) only on LDAP payload, not on baseline
+
+    Returns raw findings as dicts.
+    """
+    return [f.model_dump() for f in check_ldap_injection(_parse_endpoints(endpoints_json))]
+
+
 MEMBER = SquadMember(
     slug="penetration_tester",
     dir=Path(__file__).parent,
@@ -666,5 +692,6 @@ MEMBER = SquadMember(
         consul_vault_tool,
         nosqli_tool,
         prompt_injection_tool,
+        ldap_injection_tool,
     ],
 )
