@@ -42,6 +42,7 @@ from tools.pentest.sourcemaps import check_js_source_maps
 from tools.pentest.sqlmap import run_sqlmap
 from tools.pentest.sri import check_sri
 from tools.pentest.ssrf import check_ssrf
+from tools.pentest.ssti import check_ssti
 from tools.pentest.webapp_headers import check_header_injection, check_host_headers
 from tools.pentest.xss import check_reflected_xss
 
@@ -211,6 +212,32 @@ def path_traversal_tool(endpoints_json: str) -> list[dict]:
     Returns raw findings as dicts.
     """
     return [f.model_dump() for f in check_path_traversal(_parse_endpoints(endpoints_json))]
+
+
+@tool("Server-Side Template Injection Probe")
+def ssti_probe_tool(endpoints_json: str) -> list[dict]:
+    """
+    Inject template-language expressions (Jinja2/Twig/Liquid, Mako/FreeMarker,
+    ERB/EJS, Ruby interpolation) into URL parameters and look for the evaluated
+    arithmetic product in the response body. Confirmation requires the product
+    to appear AND the literal expression to be absent, which rules out the
+    common false positive of an app that just echoes the raw input.
+
+    endpoints_json: JSON array of endpoint objects. Prioritise endpoints where
+      any of the following apply:
+      - Parameter values are rendered into HTML the response returns (search,
+        comment, preview, name, template parameters)
+      - Technologies mention a template-heavy stack (Flask/Jinja2, Django,
+        Symfony/Twig, Rails/ERB, Spring with FreeMarker, etc.)
+      - Error disclosure findings mention template internals
+      Example: '[{"url": "https://example.com/preview", "parameters": ["name"]}]'
+
+    SSTI confirmed at the canary-arithmetic level is HIGH; the VR should
+    escalate to CRITICAL when manual follow-up demonstrates RCE primitives
+    (sandbox escape, attribute traversal, OS command execution).
+    Returns raw findings as dicts.
+    """
+    return [f.model_dump() for f in check_ssti(_parse_endpoints(endpoints_json))]
 
 
 @tool("Open Redirect Probe")
@@ -583,6 +610,7 @@ MEMBER = SquadMember(
         header_injection_tool,
         host_header_tool,
         source_maps_tool,
+        ssti_probe_tool,
         open_redirect_tool,
         path_traversal_tool,
         xss_probe_tool,
