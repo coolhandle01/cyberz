@@ -9,6 +9,7 @@ from crewai.tools import tool
 
 from models import Endpoint, ReconResult
 from squad import SquadMember
+from tools import http
 from tools.cloud import (
     check_admin_panels,
     check_azure_storage,
@@ -48,6 +49,18 @@ from tools.pentest.xss import check_reflected_xss
 def _parse_endpoints(endpoints_json: str) -> list[Endpoint]:
     """Deserialise a JSON array of endpoint dicts into Endpoint objects."""
     return [Endpoint.model_validate(e) for e in json.loads(endpoints_json)]
+
+
+def _recon_from_json(recon_result_json: str) -> ReconResult:
+    """Parse a serialised ReconResult and seed the http programme context.
+
+    Centralised here so any wrapper that has a ReconResult propagates the
+    programme handle into outbound User-Agent headers without each call site
+    having to remember the http.set_programme(...) call.
+    """
+    recon = _recon_from_json(recon_result_json)
+    http.set_programme(recon.programme.handle)
+    return recon
 
 
 @tool("Nuclei Scan")
@@ -108,7 +121,7 @@ def cookie_check_tool(recon_result_json: str) -> list[dict]:
     and authenticated API endpoints where Set-Cookie is most likely.
     Pass the full serialised ReconResult. Returns raw findings as dicts.
     """
-    recon = ReconResult.model_validate_json(recon_result_json)
+    recon = _recon_from_json(recon_result_json)
     return [f.model_dump() for f in check_cookies(recon.endpoints)]
 
 
@@ -120,7 +133,7 @@ def cors_check_tool(recon_result_json: str) -> list[dict]:
     Relevant wherever the target exposes an API or serves authenticated content.
     Pass the full serialised ReconResult. Returns raw findings as dicts.
     """
-    recon = ReconResult.model_validate_json(recon_result_json)
+    recon = _recon_from_json(recon_result_json)
     return [f.model_dump() for f in check_cors_misconfiguration(recon.endpoints)]
 
 
@@ -147,7 +160,7 @@ def header_injection_tool(recon_result_json: str) -> list[dict]:
     Relevant on all endpoints - run this broadly.
     Pass the full serialised ReconResult. Returns raw findings as dicts.
     """
-    recon = ReconResult.model_validate_json(recon_result_json)
+    recon = _recon_from_json(recon_result_json)
     return [f.model_dump() for f in check_header_injection(recon.endpoints)]
 
 
@@ -158,7 +171,7 @@ def host_header_tool(recon_result_json: str) -> list[dict]:
     and X-Original-URL / X-Rewrite-URL overrides that may bypass access controls.
     Pass the full serialised ReconResult. Returns raw findings as dicts.
     """
-    recon = ReconResult.model_validate_json(recon_result_json)
+    recon = _recon_from_json(recon_result_json)
     return [f.model_dump() for f in check_host_headers(recon.endpoints)]
 
 
@@ -170,7 +183,7 @@ def source_maps_tool(recon_result_json: str) -> list[dict]:
     that load JavaScript bundles (React, Angular, Vue, etc.).
     Pass the full serialised ReconResult. Returns raw findings as dicts.
     """
-    recon = ReconResult.model_validate_json(recon_result_json)
+    recon = _recon_from_json(recon_result_json)
     return [f.model_dump() for f in check_js_source_maps(recon.endpoints)]
 
 
@@ -246,7 +259,7 @@ def sri_check_tool(recon_result_json: str) -> list[dict]:
     integrity= attribute. Run broadly against all HTML-serving endpoints.
     Pass the full serialised ReconResult. Returns raw findings as dicts.
     """
-    recon = ReconResult.model_validate_json(recon_result_json)
+    recon = _recon_from_json(recon_result_json)
     return [f.model_dump() for f in check_sri(recon.endpoints)]
 
 
@@ -275,7 +288,7 @@ def s3_check_tool(recon_result_json: str) -> list[dict]:
     Use when the target is known to use AWS, or when S3 subdomains appear in recon.
     Pass the full serialised ReconResult. Returns raw findings as dicts.
     """
-    recon = ReconResult.model_validate_json(recon_result_json)
+    recon = _recon_from_json(recon_result_json)
     return [f.model_dump() for f in check_s3_buckets(recon)]
 
 
@@ -287,7 +300,7 @@ def azure_storage_check_tool(recon_result_json: str) -> list[dict]:
     *.blob.core.windows.net subdomains appear in recon.
     Pass the full serialised ReconResult. Returns raw findings as dicts.
     """
-    recon = ReconResult.model_validate_json(recon_result_json)
+    recon = _recon_from_json(recon_result_json)
     return [f.model_dump() for f in check_azure_storage(recon)]
 
 
@@ -299,7 +312,7 @@ def elasticsearch_tool(recon_result_json: str) -> list[dict]:
     Use when open_ports shows 9200, or when technologies mention Elasticsearch.
     Pass the full serialised ReconResult. Returns raw findings as dicts.
     """
-    recon = ReconResult.model_validate_json(recon_result_json)
+    recon = _recon_from_json(recon_result_json)
     findings = []
     for host, ports in recon.open_ports.items():
         if 9200 in ports:
@@ -315,7 +328,7 @@ def couchdb_tool(recon_result_json: str) -> list[dict]:
     Use when open_ports shows 5984.
     Pass the full serialised ReconResult. Returns raw findings as dicts.
     """
-    recon = ReconResult.model_validate_json(recon_result_json)
+    recon = _recon_from_json(recon_result_json)
     findings = []
     for host, ports in recon.open_ports.items():
         if 5984 in ports:
@@ -331,7 +344,7 @@ def redis_tool(recon_result_json: str) -> list[dict]:
     Use when open_ports shows 6379.
     Pass the full serialised ReconResult. Returns raw findings as dicts.
     """
-    recon = ReconResult.model_validate_json(recon_result_json)
+    recon = _recon_from_json(recon_result_json)
     findings = []
     for host, ports in recon.open_ports.items():
         if 6379 in ports:
@@ -348,7 +361,7 @@ def mongodb_tool(recon_result_json: str) -> list[dict]:
     Use when open_ports shows 27017.
     Pass the full serialised ReconResult. Returns raw findings as dicts.
     """
-    recon = ReconResult.model_validate_json(recon_result_json)
+    recon = _recon_from_json(recon_result_json)
     findings = []
     for host, ports in recon.open_ports.items():
         if 27017 in ports:
@@ -365,7 +378,7 @@ def postgresql_tool(recon_result_json: str) -> list[dict]:
     Use when open_ports shows 5432.
     Pass the full serialised ReconResult. Returns raw findings as dicts.
     """
-    recon = ReconResult.model_validate_json(recon_result_json)
+    recon = _recon_from_json(recon_result_json)
     findings = []
     for host, ports in recon.open_ports.items():
         if 5432 in ports:
@@ -382,7 +395,7 @@ def mysql_tool(recon_result_json: str) -> list[dict]:
     Use when open_ports shows 3306.
     Pass the full serialised ReconResult. Returns raw findings as dicts.
     """
-    recon = ReconResult.model_validate_json(recon_result_json)
+    recon = _recon_from_json(recon_result_json)
     findings = []
     for host, ports in recon.open_ports.items():
         if 3306 in ports:
@@ -429,7 +442,7 @@ def cpanel_tool(recon_result_json: str) -> list[dict]:
     appears to be a shared/managed hosting environment.
     Pass the full serialised ReconResult. Returns raw findings as dicts.
     """
-    recon = ReconResult.model_validate_json(recon_result_json)
+    recon = _recon_from_json(recon_result_json)
     return [f.model_dump() for f in check_cpanel(recon)]
 
 
@@ -441,7 +454,7 @@ def plesk_tool(recon_result_json: str) -> list[dict]:
     target is a managed hosting or VPS provider.
     Pass the full serialised ReconResult. Returns raw findings as dicts.
     """
-    recon = ReconResult.model_validate_json(recon_result_json)
+    recon = _recon_from_json(recon_result_json)
     return [f.model_dump() for f in check_plesk(recon)]
 
 
@@ -452,7 +465,7 @@ def directadmin_tool(recon_result_json: str) -> list[dict]:
     Use when open_ports shows 2222 on a target that appears to be shared hosting.
     Pass the full serialised ReconResult. Returns raw findings as dicts.
     """
-    recon = ReconResult.model_validate_json(recon_result_json)
+    recon = _recon_from_json(recon_result_json)
     return [f.model_dump() for f in check_directadmin(recon)]
 
 
@@ -463,7 +476,7 @@ def webmin_tool(recon_result_json: str) -> list[dict]:
     Use when open_ports shows 10000, or when the target is a self-hosted Linux server.
     Pass the full serialised ReconResult. Returns raw findings as dicts.
     """
-    recon = ReconResult.model_validate_json(recon_result_json)
+    recon = _recon_from_json(recon_result_json)
     return [f.model_dump() for f in check_webmin(recon)]
 
 
@@ -476,7 +489,7 @@ def grafana_tool(recon_result_json: str) -> list[dict]:
     the target is a DevOps/SRE-heavy organisation.
     Pass the full serialised ReconResult. Returns raw findings as dicts.
     """
-    recon = ReconResult.model_validate_json(recon_result_json)
+    recon = _recon_from_json(recon_result_json)
     return [f.model_dump() for f in check_grafana(recon)]
 
 
@@ -489,7 +502,7 @@ def kibana_tool(recon_result_json: str) -> list[dict]:
     technologies mention Kibana or Elasticsearch.
     Pass the full serialised ReconResult. Returns raw findings as dicts.
     """
-    recon = ReconResult.model_validate_json(recon_result_json)
+    recon = _recon_from_json(recon_result_json)
     return [f.model_dump() for f in check_kibana(recon)]
 
 
@@ -502,7 +515,7 @@ def portainer_tool(recon_result_json: str) -> list[dict]:
     containerised infrastructure.
     Pass the full serialised ReconResult. Returns raw findings as dicts.
     """
-    recon = ReconResult.model_validate_json(recon_result_json)
+    recon = _recon_from_json(recon_result_json)
     return [f.model_dump() for f in check_portainer(recon)]
 
 
@@ -515,7 +528,7 @@ def consul_vault_tool(recon_result_json: str) -> list[dict]:
     or microservices environment.
     Pass the full serialised ReconResult. Returns raw findings as dicts.
     """
-    recon = ReconResult.model_validate_json(recon_result_json)
+    recon = _recon_from_json(recon_result_json)
     return [f.model_dump() for f in check_consul_vault(recon)]
 
 

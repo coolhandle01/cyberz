@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import logging
 
-import requests
-
 from models import RawFinding, ReconResult, Severity
+from tools import http
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +46,7 @@ def check_s3_buckets(recon: ReconResult) -> list[RawFinding]:
     for bucket in _bucket_candidates(recon):
         url = f"https://{bucket}.s3.amazonaws.com/"
         try:
-            resp = requests.get(url, timeout=10, allow_redirects=False)  # nosemgrep
+            resp = http.get(url, timeout=10, allow_redirects=False)  # nosemgrep
         except Exception as exc:
             logger.debug("S3 check failed for %s: %s", bucket, exc)
             continue

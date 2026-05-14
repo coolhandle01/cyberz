@@ -5,9 +5,8 @@ from __future__ import annotations
 import logging
 import re
 
-import requests
-
 from models import RawFinding, ReconResult, Severity
+from tools import http
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +66,7 @@ def check_azure_storage(recon: ReconResult) -> list[RawFinding]:
         for container in _CONTAINER_NAMES:
             url = f"https://{account}.blob.core.windows.net/{container}?restype=container&comp=list"
             try:
-                resp = requests.get(url, timeout=10, allow_redirects=False)  # nosemgrep
+                resp = http.get(url, timeout=10, allow_redirects=False)  # nosemgrep
             except Exception as exc:
                 logger.debug("Azure check failed for %s/%s: %s", account, container, exc)
                 continue

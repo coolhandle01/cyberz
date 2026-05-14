@@ -36,9 +36,11 @@ jobs:
     name: Unit tests
     runs-on: ubuntu-latest
     env:
-      # Dummy creds so H1Client can be imported without KeyError
+      # Dummy creds so H1Client can be imported without KeyError. The contact
+      # email seeds the User-Agent helper - see tools/http.py and #46.
       H1_API_USERNAME: ci-user
       H1_API_TOKEN: ci-token
+      CYBERSQUAD_CONTACT_EMAIL: ci@example.invalid
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
 

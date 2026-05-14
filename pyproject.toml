@@ -97,6 +97,10 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["ANN", "S"]   # relax annotations and security rules in tests
+# Thin pass-through wrappers around requests.* - **kwargs: Any is the
+# idiomatic shape, and the timeout argument is part of the caller's contract,
+# not the helper's responsibility to default.
+"tools/http.py" = ["ANN401", "S113"]
 
 [tool.ruff.format]
 quote-style = "double"

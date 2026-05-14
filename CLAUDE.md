@@ -23,7 +23,7 @@ This file is for AI assistants working on this codebase. It covers the architect
    .venv/bin/ruff check .
    .venv/bin/ruff format --check .
    .venv/bin/mypy . --ignore-missing-imports
-   H1_API_USERNAME=test H1_API_TOKEN=test .venv/bin/pytest -m unit --cov --cov-report=term-missing
+   H1_API_USERNAME=test H1_API_TOKEN=test CYBERSQUAD_CONTACT_EMAIL=test@example.invalid .venv/bin/pytest -m unit --cov --cov-report=term-missing
    .venv/bin/bandit -c pyproject.toml -r . -q
    ```
 

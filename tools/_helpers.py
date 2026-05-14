@@ -40,7 +40,7 @@ def adaptive_sleep(delay: float, status_code: int) -> float:
 
         _delay = config.scan.request_delay
         for ...:
-            resp = requests.get(...)
+            resp = http.get(...)
             _delay = adaptive_sleep(_delay, resp.status_code)
     """
     from config import config  # deferred - config imports nothing from tools
