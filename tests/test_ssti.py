@@ -7,7 +7,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from models import Endpoint, Severity
-from tools.pentest.ssti import _EXPECTED, _PROBES, check_ssti
+from tools.pentest.ssti import (
+    _DJANGO_EXPECTED,
+    _DJANGO_PAYLOAD,
+    _MULTIPLY_EXPECTED,
+    _PROBES,
+    check_ssti,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -26,7 +32,7 @@ class TestCheckSSTI:
         def fake_get(url, **kwargs):
             # Server evaluates the Jinja-style payload to the product
             if "%7B%7B" in url or "{{" in url:
-                return _resp(body=f"<html>Hello {_EXPECTED}</html>")
+                return _resp(body=f"<html>Hello {_MULTIPLY_EXPECTED}</html>")
             return _resp(body="<html>Hello</html>")
 
         with patch("requests.get", side_effect=fake_get):
@@ -35,7 +41,7 @@ class TestCheckSSTI:
         assert len(results) == 1
         assert results[0].vuln_class == "SSTI"
         assert results[0].severity_hint == Severity.HIGH
-        assert _EXPECTED in results[0].evidence
+        assert _MULTIPLY_EXPECTED in results[0].evidence
         assert "Jinja2" in results[0].evidence
 
     def test_detects_dollar_brace_engine(self):
@@ -44,7 +50,7 @@ class TestCheckSSTI:
         def fake_get(url, **kwargs):
             # Only the ${...} payload triggers; the {{...}} one is echoed
             if "%24%7B" in url or url.endswith("${12345*67890}"):
-                return _resp(body=f"Result: {_EXPECTED}")
+                return _resp(body=f"Result: {_MULTIPLY_EXPECTED}")
             # Echo other payloads back literally
             payload = url.split("tpl=", 1)[1]
             return _resp(body=f"Submitted: {payload}")
@@ -55,15 +61,44 @@ class TestCheckSSTI:
         assert len(results) == 1
         assert "Mako" in results[0].evidence or "FreeMarker" in results[0].evidence
 
+    def test_detects_django_add_filter(self):
+        # Django does not evaluate raw arithmetic in {{ }} but it does
+        # evaluate its built-in filter chain - so a server that runs the
+        # add filter is positively detectable through the same shape.
+        ep = Endpoint(url="https://app.example.com/preview", status_code=200, parameters=["name"])
+
+        def fake_get(url, **kwargs):
+            # Server evaluates Django's add filter for the Django payload;
+            # echoes everything else literally so the arithmetic probes do
+            # NOT trigger (and we know it's the Django probe that won).
+            if "add" in url and "123456789" in url:
+                return _resp(body=f"<html>Total: {_DJANGO_EXPECTED}</html>")
+            payload = url.split("name=", 1)[1]
+            return _resp(body=f"<html>Echo: {payload}</html>")
+
+        with patch("requests.get", side_effect=fake_get):
+            results = check_ssti([ep])
+
+        assert len(results) == 1
+        assert "Django" in results[0].evidence
+        assert _DJANGO_EXPECTED in results[0].evidence
+        # And ensure the arithmetic probes' product is NOT what triggered
+        assert _MULTIPLY_EXPECTED not in results[0].evidence
+
     def test_no_finding_when_input_is_echoed_literally(self):
         # Page reflects the raw payload (input echo) but does not evaluate it.
         # Our guard requires literal absence, so this must NOT be a finding -
-        # even if the product happens to appear in some unrelated text.
+        # even if the expected output happens to appear in some unrelated text.
         ep = Endpoint(url="https://app.example.com/preview", status_code=200, parameters=["name"])
 
         def fake_get(url, **kwargs):
             payload = url.split("name=", 1)[1]
-            return _resp(body=f"<html>You said: {payload}. Order #{_EXPECTED}.</html>")
+            return _resp(
+                body=(
+                    f"<html>You said: {payload}. "
+                    f"Order #{_MULTIPLY_EXPECTED}. Total {_DJANGO_EXPECTED}.</html>"
+                )
+            )
 
         with patch("requests.get", side_effect=fake_get):
             results = check_ssti([ep])
@@ -103,7 +138,7 @@ class TestCheckSSTI:
         )
 
         def fake_get(url, **kwargs):
-            return _resp(body=f"Hello {_EXPECTED}!")
+            return _resp(body=f"Hello {_MULTIPLY_EXPECTED}!")
 
         with patch("requests.get", side_effect=fake_get) as mock_get:
             results = check_ssti([ep])
@@ -120,7 +155,7 @@ class TestCheckSSTI:
 
     def test_probes_cover_major_template_engines(self):
         # Sanity check the payload list - one entry per major syntax family.
-        engines = " ".join(label for _, label in _PROBES)
+        engines = " ".join(label for _, _, label in _PROBES)
         assert "Jinja2" in engines
         assert "Mako" in engines or "FreeMarker" in engines
         assert "ERB" in engines
@@ -128,8 +163,16 @@ class TestCheckSSTI:
         # The #{...} payload also covers Pug (Express) and Slim - make sure
         # the engine label flags that for the LLM consuming the evidence.
         assert "Pug" in engines
+        # Django uses its own filter-based DSL - the add-filter payload
+        # detects it without relying on arithmetic-in-delimiters semantics.
+        assert "Django" in engines
 
-    def test_expected_product_is_correct(self):
-        # Guards against someone tweaking _A/_B but forgetting _EXPECTED.
-        assert _EXPECTED == str(12345 * 67890)
-        assert _EXPECTED == "838102050"
+    def test_expected_values_are_correct(self):
+        # Guards against someone tweaking the payload constants but
+        # forgetting to update the expected output.
+        assert _MULTIPLY_EXPECTED == str(12345 * 67890)
+        assert _MULTIPLY_EXPECTED == "838102050"
+        assert _DJANGO_EXPECTED == str(123456789 + 987654321)
+        assert _DJANGO_EXPECTED == "1111111110"
+        # The Django payload must actually use the `add` filter syntax
+        assert "|add:" in _DJANGO_PAYLOAD
