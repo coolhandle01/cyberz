@@ -1,0 +1,155 @@
+"""tests/test_hpp.py - unit tests for tools/pentest/hpp.py"""
+
+from __future__ import annotations
+
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from models import Endpoint, Severity
+from tools.pentest.hpp import check_hpp
+
+pytestmark = pytest.mark.unit
+
+
+def _resp(status: int = 200, body: str = "") -> MagicMock:
+    resp = MagicMock()
+    resp.status_code = status
+    resp.text = body
+    return resp
+
+
+class TestCheckHPP:
+    def test_detects_status_delta(self):
+        # Baseline returns 200, polluted returns 302 - server picked one of
+        # the duplicate values and triggered a redirect.
+        ep = Endpoint(url="https://app.example.com/", status_code=200, parameters=["id"])
+
+        def fake_get(url, **kwargs):
+            if "id=1&id=2" in url:
+                return _resp(status=302, body="")
+            return _resp(status=200, body="ok")
+
+        with patch("requests.get", side_effect=fake_get):
+            results = check_hpp([ep])
+
+        assert len(results) == 1
+        assert results[0].vuln_class == "HPP"
+        assert results[0].severity_hint == Severity.LOW
+        assert "id" in results[0].evidence
+        assert "302" in results[0].evidence
+
+    def test_detects_length_delta(self):
+        # Same status code, but the polluted response body is materially
+        # longer because the server combined both values into the output.
+        ep = Endpoint(url="https://app.example.com/", status_code=200, parameters=["q"])
+
+        def fake_get(url, **kwargs):
+            if "q=1&q=2" in url:
+                return _resp(status=200, body="results: 1, 2 (combined)")
+            return _resp(status=200, body="results: 1")
+
+        with patch("requests.get", side_effect=fake_get):
+            results = check_hpp([ep])
+
+        assert len(results) == 1
+        assert "HPP behaviour confirmed" in results[0].evidence
+
+    def test_no_finding_when_responses_identical(self):
+        # Server collapses duplicates - baseline and polluted look the same.
+        ep = Endpoint(url="https://app.example.com/", status_code=200, parameters=["id"])
+
+        with patch("requests.get", return_value=_resp(status=200, body="ok")):
+            results = check_hpp([ep])
+
+        assert results == []
+
+    def test_skips_endpoints_without_parameters(self):
+        ep = Endpoint(url="https://app.example.com/about", status_code=200)
+        with patch("requests.get") as mock_get:
+            results = check_hpp([ep])
+        mock_get.assert_not_called()
+        assert results == []
+
+    def test_skips_server_error_endpoints(self):
+        ep = Endpoint(url="https://app.example.com/", status_code=503, parameters=["id"])
+        with patch("requests.get") as mock_get:
+            results = check_hpp([ep])
+        mock_get.assert_not_called()
+        assert results == []
+
+    def test_one_finding_per_endpoint(self):
+        # First param triggers - subsequent params should not be probed.
+        ep = Endpoint(
+            url="https://app.example.com/",
+            status_code=200,
+            parameters=["a", "b", "c"],
+        )
+
+        def fake_get(url, **kwargs):
+            if "a=1&a=2" in url:
+                return _resp(status=200, body="much longer body here than baseline")
+            return _resp(status=200, body="ok")
+
+        with patch("requests.get", side_effect=fake_get) as mock_get:
+            results = check_hpp([ep])
+
+        assert len(results) == 1
+        # Only param 'a' probed: baseline + polluted = 2 calls
+        assert mock_get.call_count == 2
+
+    def test_baseline_and_polluted_both_sent(self):
+        ep = Endpoint(url="https://app.example.com/", status_code=200, parameters=["q"])
+        urls_seen: list[str] = []
+
+        def fake_get(url, **kwargs):
+            urls_seen.append(url)
+            return _resp(status=200, body="ok")
+
+        with patch("requests.get", side_effect=fake_get):
+            check_hpp([ep])
+
+        assert any(url.endswith("?q=1") for url in urls_seen)
+        assert any(url.endswith("?q=1&q=2") for url in urls_seen)
+        assert len(urls_seen) == 2
+
+    def test_continues_to_next_param_when_first_does_not_trigger(self):
+        # Param 'a' shows no delta; param 'b' does. Tool must keep probing.
+        ep = Endpoint(
+            url="https://app.example.com/",
+            status_code=200,
+            parameters=["a", "b"],
+        )
+
+        def fake_get(url, **kwargs):
+            if "b=1&b=2" in url:
+                return _resp(status=500, body="error: ambiguous parameter")
+            return _resp(status=200, body="ok")
+
+        with patch("requests.get", side_effect=fake_get):
+            results = check_hpp([ep])
+
+        assert len(results) == 1
+        assert "b" in results[0].evidence
+
+    def test_network_exception_is_swallowed(self):
+        ep = Endpoint(url="https://app.example.com/", status_code=200, parameters=["id"])
+        with patch("requests.get", side_effect=Exception("network error")):
+            results = check_hpp([ep])
+        assert results == []
+
+    def test_evidence_records_both_signatures(self):
+        ep = Endpoint(url="https://app.example.com/", status_code=200, parameters=["id"])
+
+        def fake_get(url, **kwargs):
+            if "id=1&id=2" in url:
+                return _resp(status=403, body="forbidden")
+            return _resp(status=200, body="ok")
+
+        with patch("requests.get", side_effect=fake_get):
+            results = check_hpp([ep])
+
+        evidence = results[0].evidence
+        # Both signatures should appear so the VR can see the exact delta
+        assert "200" in evidence  # baseline status
+        assert "403" in evidence  # polluted status
