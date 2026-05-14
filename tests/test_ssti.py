@@ -125,6 +125,9 @@ class TestCheckSSTI:
         assert "Mako" in engines or "FreeMarker" in engines
         assert "ERB" in engines
         assert "Ruby" in engines
+        # The #{...} payload also covers Pug (Express) and Slim - make sure
+        # the engine label flags that for the LLM consuming the evidence.
+        assert "Pug" in engines
 
     def test_expected_product_is_correct(self):
         # Guards against someone tweaking _A/_B but forgetting _EXPECTED.
