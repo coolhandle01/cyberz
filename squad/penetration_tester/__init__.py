@@ -35,6 +35,7 @@ from tools.pentest.cookies import check_cookies
 from tools.pentest.cors import check_cors_misconfiguration
 from tools.pentest.errors import check_error_disclosure
 from tools.pentest.hpp import check_hpp
+from tools.pentest.jwt import check_jwt
 from tools.pentest.ldap_injection import check_ldap_injection
 from tools.pentest.nosqli import run_nosqli
 from tools.pentest.nuclei import run_nuclei
@@ -706,6 +707,33 @@ def xxe_probe_tool(endpoints_json: str) -> list[dict]:
     return [f.model_dump() for f in check_xxe(_parse_endpoints(endpoints_json))]
 
 
+@tool("JWT Vulnerability Check")
+def jwt_check_tool(token: str, endpoint: str) -> list[dict]:
+    """
+    Test a JWT token for common vulnerabilities by replaying forged tokens
+    against the authenticated endpoint and detecting 4xx -> 2xx transitions.
+
+    token: the raw JWT string (three base64url parts separated by dots).
+      Source from: Authorization: Bearer headers in observed requests,
+      Set-Cookie headers with session/auth cookies, JS source or API responses
+      containing access_token or id_token fields, cookie values that begin with
+      eyJ (base64url-encoded JSON header).
+
+    endpoint: the URL that validates the JWT. Should return 401 or 403 without
+      a valid token and 200 on success. Use the endpoint where the token was
+      first observed in use (e.g. /api/profile, /api/me, /dashboard).
+
+    Attacks attempted: alg:none (4 variants), RS256->HS256 confusion via JWKS,
+    weak HMAC secret brute-force, kid path traversal, kid SQL injection, and
+    claims tampering without re-signing.
+
+    Run on every JWT discovered during recon, especially on admin and account
+    endpoints. All confirmed bypasses are CRITICAL.
+    Returns raw findings as dicts.
+    """
+    return [f.model_dump() for f in check_jwt(token, endpoint)]
+
+
 MEMBER = SquadMember(
     slug="penetration_tester",
     dir=Path(__file__).parent,
@@ -748,5 +776,6 @@ MEMBER = SquadMember(
         ldap_injection_tool,
         cmd_injection_tool,
         xxe_probe_tool,
+        jwt_check_tool,
     ],
 )
