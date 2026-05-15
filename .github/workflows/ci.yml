@@ -35,6 +35,9 @@ jobs:
   test:
     name: Unit tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write  # required by dorny/test-reporter to post check runs
     env:
       # Dummy creds so H1Client can be imported without KeyError. The contact
       # email seeds the User-Agent helper - see tools/http.py and #46.
@@ -52,9 +55,24 @@ jobs:
         run: pip install -e ".[dev]"
 
       - name: pytest (unit only)
-        run: pytest -m unit --cov --cov-report=term-missing
+        run: pytest -m unit --cov --cov-report=term-missing --cov-report=xml:coverage.xml --cov-report=html --junit-xml=junit.xml
 
-      - name: Upload coverage report
+      - name: Publish test results
+        uses: dorny/test-reporter@31a54ee7ebcacc03a09ea97a7e5465a47b84aea5  # v1.9.1
+        if: always()
+        with:
+          name: pytest results
+          path: junit.xml
+          reporter: java-junit
+
+      - name: Upload coverage HTML
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        if: always()
+        with:
+          name: coverage-html
+          path: htmlcov/
+
+      - name: Upload coverage data
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
           name: coverage
@@ -64,6 +82,9 @@ jobs:
   sast:
     name: SAST
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write  # required by github/codeql-action/upload-sarif
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
 
@@ -72,10 +93,25 @@ jobs:
           python-version: "3.12"
 
       - name: Install SAST tools
-        run: pip install bandit[toml] semgrep
+        run: pip install 'bandit[toml,sarif]' semgrep
 
       - name: bandit - security lint
-        run: bandit -c pyproject.toml -r . -q
+        run: bandit -c pyproject.toml -r . -f sarif -o bandit.sarif -q
+
+      - name: Upload bandit SARIF
+        uses: github/codeql-action/upload-sarif@4e828ff8d448a8a6e532957b1811f387a63867e8  # v3.29.4
+        if: always()
+        with:
+          sarif_file: bandit.sarif
+          category: bandit
 
       - name: semgrep - SAST scan
-        run: semgrep scan --config=.semgrep.yml --error --quiet
+        if: always()
+        run: semgrep scan --config=.semgrep.yml --error --quiet --sarif-output=semgrep.sarif
+
+      - name: Upload semgrep SARIF
+        uses: github/codeql-action/upload-sarif@4e828ff8d448a8a6e532957b1811f387a63867e8  # v3.29.4
+        if: always()
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
