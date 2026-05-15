@@ -48,6 +48,7 @@ from tools.pentest.ssrf import check_ssrf
 from tools.pentest.ssti import check_ssti
 from tools.pentest.webapp_headers import check_header_injection, check_host_headers
 from tools.pentest.xss import check_reflected_xss
+from tools.pentest.xxe import check_xxe
 
 
 def _parse_endpoints(endpoints_json: str) -> list[Endpoint]:
@@ -678,6 +679,33 @@ def cmd_injection_tool(endpoints_json: str) -> list[dict]:
     return [f.model_dump() for f in check_cmd_injection(_parse_endpoints(endpoints_json))]
 
 
+@tool("XXE Probe")
+def xxe_probe_tool(endpoints_json: str) -> list[dict]:
+    """
+    POST crafted XML bodies to endpoints to detect XML External Entity (XXE)
+    injection vulnerabilities.
+
+    endpoints_json: JSON array of endpoint objects. Prioritise endpoints where
+      any of the following apply:
+      - technologies mention SOAP, XML-RPC, WSDL, XML, or web services
+      - URL path contains /soap, /xml, /wsdl, /rpc, /service, /api, or ends
+        in .asmx, .wsdl, .xml
+      - The OSINT Analyst noted XML or SOAP in the response body or headers
+      - The endpoint accepts file uploads (multipart may include XML processing)
+      Example: '[{"url": "https://example.com/soap/service", "status_code": 200}]'
+
+    Detection tiers:
+      CRITICAL - file marker from /etc/passwd or Windows win.ini appears in
+                 the response body (confirmed in-band file read via entity expansion)
+      MEDIUM   - XML parser error strings in the response body (confirms XML
+                 parsing backend; warrants manual OOB/blind XXE follow-up)
+
+    Both generic XML and SOAP-envelope wrappers are tried automatically.
+    Returns raw findings as dicts.
+    """
+    return [f.model_dump() for f in check_xxe(_parse_endpoints(endpoints_json))]
+
+
 MEMBER = SquadMember(
     slug="penetration_tester",
     dir=Path(__file__).parent,
@@ -719,5 +747,6 @@ MEMBER = SquadMember(
         prompt_injection_tool,
         ldap_injection_tool,
         cmd_injection_tool,
+        xxe_probe_tool,
     ],
 )
