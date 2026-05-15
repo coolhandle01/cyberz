@@ -149,6 +149,11 @@ class TestCheckXXE:
         soap_bodies = [b for b in bodies if "Envelope" in b]
         assert len(soap_bodies) >= 1
 
+    def test_xmlrpc_probe_is_included(self) -> None:
+        bodies = [body for body, _, _, _ in _FILE_READ_PROBES]
+        xmlrpc_bodies = [b for b in bodies if "methodCall" in b]
+        assert len(xmlrpc_bodies) >= 1
+
     def test_both_linux_and_windows_probes_included(self) -> None:
         markers = {marker for _, _, marker, _ in _FILE_READ_PROBES}
         assert _LINUX_MARKER in markers
