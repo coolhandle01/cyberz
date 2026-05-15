@@ -151,18 +151,21 @@ def csrf_check_tool(recon_result_json: str) -> list[dict]:
     Detect CSRF vulnerabilities across HTML endpoints in the recon surface.
 
     Tier 1 (MEDIUM): fetches each HTML endpoint and checks for page-level
-    CSRF protection before inspecting forms.  Endpoints are skipped silently
-    when the response sets a CSRF-pattern cookie (Angular XSRF-TOKEN, Django
-    csrftoken, Tornado _xsrf) or the HTML contains a <meta name="csrf-token">
-    tag (Rails, Spring) - these frameworks protect POSTs via JS without hidden
-    form inputs, so no finding is expected.  For remaining pages, any POST form
-    with no hidden input matching a CSRF token name pattern (csrf, token,
-    _token, authenticity_token, nonce, xsrf) is flagged.
+    CSRF protection before inspecting forms.  When the response sets a
+    CSRF-pattern cookie (Angular XSRF-TOKEN, Django csrftoken, Tornado _xsrf)
+    or the HTML contains a <meta name="csrf-token"> tag (Rails, Spring), the
+    missing-input finding is suppressed - those frameworks protect POSTs via JS
+    without hidden form inputs.  For other pages, any POST form with no hidden
+    input matching a CSRF token name pattern is flagged.
 
-    Tier 2 (HIGH): for each endpoint where Tier 1 found an unprotected form,
-    POSTs to the form action with an evil Origin header and with the correct
-    Origin.  If both return the same 2xx status the server does not validate
-    the Origin header, confirming cross-origin requests are accepted.
+    Tier 2 (HIGH): POSTs to the form action with an evil Origin header and
+    with the correct Origin.  Runs against every endpoint with a POST form,
+    including those where Tier 1 was suppressed, because per-view bypasses
+    (Django @csrf_exempt, Rails skip_before_action, Spring csrf().disable(),
+    Laravel $except) mean a page-level cookie or meta tag cannot be trusted
+    to cover every route.  When Tier 2 fires on a page-protected endpoint the
+    evidence names the likely bypass pattern so the agent can report it
+    accurately.
 
     Run broadly against all HTML-serving endpoints; especially relevant on
     login, registration, account management, and any state-changing form.

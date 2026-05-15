@@ -266,8 +266,9 @@ class TestCheckCSRF:
 
         assert results == []
 
-    def test_no_finding_when_xsrf_cookie_set(self) -> None:
-        # Angular-style double-submit cookie - no hidden input needed.
+    def test_no_tier1_finding_when_xsrf_cookie_set(self) -> None:
+        # Angular-style cookie suppresses the missing-input finding (Tier 1)
+        # but Tier 2 still runs - a per-view bypass could expose the endpoint.
         ep = Endpoint(url="https://app.example.com/login", status_code=200)
 
         with (
@@ -278,15 +279,14 @@ class TestCheckCSRF:
                     cookies={"XSRF-TOKEN": "abc"},
                 ),
             ),
-            patch("requests.post") as mock_post,
+            patch("requests.post", return_value=_post_resp(status=403)),
         ):
             results = check_csrf([ep])
 
-        assert results == []
-        mock_post.assert_not_called()  # Tier 2 also skipped
+        assert not any(r.severity_hint == Severity.MEDIUM for r in results)
 
-    def test_no_finding_when_csrftoken_cookie_set(self) -> None:
-        # Django pattern.
+    def test_no_tier1_finding_when_csrftoken_cookie_set(self) -> None:
+        # Django pattern - Tier 1 suppressed, Tier 2 still runs.
         ep = Endpoint(url="https://app.example.com/login", status_code=200)
 
         with (
@@ -297,14 +297,14 @@ class TestCheckCSRF:
                     cookies={"csrftoken": "abc"},
                 ),
             ),
-            patch("requests.post"),
+            patch("requests.post", return_value=_post_resp(status=403)),
         ):
             results = check_csrf([ep])
 
-        assert results == []
+        assert not any(r.severity_hint == Severity.MEDIUM for r in results)
 
-    def test_no_finding_when_csrf_meta_tag_present(self) -> None:
-        # Rails-style meta tag - JS reads token from DOM and sends as header.
+    def test_no_tier1_finding_when_csrf_meta_tag_present(self) -> None:
+        # Rails-style meta tag suppresses Tier 1 but Tier 2 still runs.
         html = (
             '<html><head><meta name="csrf-token" content="abc"></head>'
             "<body>" + _HTML_POST_NO_TOKEN + "</body></html>"
@@ -313,12 +313,50 @@ class TestCheckCSRF:
 
         with (
             patch("requests.get", return_value=_get_resp(body=html)),
-            patch("requests.post") as mock_post,
+            patch("requests.post", return_value=_post_resp(status=403)),
         ):
             results = check_csrf([ep])
 
-        assert results == []
-        mock_post.assert_not_called()
+        assert not any(r.severity_hint == Severity.MEDIUM for r in results)
+
+    def test_tier2_fires_despite_csrf_cookie_bypass(self) -> None:
+        # Cookie present but endpoint accepts cross-origin POST (e.g. @csrf_exempt).
+        ep = Endpoint(url="https://app.example.com/login", status_code=200)
+
+        with (
+            patch(
+                "requests.get",
+                return_value=_get_resp(
+                    body=_HTML_POST_NO_TOKEN,
+                    cookies={"XSRF-TOKEN": "abc"},
+                ),
+            ),
+            patch("requests.post", return_value=_post_resp(status=200)),
+        ):
+            results = check_csrf([ep])
+
+        tier2 = [r for r in results if r.severity_hint == Severity.HIGH]
+        assert len(tier2) == 1
+        assert "csrf_exempt" in tier2[0].evidence or "bypass" in tier2[0].evidence.lower()
+        assert not any(r.severity_hint == Severity.MEDIUM for r in results)
+
+    def test_tier2_fires_despite_csrf_meta_tag_bypass(self) -> None:
+        # Meta tag present but endpoint accepts cross-origin POST (e.g. skip_before_action).
+        html = (
+            '<html><head><meta name="csrf-token" content="abc"></head>'
+            "<body>" + _HTML_POST_NO_TOKEN + "</body></html>"
+        )
+        ep = Endpoint(url="https://app.example.com/login", status_code=200)
+
+        with (
+            patch("requests.get", return_value=_get_resp(body=html)),
+            patch("requests.post", return_value=_post_resp(status=200)),
+        ):
+            results = check_csrf([ep])
+
+        tier2 = [r for r in results if r.severity_hint == Severity.HIGH]
+        assert len(tier2) == 1
+        assert "skip_before_action" in tier2[0].evidence
 
     def test_session_cookies_do_not_suppress_finding(self) -> None:
         # Cookies that aren't CSRF-related shouldn't act as a free pass.
@@ -390,18 +428,19 @@ class TestCheckCSRF:
         tier2 = [r for r in results if r.severity_hint == Severity.HIGH]
         assert tier2 == []
 
-    def test_tier2_not_run_when_tier1_no_finding(self) -> None:
-        # Page with CSRF token -> Tier 1 passes -> Tier 2 should not run.
+    def test_tier2_runs_even_when_form_has_token(self) -> None:
+        # A form with a hidden CSRF token passes Tier 1, but Tier 2 still
+        # probes for Origin validation - those are independent checks.
         ep = Endpoint(url="https://app.example.com/login", status_code=200)
 
         with (
             patch("requests.get", return_value=_get_resp(body=_HTML_POST_WITH_TOKEN)),
-            patch("requests.post") as mock_post,
+            patch("requests.post", return_value=_post_resp(status=403)) as mock_post,
         ):
             results = check_csrf([ep])
 
-        mock_post.assert_not_called()
-        assert results == []
+        mock_post.assert_called()
+        assert not any(r.severity_hint == Severity.MEDIUM for r in results)
 
     def test_tier2_exception_is_swallowed(self) -> None:
         # GET succeeds and Tier 1 fires, but Tier 2 POST raises.
