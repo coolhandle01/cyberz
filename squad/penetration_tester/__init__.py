@@ -150,16 +150,19 @@ def csrf_check_tool(recon_result_json: str) -> list[dict]:
     """
     Detect CSRF vulnerabilities across HTML endpoints in the recon surface.
 
-    Tier 1 (MEDIUM): fetches each HTML endpoint and parses POST forms.  Any
-    POST form that contains no hidden input whose name matches common CSRF
-    token patterns (csrf, token, _token, authenticity_token, nonce, xsrf) is
-    flagged as missing CSRF protection.
+    Tier 1 (MEDIUM): fetches each HTML endpoint and checks for page-level
+    CSRF protection before inspecting forms.  Endpoints are skipped silently
+    when the response sets a CSRF-pattern cookie (Angular XSRF-TOKEN, Django
+    csrftoken, Tornado _xsrf) or the HTML contains a <meta name="csrf-token">
+    tag (Rails, Spring) - these frameworks protect POSTs via JS without hidden
+    form inputs, so no finding is expected.  For remaining pages, any POST form
+    with no hidden input matching a CSRF token name pattern (csrf, token,
+    _token, authenticity_token, nonce, xsrf) is flagged.
 
-    Tier 2 (HIGH): for each endpoint where an unprotected POST form was found,
+    Tier 2 (HIGH): for each endpoint where Tier 1 found an unprotected form,
     POSTs to the form action with an evil Origin header and with the correct
-    Origin.  If both return the same 2xx response status the server is not
-    validating the Origin header - a strong indicator that cross-origin
-    requests will be accepted.
+    Origin.  If both return the same 2xx status the server does not validate
+    the Origin header, confirming cross-origin requests are accepted.
 
     Run broadly against all HTML-serving endpoints; especially relevant on
     login, registration, account management, and any state-changing form.
