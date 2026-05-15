@@ -30,6 +30,7 @@ from tools.cloud import (
     check_sensitive_files,
     check_webmin,
 )
+from tools.pentest.cmd_injection import check_cmd_injection
 from tools.pentest.cookies import check_cookies
 from tools.pentest.cors import check_cors_misconfiguration
 from tools.pentest.errors import check_error_disclosure
@@ -653,6 +654,30 @@ def ldap_injection_tool(endpoints_json: str) -> list[dict]:
     return [f.model_dump() for f in check_ldap_injection(_parse_endpoints(endpoints_json))]
 
 
+@tool("Command Injection Probe")
+def cmd_injection_tool(endpoints_json: str) -> list[dict]:
+    """
+    Append OS command payloads to URL parameter values using common shell
+    separators and look for a canary string echoed back in the response body.
+    Confirmed echo is CRITICAL - it is direct proof of arbitrary command execution.
+
+    endpoints_json: JSON array of endpoint objects. Prioritise endpoints that have
+      parameters AND where any of the following apply:
+      - Parameter names suggest shell or system interaction (cmd, exec, command,
+        shell, run, ping, host, ip, addr, query, search, name, input)
+      - Technologies mention CGI, Perl, PHP, or shell-invoking frameworks
+      - URL paths suggest system utilities (/ping, /traceroute, /lookup, /exec,
+        /run, /convert, /render, /preview, /generate)
+      - Error disclosure findings mention exec, popen, system, or shell functions
+      Example: '[{"url": "https://example.com/ping", "parameters": ["host"]}]'
+
+    Detection is in-band only. If no finding is returned on a suspicious endpoint,
+    escalate to manual time-based testing (e.g. sleep 5 with response-time delta).
+    Returns raw findings as dicts.
+    """
+    return [f.model_dump() for f in check_cmd_injection(_parse_endpoints(endpoints_json))]
+
+
 MEMBER = SquadMember(
     slug="penetration_tester",
     dir=Path(__file__).parent,
@@ -693,5 +718,6 @@ MEMBER = SquadMember(
         nosqli_tool,
         prompt_injection_tool,
         ldap_injection_tool,
+        cmd_injection_tool,
     ],
 )
