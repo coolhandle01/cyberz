@@ -93,7 +93,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install SAST tools
-        run: pip install bandit[toml] semgrep
+        run: pip install 'bandit[toml,sarif]' semgrep
 
       - name: bandit - generate SARIF
         run: bandit -c pyproject.toml -r . -f sarif -o bandit.sarif || true
