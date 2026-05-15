@@ -33,6 +33,7 @@ from tools.cloud import (
 from tools.pentest.cmd_injection import check_cmd_injection
 from tools.pentest.cookies import check_cookies
 from tools.pentest.cors import check_cors_misconfiguration
+from tools.pentest.csrf import check_csrf
 from tools.pentest.errors import check_error_disclosure
 from tools.pentest.hpp import check_hpp
 from tools.pentest.jwt import check_jwt
@@ -142,6 +143,36 @@ def cors_check_tool(recon_result_json: str) -> list[dict]:
     """
     recon = _recon_from_json(recon_result_json)
     return [f.model_dump() for f in check_cors_misconfiguration(recon.endpoints)]
+
+
+@tool("CSRF Detection")
+def csrf_check_tool(recon_result_json: str) -> list[dict]:
+    """
+    Detect CSRF vulnerabilities across HTML endpoints in the recon surface.
+
+    Tier 1 (MEDIUM): fetches each HTML endpoint and checks for page-level
+    CSRF protection before inspecting forms.  When the response sets a
+    CSRF-pattern cookie (Angular XSRF-TOKEN, Django csrftoken, Tornado _xsrf)
+    or the HTML contains a <meta name="csrf-token"> tag (Rails, Spring), the
+    missing-input finding is suppressed - those frameworks protect POSTs via JS
+    without hidden form inputs.  For other pages, any POST form with no hidden
+    input matching a CSRF token name pattern is flagged.
+
+    Tier 2 (HIGH): POSTs to the form action with an evil Origin header and
+    with the correct Origin.  Runs against every endpoint with a POST form,
+    including those where Tier 1 was suppressed, because per-view bypasses
+    (Django @csrf_exempt, Rails skip_before_action, Spring csrf().disable(),
+    Laravel $except) mean a page-level cookie or meta tag cannot be trusted
+    to cover every route.  When Tier 2 fires on a page-protected endpoint the
+    evidence names the likely bypass pattern so the agent can report it
+    accurately.
+
+    Run broadly against all HTML-serving endpoints; especially relevant on
+    login, registration, account management, and any state-changing form.
+    Pass the full serialised ReconResult. Returns raw findings as dicts.
+    """
+    recon = _recon_from_json(recon_result_json)
+    return [f.model_dump() for f in check_csrf(recon.endpoints)]
 
 
 @tool("SSRF Probe")
@@ -775,6 +806,7 @@ MEMBER = SquadMember(
         sqlmap_tool,
         cookie_check_tool,
         cors_check_tool,
+        csrf_check_tool,
         ssrf_probe_tool,
         header_injection_tool,
         host_header_tool,
