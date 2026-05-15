@@ -33,6 +33,7 @@ from tools.cloud import (
 from tools.pentest.cmd_injection import check_cmd_injection
 from tools.pentest.cookies import check_cookies
 from tools.pentest.cors import check_cors_misconfiguration
+from tools.pentest.csrf import check_csrf
 from tools.pentest.errors import check_error_disclosure
 from tools.pentest.hpp import check_hpp
 from tools.pentest.jwt import check_jwt
@@ -42,6 +43,7 @@ from tools.pentest.nuclei import run_nuclei
 from tools.pentest.open_redirect import check_open_redirect
 from tools.pentest.path_traversal import check_path_traversal
 from tools.pentest.prompt_injection import check_prompt_injection
+from tools.pentest.prototype_pollution import check_prototype_pollution
 from tools.pentest.sourcemaps import check_js_source_maps
 from tools.pentest.sqlmap import run_sqlmap
 from tools.pentest.sri import check_sri
@@ -141,6 +143,30 @@ def cors_check_tool(recon_result_json: str) -> list[dict]:
     """
     recon = _recon_from_json(recon_result_json)
     return [f.model_dump() for f in check_cors_misconfiguration(recon.endpoints)]
+
+
+@tool("CSRF Detection")
+def csrf_check_tool(recon_result_json: str) -> list[dict]:
+    """
+    Detect CSRF vulnerabilities across HTML endpoints in the recon surface.
+
+    Tier 1 (MEDIUM): fetches each HTML endpoint and parses POST forms.  Any
+    POST form that contains no hidden input whose name matches common CSRF
+    token patterns (csrf, token, _token, authenticity_token, nonce, xsrf) is
+    flagged as missing CSRF protection.
+
+    Tier 2 (HIGH): for each endpoint where an unprotected POST form was found,
+    POSTs to the form action with an evil Origin header and with the correct
+    Origin.  If both return the same 2xx response status the server is not
+    validating the Origin header - a strong indicator that cross-origin
+    requests will be accepted.
+
+    Run broadly against all HTML-serving endpoints; especially relevant on
+    login, registration, account management, and any state-changing form.
+    Pass the full serialised ReconResult. Returns raw findings as dicts.
+    """
+    recon = _recon_from_json(recon_result_json)
+    return [f.model_dump() for f in check_csrf(recon.endpoints)]
 
 
 @tool("SSRF Probe")
@@ -707,6 +733,38 @@ def xxe_probe_tool(endpoints_json: str) -> list[dict]:
     return [f.model_dump() for f in check_xxe(_parse_endpoints(endpoints_json))]
 
 
+@tool("Prototype Pollution Check")
+def prototype_pollution_tool(endpoints_json: str) -> list[dict]:
+    """
+    Probe endpoints for prototype pollution by injecting __proto__ and
+    constructor.prototype payloads via URL query strings and JSON POST bodies,
+    then checking whether a canary property is reflected in the response or
+    whether the server returns an unhandled error.
+
+    endpoints_json: JSON array of endpoint objects. Use this tool when:
+      - Technologies mention Node.js, Express, Koa, Hapi, Fastify, or other
+        JavaScript/TypeScript server frameworks
+      - The API accepts JSON request bodies (Content-Type: application/json)
+      - URL parameters are parsed server-side into plain objects (lodash merge,
+        recursive assign, query-string to object conversions)
+      - The target is a REST or GraphQL API with a JavaScript backend
+      Example: '[{"url": "https://api.example.com/users", "status_code": 200}]'
+
+    Detection tiers:
+      CRITICAL - the canary string appears in the response body after injection,
+                 confirming the polluted property is accessible to application code.
+      MEDIUM   - the server returns HTTP 500 only after an injection attempt,
+                 suggesting the injection triggered an unhandled error during
+                 prototype chain traversal (warrants manual follow-up).
+
+    One finding per endpoint. CRITICAL takes priority over MEDIUM.
+    No parameters required - prototype pollution targets object construction,
+    not individual parameter values.
+    Returns raw findings as dicts.
+    """
+    return [f.model_dump() for f in check_prototype_pollution(_parse_endpoints(endpoints_json))]
+
+
 @tool("JWT Vulnerability Check")
 def jwt_check_tool(token: str, endpoint: str) -> list[dict]:
     """
@@ -742,6 +800,7 @@ MEMBER = SquadMember(
         sqlmap_tool,
         cookie_check_tool,
         cors_check_tool,
+        csrf_check_tool,
         ssrf_probe_tool,
         header_injection_tool,
         host_header_tool,
@@ -776,6 +835,7 @@ MEMBER = SquadMember(
         ldap_injection_tool,
         cmd_injection_tool,
         xxe_probe_tool,
+        prototype_pollution_tool,
         jwt_check_tool,
     ],
 )
