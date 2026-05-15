@@ -724,8 +724,8 @@ def jwt_check_tool(token: str, endpoint: str) -> list[dict]:
       first observed in use (e.g. /api/profile, /api/me, /dashboard).
 
     Attacks attempted: alg:none (4 variants), RS256->HS256 confusion via JWKS,
-    weak HMAC secret brute-force, kid path traversal, kid SQL injection, and
-    claims tampering without re-signing.
+    weak HMAC secret brute-force, kid path traversal, kid SQL injection,
+    kid NoSQL injection (MongoDB operators), and claims tampering without re-signing.
 
     Run on every JWT discovered during recon, especially on admin and account
     endpoints. All confirmed bypasses are CRITICAL.

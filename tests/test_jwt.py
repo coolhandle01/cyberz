@@ -14,6 +14,7 @@ import pytest
 from models import Severity
 from tools.pentest.jwt import (
     _ALG_NONE_VARIANTS,
+    _KID_NOSQLI_OPERATORS,
     _KID_PATH_TRAVERSAL,
     _KID_SQLI,
     _WEAK_SECRETS,
@@ -222,6 +223,29 @@ class TestKidInjection:
         sqli = [r for r in results if "SQL injection" in r.title]
         assert len(sqli) == 1
         assert sqli[0].severity_hint == Severity.CRITICAL
+
+    def test_detects_kid_nosql_injection(self) -> None:
+        token = _make_token({"alg": "HS256", "typ": "JWT", "kid": "key-1"}, {"sub": "1"})
+
+        def fake_get(url: str, **kw: Any) -> MagicMock:
+            auth = str(kw.get("headers", {}).get("Authorization", ""))
+            t = auth.removeprefix("Bearer ") if "Bearer " in auth else ""
+            h = _decode_token_part(t, 0) if t else {}
+            if isinstance(h.get("kid"), dict):
+                return _mock_response(200)
+            return _mock_response(401)
+
+        with patch("requests.get", side_effect=fake_get):
+            results = check_jwt(token, _ENDPOINT)
+
+        nosqli = [r for r in results if "NoSQL" in r.title]
+        assert len(nosqli) == 1
+        assert nosqli[0].severity_hint == Severity.CRITICAL
+
+    def test_nosql_operators_cover_gt_and_ne(self) -> None:
+        operators = [list(op.keys())[0] for op in _KID_NOSQLI_OPERATORS]
+        assert "$gt" in operators
+        assert "$ne" in operators
 
     def test_kid_attacks_skipped_when_no_kid(self) -> None:
         token = _make_token({"alg": "HS256", "typ": "JWT"}, {"sub": "1"})
