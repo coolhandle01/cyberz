@@ -13,6 +13,7 @@ from tools.pentest.xxe import (
     _LINUX_MARKER,
     _WIN_MARKER,
     _XML_ERROR_MARKERS,
+    XxePayload,
     check_xxe,
 )
 
@@ -145,22 +146,22 @@ class TestCheckXXE:
         assert results == []
 
     def test_soap_envelope_probe_is_included(self) -> None:
-        bodies = [body for body, _, _, _ in _FILE_READ_PROBES]
+        bodies = [body for body, _ct, _marker in _FILE_READ_PROBES.values()]
         soap_bodies = [b for b in bodies if "Envelope" in b]
         assert len(soap_bodies) >= 1
 
     def test_xmlrpc_probe_is_included(self) -> None:
-        bodies = [body for body, _, _, _ in _FILE_READ_PROBES]
+        bodies = [body for body, _ct, _marker in _FILE_READ_PROBES.values()]
         xmlrpc_bodies = [b for b in bodies if "methodCall" in b]
         assert len(xmlrpc_bodies) >= 1
 
     def test_both_linux_and_windows_probes_included(self) -> None:
-        markers = {marker for _, _, marker, _ in _FILE_READ_PROBES}
+        markers = {marker for _body, _ct, marker in _FILE_READ_PROBES.values()}
         assert _LINUX_MARKER in markers
         assert _WIN_MARKER in markers
 
     def test_error_probes_cover_both_content_types(self) -> None:
-        content_types = {ct for _, ct, _ in _ERROR_PROBES}
+        content_types = {ct for _body, ct in _ERROR_PROBES.values()}
         assert "application/xml" in content_types
         assert "text/xml; charset=utf-8" in content_types
 
@@ -170,3 +171,70 @@ class TestCheckXXE:
         assert "ParseError" in joined
         assert "undefined entity" in joined
         assert "expat" in joined
+
+    def test_payload_filter_restricts_to_named_probes(self) -> None:
+        # Restricting to only linux-* probes must skip every windows-* probe
+        # and every error-* probe.
+        ep = Endpoint(url="https://app.example.com/api", status_code=200)
+
+        seen_bodies: list[str] = []
+
+        def record(url: str, **kw: object) -> MagicMock:
+            seen_bodies.append(str(kw.get("data", "")))
+            return _resp(body="clean")
+
+        with patch("requests.post", side_effect=record):
+            check_xxe(
+                [ep],
+                payload_names=[
+                    XxePayload.linux_generic,
+                    XxePayload.linux_soap,
+                    XxePayload.linux_xmlrpc,
+                ],
+            )
+
+        assert len(seen_bodies) == 3
+        joined = "\n".join(seen_bodies)
+        assert "win.ini" not in joined
+        # No error-only probes (those use a separate body shape).
+        assert "cybersquad_xxe_probe" not in joined
+
+    def test_payload_filter_only_error_probes_runs_just_error_tier(self) -> None:
+        # The Tier 1 file-read loop only fires if any active file-read probe
+        # exists. Restricting to error-* names should skip Tier 1 entirely
+        # and go straight to the parser-error probes - exactly what an agent
+        # wants for a low-noise "is this XML-backed?" reconnaissance pass.
+        ep = Endpoint(url="https://app.example.com/api", status_code=200)
+
+        seen_bodies: list[str] = []
+
+        def record(url: str, **kw: object) -> MagicMock:
+            seen_bodies.append(str(kw.get("data", "")))
+            return _resp(body="SAXParseException: undefined entity")
+
+        with patch("requests.post", side_effect=record):
+            results = check_xxe([ep], payload_names=[XxePayload.error_generic])
+
+        # One error probe runs, fires MEDIUM.
+        assert len(seen_bodies) == 1
+        assert "cybersquad_xxe_probe" in seen_bodies[0]
+        assert len(results) == 1
+        assert results[0].severity_hint == Severity.MEDIUM
+
+    def test_payload_filter_finding_evidence_names_the_probe(self) -> None:
+        ep = Endpoint(url="https://app.example.com/api", status_code=200)
+
+        with patch("requests.post", return_value=_resp(body=_LINUX_MARKER)):
+            results = check_xxe([ep], payload_names=[XxePayload.linux_soap])
+
+        assert len(results) == 1
+        assert "linux-soap" in results[0].evidence
+
+    def test_payload_filter_empty_list_is_a_noop(self) -> None:
+        ep = Endpoint(url="https://app.example.com/api", status_code=200)
+
+        with patch("requests.post") as mock_post:
+            results = check_xxe([ep], payload_names=[])
+
+        assert results == []
+        mock_post.assert_not_called()

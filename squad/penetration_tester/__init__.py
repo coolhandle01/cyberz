@@ -1,7 +1,5 @@
 """Penetration Tester - runs targeted vulnerability checks against the recon surface."""
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 
@@ -30,28 +28,31 @@ from tools.cloud import (
     check_sensitive_files,
     check_webmin,
 )
-from tools.pentest.cmd_injection import check_cmd_injection
+from tools.pentest.cmd_injection import CmdPayload, check_cmd_injection
 from tools.pentest.cookies import check_cookies
 from tools.pentest.cors import check_cors_misconfiguration
 from tools.pentest.csrf import check_csrf
 from tools.pentest.errors import check_error_disclosure
 from tools.pentest.hpp import check_hpp
-from tools.pentest.jwt import check_jwt
-from tools.pentest.ldap_injection import check_ldap_injection
+from tools.pentest.jwt import JwtAttack, check_jwt
+from tools.pentest.ldap_injection import LdapPayload, check_ldap_injection
 from tools.pentest.nosqli import run_nosqli
 from tools.pentest.nuclei import run_nuclei
-from tools.pentest.open_redirect import check_open_redirect
-from tools.pentest.path_traversal import check_path_traversal
-from tools.pentest.prompt_injection import check_prompt_injection
-from tools.pentest.prototype_pollution import check_prototype_pollution
+from tools.pentest.open_redirect import OpenRedirectPayload, check_open_redirect
+from tools.pentest.path_traversal import PathTraversalPayload, check_path_traversal
+from tools.pentest.prompt_injection import PromptPayload, check_prompt_injection
+from tools.pentest.prototype_pollution import (
+    PrototypePollutionPayload,
+    check_prototype_pollution,
+)
 from tools.pentest.sourcemaps import check_js_source_maps
 from tools.pentest.sqlmap import run_sqlmap
 from tools.pentest.sri import check_sri
-from tools.pentest.ssrf import check_ssrf
-from tools.pentest.ssti import check_ssti
+from tools.pentest.ssrf import SsrfPayload, check_ssrf
+from tools.pentest.ssti import SstiPayload, check_ssti
 from tools.pentest.webapp_headers import check_header_injection, check_host_headers
 from tools.pentest.xss import check_reflected_xss
-from tools.pentest.xxe import check_xxe
+from tools.pentest.xxe import XxePayload, check_xxe
 
 
 def _parse_endpoints(endpoints_json: str) -> list[Endpoint]:
@@ -176,7 +177,10 @@ def csrf_check_tool(recon_result_json: str) -> list[dict]:
 
 
 @tool("SSRF Probe")
-def ssrf_probe_tool(endpoints_json: str) -> list[dict]:
+def ssrf_probe_tool(
+    endpoints_json: str,
+    payloads: list[SsrfPayload] | None = None,
+) -> list[dict]:
     """
     Inject cloud metadata (169.254.169.254) and loopback (127.0.0.1) payloads
     into URL parameters to detect Server-Side Request Forgery.
@@ -186,9 +190,13 @@ def ssrf_probe_tool(endpoints_json: str) -> list[dict]:
       file paths, or resource identifiers (e.g. url=, path=, file=, redirect=, src=).
       Example: '[{"url": "https://example.com/fetch", "parameters": ["url"]}]'
 
+    payloads: optional list of internal-address variants to try; omit or pass
+      null to try all. Useful for stealth or when the cloud provider is known
+      (e.g. just "aws-imds" for an AWS-hosted target).
+
     Returns raw findings as dicts.
     """
-    return [f.model_dump() for f in check_ssrf(_parse_endpoints(endpoints_json))]
+    return [f.model_dump() for f in check_ssrf(_parse_endpoints(endpoints_json), payloads)]
 
 
 @tool("Header Injection Check")
@@ -226,7 +234,10 @@ def source_maps_tool(recon_result_json: str) -> list[dict]:
 
 
 @tool("Path Traversal Probe")
-def path_traversal_tool(endpoints_json: str) -> list[dict]:
+def path_traversal_tool(
+    endpoints_json: str,
+    payloads: list[PathTraversalPayload] | None = None,
+) -> list[dict]:
     """
     Inject directory-traversal payloads (plain, URL-encoded, double-encoded,
     backslash for Windows, null-byte truncation) into URL parameters and look
@@ -243,12 +254,18 @@ def path_traversal_tool(endpoints_json: str) -> list[dict]:
         files based on the parameter
       Example: '[{"url": "https://example.com/download", "parameters": ["file"]}]'
 
+    payloads: optional list of traversal variants to try; omit or pass null
+      to try all. When the OS is known, pass only the matching set (e.g. just
+      "unix-basic" and "unix-encoded" for a Linux target).
+
     Read-only sentinel paths only; no writes, no destructive payloads. A
     confirmed match returns severity HIGH - traversal that yields /etc/passwd
     or win.ini almost always implies a file-read primitive worth escalating.
     Returns raw findings as dicts.
     """
-    return [f.model_dump() for f in check_path_traversal(_parse_endpoints(endpoints_json))]
+    return [
+        f.model_dump() for f in check_path_traversal(_parse_endpoints(endpoints_json), payloads)
+    ]
 
 
 @tool("HTTP Parameter Pollution Probe")
@@ -280,7 +297,10 @@ def hpp_probe_tool(endpoints_json: str) -> list[dict]:
 
 
 @tool("Server-Side Template Injection Probe")
-def ssti_probe_tool(endpoints_json: str) -> list[dict]:
+def ssti_probe_tool(
+    endpoints_json: str,
+    payloads: list[SstiPayload] | None = None,
+) -> list[dict]:
     """
     Inject template-language expressions (Jinja2/Twig/Liquid, Mako/FreeMarker,
     ERB/EJS, Ruby interpolation) into URL parameters and look for the evaluated
@@ -297,16 +317,23 @@ def ssti_probe_tool(endpoints_json: str) -> list[dict]:
       - Error disclosure findings mention template internals
       Example: '[{"url": "https://example.com/preview", "parameters": ["name"]}]'
 
+    payloads: optional list of engine variants to try; omit or pass null to
+      try all. When the template engine is known from recon, pass only the
+      matching engine (e.g. just "jinja2" for a Flask target).
+
     SSTI confirmed at the canary-arithmetic level is HIGH; the VR should
     escalate to CRITICAL when manual follow-up demonstrates RCE primitives
     (sandbox escape, attribute traversal, OS command execution).
     Returns raw findings as dicts.
     """
-    return [f.model_dump() for f in check_ssti(_parse_endpoints(endpoints_json))]
+    return [f.model_dump() for f in check_ssti(_parse_endpoints(endpoints_json), payloads)]
 
 
 @tool("Open Redirect Probe")
-def open_redirect_tool(endpoints_json: str) -> list[dict]:
+def open_redirect_tool(
+    endpoints_json: str,
+    payloads: list[OpenRedirectPayload] | None = None,
+) -> list[dict]:
     """
     Inject external URL payloads (https, protocol-relative, backslash, userinfo)
     into URL parameters and check whether the response Location, Refresh header,
@@ -321,11 +348,14 @@ def open_redirect_tool(endpoints_json: str) -> list[dict]:
       - Recon noted a 30x response on the endpoint already
       Example: '[{"url": "https://example.com/login", "parameters": ["next"]}]'
 
+    payloads: optional list of encoding variants to try; omit or pass null to
+      try all.
+
     Open redirect on its own is typically MEDIUM, but it escalates on OAuth
     redirect_uri and SSO callback endpoints (token theft) - flag those for VR.
     Returns raw findings as dicts.
     """
-    return [f.model_dump() for f in check_open_redirect(_parse_endpoints(endpoints_json))]
+    return [f.model_dump() for f in check_open_redirect(_parse_endpoints(endpoints_json), payloads)]
 
 
 @tool("Reflected XSS Probe")
@@ -625,7 +655,10 @@ def consul_vault_tool(recon_result_json: str) -> list[dict]:
 
 
 @tool("Prompt Injection Probe")
-def prompt_injection_tool(endpoints_json: str) -> list[dict]:
+def prompt_injection_tool(
+    endpoints_json: str,
+    payloads: list[PromptPayload] | None = None,
+) -> list[dict]:
     """
     Probe LLM-backed endpoints for prompt injection by injecting a canary string
     in multiple request formats (OpenAI chat, generic message, prompt completion).
@@ -636,13 +669,20 @@ def prompt_injection_tool(endpoints_json: str) -> list[dict]:
       - URL paths suggest an AI assistant (/chat, /ask, /ai, /assistant, /copilot)
       - The target is known to use an AI product or chatbot feature
 
+    payloads: optional list of injection technique variants to try; omit or
+      pass null to try all. Use "override" for direct instruction override,
+      "conversation" for transcript-style injection, "token-boundary" for
+      models that recognise chat delimiter tokens.
+
     Severity:
       - Canary reflected in response (direct injection): CRITICAL
       - Response contains system prompt shaped text (leakage): HIGH
 
     Returns raw findings as dicts.
     """
-    return [f.model_dump() for f in check_prompt_injection(_parse_endpoints(endpoints_json))]
+    return [
+        f.model_dump() for f in check_prompt_injection(_parse_endpoints(endpoints_json), payloads)
+    ]
 
 
 @tool("NoSQL Injection Scan")
@@ -664,7 +704,10 @@ def nosqli_tool(endpoints_json: str) -> list[dict]:
 
 
 @tool("LDAP Injection Probe")
-def ldap_injection_tool(endpoints_json: str) -> list[dict]:
+def ldap_injection_tool(
+    endpoints_json: str,
+    payloads: list[LdapPayload] | None = None,
+) -> list[dict]:
     """
     Inject LDAP bypass and enumeration payloads into URL parameters to detect
     LDAP injection vulnerabilities against Active Directory or OpenLDAP backends.
@@ -678,6 +721,10 @@ def ldap_injection_tool(endpoints_json: str) -> list[dict]:
       - Technologies mention LDAP, Active Directory, OpenLDAP, or JNDI
       Example: '[{"url": "https://example.com/login", "parameters": ["username"]}]'
 
+    payloads: optional list of injection variants to try; omit or pass null
+      to try all. Use "auth-bypass" first on a /login endpoint to confirm the
+      class with a single request, then escalate.
+
     Detection tiers:
       HIGH   - status code change vs baseline suggests auth bypass
       MEDIUM - LDAP/AD error strings in response body (confirms LDAP backend)
@@ -685,11 +732,16 @@ def ldap_injection_tool(endpoints_json: str) -> list[dict]:
 
     Returns raw findings as dicts.
     """
-    return [f.model_dump() for f in check_ldap_injection(_parse_endpoints(endpoints_json))]
+    return [
+        f.model_dump() for f in check_ldap_injection(_parse_endpoints(endpoints_json), payloads)
+    ]
 
 
 @tool("Command Injection Probe")
-def cmd_injection_tool(endpoints_json: str) -> list[dict]:
+def cmd_injection_tool(
+    endpoints_json: str,
+    payloads: list[CmdPayload] | None = None,
+) -> list[dict]:
     """
     Append OS command payloads to URL parameter values using common shell
     separators and look for a canary string echoed back in the response body.
@@ -705,15 +757,23 @@ def cmd_injection_tool(endpoints_json: str) -> list[dict]:
       - Error disclosure findings mention exec, popen, system, or shell functions
       Example: '[{"url": "https://example.com/ping", "parameters": ["host"]}]'
 
+    payloads: optional list of separator variants to try; omit or pass null
+      to try all. When the OS is known, pass only matching separators
+      (e.g. just "windows-amp" for an IIS target; "semicolon" and
+      "dollar-paren" for a known Unix target).
+
     Detection is in-band only. If no finding is returned on a suspicious endpoint,
     escalate to manual time-based testing (e.g. sleep 5 with response-time delta).
     Returns raw findings as dicts.
     """
-    return [f.model_dump() for f in check_cmd_injection(_parse_endpoints(endpoints_json))]
+    return [f.model_dump() for f in check_cmd_injection(_parse_endpoints(endpoints_json), payloads)]
 
 
 @tool("XXE Probe")
-def xxe_probe_tool(endpoints_json: str) -> list[dict]:
+def xxe_probe_tool(
+    endpoints_json: str,
+    payloads: list[XxePayload] | None = None,
+) -> list[dict]:
     """
     POST crafted XML bodies to endpoints to detect XML External Entity (XXE)
     injection vulnerabilities.
@@ -727,6 +787,12 @@ def xxe_probe_tool(endpoints_json: str) -> list[dict]:
       - The endpoint accepts file uploads (multipart may include XML processing)
       Example: '[{"url": "https://example.com/soap/service", "status_code": 200}]'
 
+    payloads: optional list of probe variants to try; omit or pass null to
+      try all. linux-* probes target /etc/passwd, windows-* probes target
+      win.ini. The error-* probes are MEDIUM-severity backend confirmation
+      and only run if no file-read probe fires - select them alone for a
+      quiet "is there an XML parser?" reconnaissance pass.
+
     Detection tiers:
       CRITICAL - file marker from /etc/passwd or Windows win.ini appears in
                  the response body (confirmed in-band file read via entity expansion)
@@ -736,11 +802,14 @@ def xxe_probe_tool(endpoints_json: str) -> list[dict]:
     Both generic XML and SOAP-envelope wrappers are tried automatically.
     Returns raw findings as dicts.
     """
-    return [f.model_dump() for f in check_xxe(_parse_endpoints(endpoints_json))]
+    return [f.model_dump() for f in check_xxe(_parse_endpoints(endpoints_json), payloads)]
 
 
 @tool("Prototype Pollution Check")
-def prototype_pollution_tool(endpoints_json: str) -> list[dict]:
+def prototype_pollution_tool(
+    endpoints_json: str,
+    payloads: list[PrototypePollutionPayload] | None = None,
+) -> list[dict]:
     """
     Probe endpoints for prototype pollution by injecting __proto__ and
     constructor.prototype payloads via URL query strings and JSON POST bodies,
@@ -756,6 +825,12 @@ def prototype_pollution_tool(endpoints_json: str) -> list[dict]:
       - The target is a REST or GraphQL API with a JavaScript backend
       Example: '[{"url": "https://api.example.com/users", "status_code": 200}]'
 
+    payloads: optional list of injection variants to try; omit or pass null
+      to try all. The proto-* and constructor-* names are URL query-string
+      vectors; the json-* names are JSON POST body vectors. Select just the
+      json-* set for a JSON-only API, or just the proto-* set for a quick
+      reconnaissance pass.
+
     Detection tiers:
       CRITICAL - the canary string appears in the response body after injection,
                  confirming the polluted property is accessible to application code.
@@ -764,15 +839,20 @@ def prototype_pollution_tool(endpoints_json: str) -> list[dict]:
                  prototype chain traversal (warrants manual follow-up).
 
     One finding per endpoint. CRITICAL takes priority over MEDIUM.
-    No parameters required - prototype pollution targets object construction,
-    not individual parameter values.
     Returns raw findings as dicts.
     """
-    return [f.model_dump() for f in check_prototype_pollution(_parse_endpoints(endpoints_json))]
+    return [
+        f.model_dump()
+        for f in check_prototype_pollution(_parse_endpoints(endpoints_json), payloads)
+    ]
 
 
 @tool("JWT Vulnerability Check")
-def jwt_check_tool(token: str, endpoint: str) -> list[dict]:
+def jwt_check_tool(
+    token: str,
+    endpoint: str,
+    attacks: list[JwtAttack] | None = None,
+) -> list[dict]:
     """
     Test a JWT token for common vulnerabilities by replaying forged tokens
     against the authenticated endpoint and detecting 4xx -> 2xx transitions.
@@ -787,15 +867,21 @@ def jwt_check_tool(token: str, endpoint: str) -> list[dict]:
       a valid token and 200 on success. Use the endpoint where the token was
       first observed in use (e.g. /api/profile, /api/me, /dashboard).
 
-    Attacks attempted: alg:none (4 variants), RS256->HS256 confusion via JWKS,
-    weak HMAC secret brute-force, kid path traversal, kid SQL injection,
-    kid NoSQL injection (MongoDB operators), and claims tampering without re-signing.
+    attacks: optional list of attack classes to run; omit or pass null to run
+      all seven. Useful when chaining - e.g. ["alg-none", "claims-escalation"]
+      to confirm a missing-signature-verification class without firing every
+      kid variant against an endpoint where kid is not even in the header.
+
+    Attacks attempted (when not filtered): alg:none (4 variants), RS256->HS256
+    confusion via JWKS, weak HMAC secret brute-force, kid path traversal,
+    kid SQL injection, kid NoSQL injection (MongoDB operators), and claims
+    tampering without re-signing.
 
     Run on every JWT discovered during recon, especially on admin and account
     endpoints. All confirmed bypasses are CRITICAL.
     Returns raw findings as dicts.
     """
-    return [f.model_dump() for f in check_jwt(token, endpoint)]
+    return [f.model_dump() for f in check_jwt(token, endpoint, attacks)]
 
 
 MEMBER = SquadMember(

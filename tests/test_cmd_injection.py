@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from models import Endpoint, Severity
-from tools.pentest.cmd_injection import _CANARY, _PAYLOADS, check_cmd_injection
+from tools.pentest.cmd_injection import _CANARY, _PAYLOADS, CmdPayload, check_cmd_injection
 
 pytestmark = pytest.mark.unit
 
@@ -115,8 +115,7 @@ class TestCheckCmdInjection:
         assert results == []
 
     def test_payload_list_covers_required_separators(self) -> None:
-        payloads = [p for p, _ in _PAYLOADS]
-        joined = " ".join(payloads)
+        joined = " ".join(_PAYLOADS.values())
         assert "; echo" in joined
         assert "| echo" in joined
         assert "&& echo" in joined
@@ -127,5 +126,66 @@ class TestCheckCmdInjection:
         assert "& echo" in joined
 
     def test_canary_is_embedded_in_all_payloads(self) -> None:
-        for payload, label in _PAYLOADS:
+        for label, payload in _PAYLOADS.items():
             assert _CANARY in payload, f"canary missing from payload {label!r}"
+
+    def test_payload_filter_runs_only_named_variants(self) -> None:
+        # When the agent passes a single payload name we should issue exactly
+        # one request per parameter and use only that variant. This is the
+        # core "be surgical" affordance for stealth and chained probes.
+        ep = Endpoint(url="https://app.example.com/ping", status_code=200, parameters=["host"])
+
+        seen_urls: list[str] = []
+
+        def record(url: str, **_: object) -> MagicMock:
+            seen_urls.append(url)
+            return _resp(body="no canary here")
+
+        with patch("requests.get", side_effect=record):
+            results = check_cmd_injection([ep], payload_names=[CmdPayload.semicolon])
+
+        assert results == []
+        assert len(seen_urls) == 1
+        # The single request must have used the semicolon variant.
+        assert "%3B" in seen_urls[0] or "; echo" in seen_urls[0]
+
+    def test_payload_filter_with_unknown_name_runs_no_payloads(self) -> None:
+        # Pydantic validation already prevents invalid enum strings reaching
+        # the function in production, but at the Python layer a wrong name
+        # should be a no-op rather than a fallback to all-payloads.
+        ep = Endpoint(url="https://app.example.com/ping", status_code=200, parameters=["host"])
+
+        with patch("requests.get") as mock_get:
+            results = check_cmd_injection([ep], payload_names=[])
+
+        # Empty list means "no payloads to try" - the loop runs zero requests.
+        assert results == []
+        mock_get.assert_not_called()
+
+    def test_payload_filter_finding_evidence_names_the_variant(self) -> None:
+        # When a filtered probe fires, the evidence must name which variant
+        # triggered - the agent needs that to chain follow-up requests.
+        ep = Endpoint(url="https://app.example.com/ping", status_code=200, parameters=["host"])
+
+        with patch("requests.get", return_value=_resp(body=_CANARY)):
+            results = check_cmd_injection([ep], payload_names=[CmdPayload.dollar_paren])
+
+        assert len(results) == 1
+        assert "dollar-paren" in results[0].evidence
+
+    def test_payload_filter_none_runs_all_variants(self) -> None:
+        # Explicit None (the default) preserves the original behaviour:
+        # every payload is tried until one matches.
+        ep = Endpoint(url="https://app.example.com/ping", status_code=200, parameters=["host"])
+
+        seen_urls: list[str] = []
+
+        def record(url: str, **_: object) -> MagicMock:
+            seen_urls.append(url)
+            return _resp(body="no canary here")
+
+        with patch("requests.get", side_effect=record):
+            check_cmd_injection([ep], payload_names=None)
+
+        # One request per payload variant - all eight.
+        assert len(seen_urls) == len(_PAYLOADS)
