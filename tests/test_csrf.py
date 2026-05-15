@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from models import Endpoint, Severity
-from tools.pentest.csrf import _FormScanner, check_csrf
+from tools.pentest.csrf import _parse_post_forms, check_csrf
 
 pytestmark = pytest.mark.unit
 
@@ -66,53 +66,44 @@ def _post_resp(status: int = 200) -> MagicMock:
 
 
 # ---------------------------------------------------------------------------
-# _FormScanner unit tests
+# _parse_post_forms unit tests
 # ---------------------------------------------------------------------------
 
 
-class TestFormScanner:
+class TestParsePostForms:
     def test_finds_post_form_without_token(self) -> None:
-        scanner = _FormScanner()
-        scanner.feed(_HTML_POST_NO_TOKEN)
-        assert len(scanner.forms) == 1
-        assert scanner.forms[0]["has_csrf_input"] is False
-        assert scanner.forms[0]["action"] == "/submit"
+        forms = _parse_post_forms(_HTML_POST_NO_TOKEN)
+        assert len(forms) == 1
+        assert forms[0]["has_csrf_input"] is False
+        assert forms[0]["action"] == "/submit"
 
     def test_finds_post_form_with_csrf_token(self) -> None:
-        scanner = _FormScanner()
-        scanner.feed(_HTML_POST_WITH_TOKEN)
-        assert len(scanner.forms) == 1
-        assert scanner.forms[0]["has_csrf_input"] is True
+        forms = _parse_post_forms(_HTML_POST_WITH_TOKEN)
+        assert len(forms) == 1
+        assert forms[0]["has_csrf_input"] is True
 
     def test_ignores_get_form(self) -> None:
-        scanner = _FormScanner()
-        scanner.feed(_HTML_GET_FORM_ONLY)
-        assert scanner.forms == []
+        assert _parse_post_forms(_HTML_GET_FORM_ONLY) == []
 
     def test_no_forms(self) -> None:
-        scanner = _FormScanner()
-        scanner.feed(_HTML_NO_FORM)
-        assert scanner.forms == []
+        assert _parse_post_forms(_HTML_NO_FORM) == []
 
     def test_case_insensitive_method_attribute(self) -> None:
         html = '<form method="post"><input type="text" name="x"></form>'
-        scanner = _FormScanner()
-        scanner.feed(html)
-        assert len(scanner.forms) == 1
+        forms = _parse_post_forms(html)
+        assert len(forms) == 1
 
     def test_recognises_xsrf_token(self) -> None:
         html = '<form method="POST"><input type="hidden" name="xsrf_token" value="y"></form>'
-        scanner = _FormScanner()
-        scanner.feed(html)
-        assert scanner.forms[0]["has_csrf_input"] is True
+        forms = _parse_post_forms(html)
+        assert forms[0]["has_csrf_input"] is True
 
     def test_recognises_authenticity_token(self) -> None:
         html = (
             '<form method="POST"><input type="hidden" name="authenticity_token" value="z"></form>'
         )
-        scanner = _FormScanner()
-        scanner.feed(html)
-        assert scanner.forms[0]["has_csrf_input"] is True
+        forms = _parse_post_forms(html)
+        assert forms[0]["has_csrf_input"] is True
 
     def test_multiple_forms_tracked_independently(self) -> None:
         html = """
@@ -123,11 +114,10 @@ class TestFormScanner:
           <input type="text" name="user">
         </form>
         """
-        scanner = _FormScanner()
-        scanner.feed(html)
-        assert len(scanner.forms) == 2
-        assert scanner.forms[0]["has_csrf_input"] is True
-        assert scanner.forms[1]["has_csrf_input"] is False
+        forms = _parse_post_forms(html)
+        assert len(forms) == 2
+        assert forms[0]["has_csrf_input"] is True
+        assert forms[1]["has_csrf_input"] is False
 
 
 # ---------------------------------------------------------------------------
