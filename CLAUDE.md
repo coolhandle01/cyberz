@@ -1,4 +1,4 @@
-# Bounty Squad - AI Contributor Guide
+# cybersquad - AI Contributor Guide
 
 This file is for AI assistants working on this codebase. It covers the architecture, conventions, safety invariants, and the things most likely to trip you up.
 
@@ -6,7 +6,43 @@ This file is for AI assistants working on this codebase. It covers the architect
 
 ---
 
-## Before you push - non-negotiable
+## Required Skills and MCP Servers
+
+To work effectively on this repository, you (Claude) must have the following capabilities enabled. If you do not have these skills installed, pause and inform the user to install them before proceeding.
+
+### Required Skills
+
+* **CrewAI Skill**
+    * **Purpose:** Essential for understanding, debugging, and writing valid CrewAI architecture, agents, tasks, and tools.
+    * **Reference:** [CrewAI Skills Docs](https://docs.crewai.com/en/skills)
+* **Skill Creator (`skill-creator`)**
+    * **Purpose:** Used to create, iteratively improve, and evaluate new custom skills for the agents in this repository.
+    * **Reference:** [Anthropic skill-creator SKILL.md](https://github.com/anthropics/skills/blob/main/skills/skill-creator/SKILL.md)
+
+### MCP Server Specification (Reference)
+
+This project relies on MCP servers for local execution and file management. Below is a reference configuration. Ensure this is added to your `claude_desktop_config.json` file.
+
+* **Filesystem MCP Server**
+    * **Purpose:** Allows Claude to safely read, write, and traverse the `cybersquad` directory.
+
+**Configuration:**
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/absolute/path/to/cybersquad"
+      ]
+    }
+  }
+}
+```
+
+## Before you commit - non-negotiable
 
 1. **Work inside a virtualenv with the full dev deps installed.**
 
@@ -27,7 +63,7 @@ This file is for AI assistants working on this codebase. It covers the architect
    .venv/bin/bandit -c pyproject.toml -r . -q
    ```
 
-   All five must pass. If any fail, fix before pushing - never "push and let CI tell me".
+   All five must pass. If any fail, fix before committing and definitely before pushing - never "push and let CI tell me".
 
 3. **Never push a change you haven't actually executed.** A passing mypy run after a `type: ignore` removal means nothing if the file wasn't reachable. Run the tests.
 
@@ -39,7 +75,7 @@ This file is for AI assistants working on this codebase. It covers the architect
 
 ## Git workflow
 
-Always cut branches fresh from a current main. Do not reuse or rebase a branch that was used for a previous PR - once a PR merges, its commits are in main and rebasing on top of them causes conflicts that require skipping commits. The correct flow every time:
+Always cut branches fresh from a current main. Do not reuse or rebase a branch that was used for a previous PR - once a PR merges, its commits are in main and rebasing on top of them causes conflicts that require skipping commits. Place the branch in a folder depending on the semantics of the change. The correct flow every time for a feature:
 
 ```bash
 git fetch origin
@@ -48,13 +84,15 @@ git pull origin main
 git checkout -b feat/your-branch-name
 ```
 
+For bugs use `bug/your-branch-name` for the branch name, for refactors and ci (non-breaking, non-bugfix) changes use `task/your-branch-name`.
+
 A `git diff origin/main --stat` before any push is a fast sanity check that only your intended changes are included.
 
 ---
 
 ## What this project does
 
-Bounty Squad is a six-agent CrewAI pipeline that autonomously selects HackerOne bug bounty programmes, maps their attack surface, runs vulnerability scans, triages findings, writes professional disclosure reports, and submits them via the H1 API. Agents run sequentially; each passes structured output to the next via CrewAI's `context` chaining.
+cybersquad is a six-agent CrewAI pipeline that autonomously selects HackerOne bug bounty programmes, maps their attack surface, runs vulnerability scans, triages findings, writes professional disclosure reports, and submits them via the H1 API. Agents run sequentially; each passes structured output to the next via CrewAI's `context` chaining.
 
 ---
 
@@ -150,7 +188,7 @@ H1_API_USERNAME=test H1_API_TOKEN=test pytest -m unit
 
 Tests that reload modules for config isolation use `importlib.reload()` - this is the correct pattern for testing env-var-backed dataclasses.
 
-Coverage floor is 70%. Every new public function in `tools/` needs a test. Every bug fix needs a regression test.
+Coverage floor is 85%. Every new public function in `tools/` needs a test. Every bug fix needs a regression test.
 
 ---
 
