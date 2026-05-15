@@ -7,7 +7,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from models import Endpoint, Severity
-from tools.pentest.prompt_injection import check_prompt_injection
+from tools.pentest.prompt_injection import (
+    _INJECTION_PAYLOADS,
+    _POST_FORMATS,
+    PromptPayload,
+    check_prompt_injection,
+)
 from tools.pentest.triage import _lookup_cvss
 from tools.recon.llm import detect_llm_endpoints
 
@@ -148,3 +153,61 @@ class TestCheckPromptInjection:
         score, vector = _lookup_cvss("PromptInjection", Severity.HIGH)
         assert score == 7.2
         assert "CVSS:3.1" in vector
+
+    def test_payload_filter_restricts_to_named_variants(self):
+        # Selecting only "override" should fire one payload across all four
+        # body formats, not three payloads x four formats.
+        ep = Endpoint(url="https://example.com/chat", status_code=200)
+
+        seen_bodies: list[str] = []
+
+        def record(url, **kw):
+            body = kw.get("json", {})
+            seen_bodies.append(str(body))
+            return _mock_resp(200, "safe response")
+
+        with patch("requests.post", side_effect=record):
+            check_prompt_injection([ep], payload_names=[PromptPayload.override])
+
+        # Only one payload string across the four body formats.
+        assert len(seen_bodies) == len(_POST_FORMATS)
+        # Every body must contain the override payload's signature.
+        for body in seen_bodies:
+            assert "Ignore all previous instructions" in body
+
+    def test_payload_filter_finding_evidence_names_the_variant(self):
+        ep = Endpoint(url="https://example.com/chat", status_code=200)
+
+        with patch("requests.post", return_value=_mock_resp(200, "CYBERSQUADCANARY")):
+            results = check_prompt_injection([ep], payload_names=[PromptPayload.token_boundary])
+
+        assert len(results) == 1
+        # The token-boundary payload contains <|im_end|>.
+        assert "<|im_end|>" in results[0].evidence
+
+    def test_payload_filter_none_runs_all_variants(self):
+        ep = Endpoint(url="https://example.com/chat", status_code=200)
+
+        seen_payloads: set[str] = set()
+
+        def record(url, **kw):
+            body_str = str(kw.get("json", {}))
+            for name, payload in _INJECTION_PAYLOADS.items():
+                if payload.replace("\n", "\\n") in body_str.replace("\n", "\\n"):
+                    seen_payloads.add(name)
+            return _mock_resp(200, "safe")
+
+        with patch("requests.post", side_effect=record):
+            check_prompt_injection([ep], payload_names=None)
+
+        # All three payload variants fired.
+        assert seen_payloads == set(_INJECTION_PAYLOADS.keys())
+
+    def test_payload_filter_empty_list_is_a_noop(self):
+        ep = Endpoint(url="https://example.com/chat", status_code=200)
+
+        with patch("requests.post") as mock_post:
+            results = check_prompt_injection([ep], payload_names=[])
+
+        assert results == []
+        mock_post.assert_not_called()

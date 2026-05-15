@@ -18,6 +18,7 @@ from tools.pentest.jwt import (
     _KID_PATH_TRAVERSAL,
     _KID_SQLI,
     _WEAK_SECRETS,
+    JwtAttack,
     _base64url_decode,
     _base64url_encode,
     _decode_token_part,
@@ -368,3 +369,138 @@ class TestEdgeCases:
         with patch("requests.get", return_value=_mock_response(200)):
             results = check_jwt("onlytwoparts.here", _ENDPOINT)
         assert results == []
+
+
+class TestAttackFilter:
+    """The attack_names parameter is the agent's surgical-selection lever.
+
+    Each attack block is gated independently - passing a subset must run only
+    those blocks and skip everything else. This is critical for stealth (each
+    skipped block is a forged-token replay we don't fire) and for chained
+    probes (e.g. confirm alg:none works before bothering with kid variants)."""
+
+    def _token_with_kid(self) -> str:
+        return _make_token({"alg": "HS256", "kid": "k1", "typ": "JWT"}, {"sub": "1"})
+
+    def test_only_alg_none_runs_when_filtered(self) -> None:
+        # A token with kid set would normally trigger alg-none + kid-traversal
+        # + kid-sqli + kid-nosqli + claims-escalation = 5 attack classes.
+        # With attack_names=["alg-none"] we must only see alg-none requests.
+        token = self._token_with_kid()
+
+        replayed_tokens: list[str] = []
+
+        def record(url: str, **kw: Any) -> MagicMock:
+            auth = str(kw.get("headers", {}).get("Authorization", ""))
+            if "Bearer " in auth:
+                replayed_tokens.append(auth.removeprefix("Bearer "))
+            return _mock_response(401)
+
+        with patch("requests.get", side_effect=record):
+            check_jwt(token, _ENDPOINT, attack_names=[JwtAttack.alg_none])
+
+        # Exactly four replays: one per alg:none variant.
+        assert len(replayed_tokens) == len(_ALG_NONE_VARIANTS)
+        # Every replayed token must be unsigned (alg:none signature is empty).
+        for replayed in replayed_tokens:
+            assert replayed.endswith(".")
+
+    def test_only_claims_escalation_runs_when_filtered(self) -> None:
+        token = self._token_with_kid()
+
+        seen_tokens: list[str] = []
+
+        def record(url: str, **kw: Any) -> MagicMock:
+            auth = str(kw.get("headers", {}).get("Authorization", ""))
+            if "Bearer " in auth:
+                seen_tokens.append(auth.removeprefix("Bearer "))
+            return _mock_response(401)
+
+        with patch("requests.get", side_effect=record):
+            check_jwt(token, _ENDPOINT, attack_names=[JwtAttack.claims_escalation])
+
+        # Exactly one replay: the claims-tampered token with original sig.
+        assert len(seen_tokens) == 1
+        # The signature segment matches the original (fakesig base64-decoded).
+        orig_sig = token.split(".")[2]
+        assert seen_tokens[0].split(".")[2] == orig_sig
+
+    def test_kid_attacks_only_runs_when_filtered(self) -> None:
+        # The agent wants to focus on kid-* attacks because the token has a
+        # kid header. Passing the three kid-* attack names should run them
+        # all and skip alg-none, weak-secret, and claims-escalation.
+        token = self._token_with_kid()
+
+        replayed: list[str] = []
+
+        def record(url: str, **kw: Any) -> MagicMock:
+            auth = str(kw.get("headers", {}).get("Authorization", ""))
+            if "Bearer " in auth:
+                replayed.append(auth.removeprefix("Bearer "))
+            return _mock_response(401)
+
+        with patch("requests.get", side_effect=record):
+            check_jwt(
+                token,
+                _ENDPOINT,
+                attack_names=[
+                    JwtAttack.kid_traversal,
+                    JwtAttack.kid_sqli,
+                    JwtAttack.kid_nosqli,
+                ],
+            )
+
+        # kid-traversal: 1, kid-sqli: 1, kid-nosqli: 2 operators = 4 replays.
+        assert len(replayed) == 4
+        # No unsigned tokens (those would be alg-none, which was filtered).
+        for t in replayed:
+            assert not t.endswith(".")
+
+    def test_attack_filter_empty_list_runs_no_attacks(self) -> None:
+        token = self._token_with_kid()
+
+        with patch("requests.get") as mock_get:
+            results = check_jwt(token, _ENDPOINT, attack_names=[])
+
+        assert results == []
+        mock_get.assert_not_called()
+
+    def test_attack_filter_none_runs_every_attack(self) -> None:
+        # Sanity check: default attack_names=None must run all seven attack
+        # blocks (those whose preconditions hold for this token).
+        token = self._token_with_kid()
+
+        attempted: list[str] = []
+
+        def record(url: str, **kw: Any) -> MagicMock:
+            auth = str(kw.get("headers", {}).get("Authorization", ""))
+            if "Bearer " in auth:
+                attempted.append(auth.removeprefix("Bearer "))
+            return _mock_response(401)
+
+        with patch("requests.get", side_effect=record):
+            check_jwt(token, _ENDPOINT, attack_names=None)
+
+        # alg-none(4) + weak-secret(0, fakesig won't verify) + kid-trav(1) +
+        # kid-sqli(1) + kid-nosqli(2) + claims-escalation(1) = 9 replays.
+        # alg-confusion needs RS256, claims-escalation always runs once.
+        assert len(attempted) == 9
+
+    def test_filtered_finding_evidence_names_the_attack(self) -> None:
+        # When alg-none succeeds, evidence must name the attack class so the
+        # agent and report know what fired.
+        token = self._token_with_kid()
+
+        def accept_unsigned(url: str, **kw: Any) -> MagicMock:
+            auth = str(kw.get("headers", {}).get("Authorization", ""))
+            if "Bearer " in auth:
+                t = auth.removeprefix("Bearer ")
+                if t.endswith("."):
+                    return _mock_response(200)
+            return _mock_response(401)
+
+        with patch("requests.get", side_effect=accept_unsigned):
+            results = check_jwt(token, _ENDPOINT, attack_names=[JwtAttack.alg_none])
+
+        assert len(results) == 1
+        assert "alg:none" in results[0].evidence

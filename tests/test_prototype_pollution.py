@@ -11,6 +11,7 @@ from tools.pentest.prototype_pollution import (
     _CANARY,
     _JSON_PAYLOADS,
     _URL_PAYLOADS,
+    PrototypePollutionPayload,
     check_prototype_pollution,
 )
 
@@ -169,8 +170,7 @@ class TestCheckPrototypePollution:
         assert results == []
 
     def test_url_payloads_cover_proto_and_constructor(self) -> None:
-        payloads = [qs for qs, _ in _URL_PAYLOADS]
-        joined = " ".join(payloads)
+        joined = " ".join(_URL_PAYLOADS.values())
         assert "__proto__" in joined
         assert "constructor" in joined
         assert _CANARY in joined
@@ -178,10 +178,99 @@ class TestCheckPrototypePollution:
     def test_json_payloads_cover_proto_and_constructor(self) -> None:
         import json
 
-        serialised = json.dumps([body for body, _ in _JSON_PAYLOADS])
+        serialised = json.dumps(list(_JSON_PAYLOADS.values()))
         assert "__proto__" in serialised
         assert "constructor" in serialised
         assert _CANARY in serialised
+
+    def test_payload_filter_restricts_to_json_vector_only(self) -> None:
+        # Selecting only json-* names should skip the URL GET loop entirely.
+        ep = Endpoint(url="https://api.example.com/users", status_code=200)
+
+        get_calls: list[str] = []
+        post_calls: list[dict] = []
+
+        def record_get(url: str, **_: object) -> MagicMock:
+            get_calls.append(url)
+            return _resp(body="baseline")
+
+        def record_post(url: str, **kw: object) -> MagicMock:
+            post_calls.append(kw)
+            return _resp(body="no canary")
+
+        with (
+            patch("requests.get", side_effect=record_get),
+            patch("requests.post", side_effect=record_post),
+        ):
+            check_prototype_pollution(
+                [ep],
+                payload_names=[
+                    PrototypePollutionPayload.json_proto,
+                    PrototypePollutionPayload.json_constructor,
+                ],
+            )
+
+        # Only the baseline GET fires; no URL-injection GETs because all
+        # active URL payloads were filtered out.
+        assert len(get_calls) == 1
+        # Both JSON POSTs fire.
+        assert len(post_calls) == 2
+
+    def test_payload_filter_url_only_skips_json(self) -> None:
+        ep = Endpoint(url="https://api.example.com/users", status_code=200)
+
+        get_calls: list[str] = []
+        post_calls: list[dict] = []
+
+        def record_get(url: str, **_: object) -> MagicMock:
+            get_calls.append(url)
+            return _resp(body="no canary")
+
+        def record_post(url: str, **kw: object) -> MagicMock:
+            post_calls.append(kw)
+            return _resp(body="no canary")
+
+        with (
+            patch("requests.get", side_effect=record_get),
+            patch("requests.post", side_effect=record_post),
+        ):
+            check_prototype_pollution(
+                [ep],
+                payload_names=[PrototypePollutionPayload.proto_bracket],
+            )
+
+        # 1 baseline GET + 1 URL probe = 2 GETs, 0 POSTs.
+        assert len(get_calls) == 2
+        assert post_calls == []
+
+    def test_payload_filter_finding_evidence_names_the_variant(self) -> None:
+        ep = Endpoint(url="https://api.example.com/users", status_code=200)
+
+        with (
+            patch("requests.get", return_value=_resp(body=f"reflected {_CANARY}")),
+            patch("requests.post", return_value=_resp(body="")),
+        ):
+            results = check_prototype_pollution(
+                [ep],
+                payload_names=[PrototypePollutionPayload.proto_dot],
+            )
+
+        assert len(results) == 1
+        assert "proto-dot" in results[0].evidence
+
+    def test_payload_filter_empty_list_is_a_noop(self) -> None:
+        ep = Endpoint(url="https://api.example.com/users", status_code=200)
+
+        with (
+            patch("requests.get", return_value=_resp(body="baseline")) as mock_get,
+            patch("requests.post") as mock_post,
+        ):
+            results = check_prototype_pollution([ep], payload_names=[])
+
+        assert results == []
+        # Baseline still runs, but no follow-up GET/POST probes.
+        assert mock_get.call_count == 1
+        mock_post.assert_not_called()
 
     def test_endpoint_with_none_status_code_is_probed(self) -> None:
         # status_code=None means the endpoint was discovered but not yet probed.

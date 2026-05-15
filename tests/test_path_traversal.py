@@ -7,7 +7,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from models import Endpoint, Severity
-from tools.pentest.path_traversal import _PROBES, check_path_traversal
+from tools.pentest.path_traversal import (
+    _PROBES,
+    PathTraversalPayload,
+    check_path_traversal,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -138,10 +142,70 @@ class TestCheckPathTraversal:
         # Sanity check that we ship the full set of encoding bypasses called
         # out in the issue: plain, single-encoded, double-encoded, null byte,
         # backslash for Windows.
-        payloads = [p for p, _ in _PROBES]
-        joined = "\n".join(payloads)
+        joined = "\n".join(payload for payload, _marker in _PROBES.values())
         assert "../" in joined
         assert "%2f" in joined
         assert "%252f" in joined
         assert "%00" in joined
         assert "\\" in joined
+
+    def test_payload_filter_restricts_to_named_variants(self):
+        # Asking for just the Linux variants should skip both Windows probes
+        # entirely - useful when recon already confirms the target OS.
+        ep = Endpoint(url="https://app.example.com/dl", status_code=200, parameters=["file"])
+
+        seen_urls: list[str] = []
+
+        def record(url, **_):
+            seen_urls.append(url)
+            return _resp(body="not found")
+
+        with patch("requests.get", side_effect=record):
+            check_path_traversal(
+                [ep],
+                payload_names=[
+                    PathTraversalPayload.unix_basic,
+                    PathTraversalPayload.unix_encoded,
+                ],
+            )
+
+        # 2 unix variants, no windows; one request each.
+        assert len(seen_urls) == 2
+        joined = " ".join(seen_urls)
+        assert "win.ini" not in joined.lower()
+        assert "windows" not in joined.lower()
+
+    def test_payload_filter_finding_evidence_names_the_variant(self):
+        ep = Endpoint(url="https://app.example.com/dl", status_code=200, parameters=["file"])
+
+        with patch("requests.get", return_value=_resp(body=_PASSWD_BODY)):
+            results = check_path_traversal(
+                [ep], payload_names=[PathTraversalPayload.unix_null_byte]
+            )
+
+        assert len(results) == 1
+        assert "unix-null-byte" in results[0].evidence
+
+    def test_payload_filter_none_runs_all_variants(self):
+        ep = Endpoint(url="https://app.example.com/dl", status_code=200, parameters=["file"])
+
+        seen_urls: list[str] = []
+
+        def record(url, **_):
+            seen_urls.append(url)
+            return _resp(body="not found")
+
+        with patch("requests.get", side_effect=record):
+            check_path_traversal([ep], payload_names=None)
+
+        # All six probes fire when no filter is applied.
+        assert len(seen_urls) == len(_PROBES)
+
+    def test_payload_filter_empty_list_is_a_noop(self):
+        ep = Endpoint(url="https://app.example.com/dl", status_code=200, parameters=["file"])
+
+        with patch("requests.get") as mock_get:
+            results = check_path_traversal([ep], payload_names=[])
+
+        assert results == []
+        mock_get.assert_not_called()

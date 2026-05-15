@@ -11,6 +11,7 @@ from tools.pentest.ldap_injection import (
     _BASELINE_VALUE,
     _LDAP_ERROR_MARKERS,
     _PAYLOADS,
+    LdapPayload,
     check_ldap_injection,
 )
 
@@ -205,8 +206,7 @@ class TestCheckLDAPInjection:
         assert results[0].severity_hint == Severity.HIGH
 
     def test_payload_list_covers_required_classes(self) -> None:
-        payloads = [p for p, _ in _PAYLOADS]
-        joined = " ".join(payloads)
+        joined = " ".join(_PAYLOADS.values())
         assert "uid=*" in joined
         assert "objectClass" in joined
         assert "*" in joined
@@ -217,3 +217,50 @@ class TestCheckLDAPInjection:
         assert "javax.naming" in _LDAP_ERROR_MARKERS
         assert "ldap_search" in _LDAP_ERROR_MARKERS
         assert "objectClass" in _LDAP_ERROR_MARKERS
+
+    def test_payload_filter_restricts_to_named_variants(self) -> None:
+        # Asking only for auth-bypass should send one baseline + one probe
+        # per parameter - the other five payloads must not fire.
+        ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["username"])
+
+        seen_urls: list[str] = []
+
+        def record(url: str, **_: object) -> MagicMock:
+            seen_urls.append(url)
+            return _resp(401, "Invalid credentials")
+
+        with patch("requests.get", side_effect=record):
+            check_ldap_injection([ep], payload_names=[LdapPayload.auth_bypass])
+
+        # 1 baseline + 1 payload only.
+        assert len(seen_urls) == 2
+
+    def test_payload_filter_finding_evidence_names_the_variant(self) -> None:
+        ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["username"])
+
+        with patch(
+            "requests.get",
+            side_effect=lambda url, **kw: _baseline_or_probe(
+                url, _resp(401, "bad"), _resp(200, "Welcome!")
+            ),
+        ):
+            results = check_ldap_injection([ep], payload_names=[LdapPayload.boolean_blind_true])
+
+        assert len(results) == 1
+        assert "boolean-blind-true" in results[0].evidence
+
+    def test_payload_filter_empty_list_is_a_noop(self) -> None:
+        ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["username"])
+
+        seen_urls: list[str] = []
+
+        def record(url: str, **_: object) -> MagicMock:
+            seen_urls.append(url)
+            return _resp(401, "bad")
+
+        with patch("requests.get", side_effect=record):
+            results = check_ldap_injection([ep], payload_names=[])
+
+        # Baseline still fires but no probes follow.
+        assert results == []
+        assert len(seen_urls) == 1

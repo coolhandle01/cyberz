@@ -158,3 +158,55 @@ def disclosure_report(verified_vuln) -> DisclosureReport:
         weakness_id=89,
         impact_statement=verified_vuln.impact,
     )
+
+
+# Response body fixtures
+#
+# These exist so tests for "no finding" cases don't accidentally include a
+# string that one of the pentest probes uses as a positive detection marker.
+# We caught one of those (an SSRF test where the body "not metadata" tripped
+# the "metadata" marker) - the fixture catches the next one at setup time
+# instead of at assertion time.
+@pytest.fixture()
+def clean_response_body() -> str:
+    """An HTML response body verified to contain none of the strings any
+    pentest probe uses as a positive detection marker. Use this for tests
+    that need a generic 'nothing of interest in the response' body.
+    """
+    body = "<html><body><h1>Hello</h1><p>Welcome.</p></body></html>"
+
+    from tools.pentest.cmd_injection import _CANARY as _CMD_CANARY
+    from tools.pentest.ldap_injection import _LDAP_ERROR_MARKERS
+    from tools.pentest.path_traversal import _PROBES as _PATH_PROBES
+    from tools.pentest.prompt_injection import (
+        _CANARY as _PROMPT_CANARY,
+    )
+    from tools.pentest.prompt_injection import (
+        _SYSTEM_PROMPT_MARKERS,
+    )
+    from tools.pentest.prototype_pollution import _CANARY as _PP_CANARY
+    from tools.pentest.ssrf import _SSRF_MARKERS
+    from tools.pentest.ssti import _EXPECTED as _SSTI_EXPECTED
+    from tools.pentest.xxe import _LINUX_MARKER, _WIN_MARKER, _XML_ERROR_MARKERS
+
+    forbidden: list[str] = [
+        _CMD_CANARY,
+        _PROMPT_CANARY,
+        _PP_CANARY,
+        _LINUX_MARKER,
+        _WIN_MARKER,
+        _SSTI_EXPECTED,
+        *_SSRF_MARKERS,
+        *_LDAP_ERROR_MARKERS,
+        *_XML_ERROR_MARKERS,
+        *_SYSTEM_PROMPT_MARKERS,
+        *(marker for _payload, marker in _PATH_PROBES.values()),
+    ]
+
+    for marker in forbidden:
+        assert marker not in body, (
+            f"clean_response_body fixture contains pentest marker {marker!r}; "
+            "rewrite the body so no probe would treat it as a finding."
+        )
+
+    return body

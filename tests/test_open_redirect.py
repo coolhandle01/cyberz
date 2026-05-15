@@ -9,6 +9,8 @@ import pytest
 from models import Endpoint, Severity
 from tools.pentest.open_redirect import (
     _PAYLOAD_HOST,
+    _PAYLOADS,
+    OpenRedirectPayload,
     _redirect_target,
     _redirects_to_canary,
     check_open_redirect,
@@ -172,3 +174,54 @@ class TestCheckOpenRedirect:
         # Defence in depth: our payload host must be a reserved TLD so even
         # if a victim browser followed the redirect, no live service receives it.
         assert _PAYLOAD_HOST.endswith(".invalid")
+
+    def test_payload_filter_restricts_to_named_variants(self):
+        # Selecting only "https" should fire one request per parameter,
+        # not four.
+        ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["next"])
+
+        seen_urls: list[str] = []
+
+        def record(url, **_):
+            seen_urls.append(url)
+            return _resp(status=200)
+
+        with patch("requests.get", side_effect=record):
+            check_open_redirect([ep], payload_names=[OpenRedirectPayload.https])
+
+        assert len(seen_urls) == 1
+
+    def test_payload_filter_finding_evidence_names_the_variant(self):
+        ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["next"])
+
+        with patch(
+            "requests.get",
+            return_value=_resp(status=302, headers={"Location": f"https://{_PAYLOAD_HOST}/"}),
+        ):
+            results = check_open_redirect([ep], payload_names=[OpenRedirectPayload.https])
+
+        assert len(results) == 1
+        assert "https" in results[0].evidence
+
+    def test_payload_filter_none_runs_all_variants(self):
+        ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["next"])
+
+        seen_urls: list[str] = []
+
+        def record(url, **_):
+            seen_urls.append(url)
+            return _resp(status=200)
+
+        with patch("requests.get", side_effect=record):
+            check_open_redirect([ep], payload_names=None)
+
+        assert len(seen_urls) == len(_PAYLOADS)
+
+    def test_payload_filter_empty_list_is_a_noop(self):
+        ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["next"])
+
+        with patch("requests.get") as mock_get:
+            results = check_open_redirect([ep], payload_names=[])
+
+        assert results == []
+        mock_get.assert_not_called()
