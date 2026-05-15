@@ -7,7 +7,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from models import Endpoint, Severity
-from tools.pentest.csrf import _parse_post_forms, check_csrf
+from tools.pentest.csrf import (
+    _has_csrf_cookie,
+    _has_csrf_meta_tag,
+    _parse_post_forms,
+    check_csrf,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -49,11 +54,13 @@ def _get_resp(
     status: int = 200,
     body: str = "",
     content_type: str = "text/html; charset=utf-8",
+    cookies: dict[str, str] | None = None,
 ) -> MagicMock:
     resp = MagicMock()
     resp.status_code = status
     resp.text = body
     resp.headers = {"Content-Type": content_type}
+    resp.cookies = cookies or {}
     return resp
 
 
@@ -118,6 +125,67 @@ class TestParsePostForms:
         assert len(forms) == 2
         assert forms[0]["has_csrf_input"] is True
         assert forms[1]["has_csrf_input"] is False
+
+
+# ---------------------------------------------------------------------------
+# Page-level CSRF protection helpers
+# ---------------------------------------------------------------------------
+
+
+class TestHasCsrfCookie:
+    def test_detects_angular_xsrf_token(self) -> None:
+        resp = _get_resp(cookies={"XSRF-TOKEN": "abc"})
+        assert _has_csrf_cookie(resp) is True
+
+    def test_detects_django_csrftoken(self) -> None:
+        resp = _get_resp(cookies={"csrftoken": "abc"})
+        assert _has_csrf_cookie(resp) is True
+
+    def test_detects_tornado_xsrf(self) -> None:
+        resp = _get_resp(cookies={"_xsrf": "abc"})
+        assert _has_csrf_cookie(resp) is True
+
+    def test_ignores_session_cookies(self) -> None:
+        resp = _get_resp(cookies={"JSESSIONID": "abc", "session_id": "xyz"})
+        assert _has_csrf_cookie(resp) is False
+
+    def test_no_cookies(self) -> None:
+        resp = _get_resp(cookies={})
+        assert _has_csrf_cookie(resp) is False
+
+    def test_match_is_case_insensitive(self) -> None:
+        resp = _get_resp(cookies={"xsrf-token": "abc"})
+        assert _has_csrf_cookie(resp) is True
+
+
+class TestHasCsrfMetaTag:
+    def test_detects_rails_csrf_meta(self) -> None:
+        html = '<html><head><meta name="csrf-token" content="abc"></head></html>'
+        assert _has_csrf_meta_tag(html) is True
+
+    def test_detects_underscore_csrf_meta(self) -> None:
+        html = '<html><head><meta name="_csrf" content="abc"></head></html>'
+        assert _has_csrf_meta_tag(html) is True
+
+    def test_detects_xsrf_meta(self) -> None:
+        html = '<html><head><meta name="xsrf-token" content="abc"></head></html>'
+        assert _has_csrf_meta_tag(html) is True
+
+    def test_ignores_unrelated_meta_tags(self) -> None:
+        html = (
+            "<html><head>"
+            '<meta name="viewport" content="width=device-width">'
+            '<meta name="description" content="A page">'
+            "</head></html>"
+        )
+        assert _has_csrf_meta_tag(html) is False
+
+    def test_no_meta_tags(self) -> None:
+        assert _has_csrf_meta_tag("<html><body>hi</body></html>") is False
+
+    def test_match_is_case_insensitive(self) -> None:
+        html = '<meta name="CSRF-Token" content="abc">'
+        assert _has_csrf_meta_tag(html) is True
 
 
 # ---------------------------------------------------------------------------
@@ -197,6 +265,79 @@ class TestCheckCSRF:
             results = check_csrf([ep])
 
         assert results == []
+
+    def test_no_finding_when_xsrf_cookie_set(self) -> None:
+        # Angular-style double-submit cookie - no hidden input needed.
+        ep = Endpoint(url="https://app.example.com/login", status_code=200)
+
+        with (
+            patch(
+                "requests.get",
+                return_value=_get_resp(
+                    body=_HTML_POST_NO_TOKEN,
+                    cookies={"XSRF-TOKEN": "abc"},
+                ),
+            ),
+            patch("requests.post") as mock_post,
+        ):
+            results = check_csrf([ep])
+
+        assert results == []
+        mock_post.assert_not_called()  # Tier 2 also skipped
+
+    def test_no_finding_when_csrftoken_cookie_set(self) -> None:
+        # Django pattern.
+        ep = Endpoint(url="https://app.example.com/login", status_code=200)
+
+        with (
+            patch(
+                "requests.get",
+                return_value=_get_resp(
+                    body=_HTML_POST_NO_TOKEN,
+                    cookies={"csrftoken": "abc"},
+                ),
+            ),
+            patch("requests.post"),
+        ):
+            results = check_csrf([ep])
+
+        assert results == []
+
+    def test_no_finding_when_csrf_meta_tag_present(self) -> None:
+        # Rails-style meta tag - JS reads token from DOM and sends as header.
+        html = (
+            '<html><head><meta name="csrf-token" content="abc"></head>'
+            "<body>" + _HTML_POST_NO_TOKEN + "</body></html>"
+        )
+        ep = Endpoint(url="https://app.example.com/login", status_code=200)
+
+        with (
+            patch("requests.get", return_value=_get_resp(body=html)),
+            patch("requests.post") as mock_post,
+        ):
+            results = check_csrf([ep])
+
+        assert results == []
+        mock_post.assert_not_called()
+
+    def test_session_cookies_do_not_suppress_finding(self) -> None:
+        # Cookies that aren't CSRF-related shouldn't act as a free pass.
+        ep = Endpoint(url="https://app.example.com/login", status_code=200)
+
+        with (
+            patch(
+                "requests.get",
+                return_value=_get_resp(
+                    body=_HTML_POST_NO_TOKEN,
+                    cookies={"JSESSIONID": "abc"},
+                ),
+            ),
+            patch("requests.post", return_value=_post_resp(status=400)),
+        ):
+            results = check_csrf([ep])
+
+        tier1 = [r for r in results if r.severity_hint == Severity.MEDIUM]
+        assert len(tier1) == 1
 
     # ------------------------------------------------------------------
     # Tier 2: origin not validated -> HIGH
