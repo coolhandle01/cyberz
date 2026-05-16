@@ -79,6 +79,26 @@ def test_detects_injection(make_response):
     ...
 ```
 
+## make_html_page
+
+Factory for minimal HTML pages containing `<script>` tags. Returns a callable that accepts an optional `scripts` list; omitting it defaults to `[f"{victim_url}/app.js"]`.
+
+Use this wherever a test needs a generic HTML page with script references (e.g. sourcemap probes, SRI checks) rather than hand-rolling `<html><head><script ...></script></head></html>` strings.
+
+```python
+# correct
+def test_map_detected(victim_url, make_html_page):
+    def fake_get(url, **kwargs):
+        ...
+        resp.text = make_html_page()                          # default script
+        resp.text = make_html_page(scripts=["https://cdn.example.net/lib.js"])
+        ...
+
+# wrong - inline string duplicates the pattern and hard-codes the hostname
+def test_map_detected(victim_url):
+    html = f'<html><head><script src="{victim_url}/app.js"></script></head></html>'
+```
+
 ## When in doubt
 
 Read `tests/conftest.py` - it is the source of truth for what is available.

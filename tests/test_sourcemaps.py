@@ -15,10 +15,6 @@ from tools.pentest.sourcemaps import _scan_with_gitleaks, check_js_source_maps
 pytestmark = pytest.mark.unit
 
 
-def _html_with_script(js_url: str = "https://victim.example.com/app.js") -> str:
-    return f'<html><head><script src="{js_url}"></script></head></html>'
-
-
 def _map_payload(sources: list[str], sources_content: list[str]) -> dict:
     return {
         "version": 3,
@@ -124,7 +120,7 @@ class TestCheckJsSourceMaps:
             patch("subprocess.run", side_effect=fake_run),
         )
 
-    def test_detects_exposed_map_with_internal_paths(self, victim_url: str):
+    def test_detects_exposed_map_with_internal_paths(self, victim_url: str, make_html_page):
         ep = Endpoint(url=f"{victim_url}/", status_code=200)
 
         map_data = _map_payload(
@@ -142,7 +138,7 @@ class TestCheckJsSourceMaps:
             elif url.endswith(".js"):
                 resp.text = "console.log('app')"
             else:
-                resp.text = _html_with_script()
+                resp.text = make_html_page()
             return resp
 
         which_patch, run_patch = self._patch_gitleaks_no_findings()
@@ -154,7 +150,9 @@ class TestCheckJsSourceMaps:
         assert results[0].severity_hint == Severity.MEDIUM
         assert "/src/server/auth.ts" in results[0].evidence
 
-    def test_detects_critical_finding_when_gitleaks_finds_secrets(self, victim_url: str):
+    def test_detects_critical_finding_when_gitleaks_finds_secrets(
+        self, victim_url: str, make_html_page
+    ):
         ep = Endpoint(url=f"{victim_url}/", status_code=200)
 
         map_data = _map_payload(
@@ -172,7 +170,7 @@ class TestCheckJsSourceMaps:
             elif url.endswith(".js"):
                 resp.text = "//# sourceMappingURL=app.js.map"
             else:
-                resp.text = _html_with_script()
+                resp.text = make_html_page()
             return resp
 
         which_patch, run_patch = self._patch_gitleaks_with_findings(
@@ -185,7 +183,7 @@ class TestCheckJsSourceMaps:
         assert results[0].severity_hint == Severity.CRITICAL
         assert "generic-api-key" in results[0].evidence
 
-    def test_detects_aws_access_key_via_gitleaks(self, victim_url: str):
+    def test_detects_aws_access_key_via_gitleaks(self, victim_url: str, make_html_page):
         ep = Endpoint(url=f"{victim_url}/", status_code=200)
 
         map_data = _map_payload(
@@ -203,7 +201,7 @@ class TestCheckJsSourceMaps:
             elif url.endswith(".js"):
                 resp.text = ""
             else:
-                resp.text = _html_with_script()
+                resp.text = make_html_page()
             return resp
 
         which_patch, run_patch = self._patch_gitleaks_with_findings(
@@ -235,7 +233,7 @@ class TestCheckJsSourceMaps:
 
         assert results == []
 
-    def test_ignores_map_returning_non_200(self, victim_url: str):
+    def test_ignores_map_returning_non_200(self, victim_url: str, make_html_page):
         ep = Endpoint(url=f"{victim_url}/", status_code=200)
 
         def fake_get(url, **kwargs):
@@ -249,7 +247,7 @@ class TestCheckJsSourceMaps:
             else:
                 resp.status_code = 200
                 resp.headers = {"Content-Type": "text/html"}
-                resp.text = _html_with_script()
+                resp.text = make_html_page()
             return resp
 
         with patch("requests.get", side_effect=fake_get):
@@ -263,7 +261,7 @@ class TestCheckJsSourceMaps:
             results = check_js_source_maps([ep])
         assert results == []
 
-    def test_deduplicates_same_map_url(self, victim_url: str):
+    def test_deduplicates_same_map_url(self, victim_url: str, make_html_page):
         endpoints = [
             Endpoint(url=f"{victim_url}/page1", status_code=200),
             Endpoint(url=f"{victim_url}/page2", status_code=200),
@@ -287,7 +285,7 @@ class TestCheckJsSourceMaps:
             elif url.endswith(".js"):
                 resp.text = ""
             else:
-                resp.text = _html_with_script()
+                resp.text = make_html_page()
             return resp
 
         which_patch, run_patch = self._patch_gitleaks_no_findings()
@@ -296,7 +294,9 @@ class TestCheckJsSourceMaps:
 
         assert map_fetch_count == 1
 
-    def test_skips_map_when_gitleaks_missing_and_no_internal_paths(self, victim_url: str):
+    def test_skips_map_when_gitleaks_missing_and_no_internal_paths(
+        self, victim_url: str, make_html_page
+    ):
         ep = Endpoint(url=f"{victim_url}/", status_code=200)
 
         # sources has only 1 entry and no internal path markers -> would be
@@ -316,7 +316,7 @@ class TestCheckJsSourceMaps:
             elif url.endswith(".js"):
                 resp.text = ""
             else:
-                resp.text = _html_with_script()
+                resp.text = make_html_page()
             return resp
 
         with patch("requests.get", side_effect=fake_get):

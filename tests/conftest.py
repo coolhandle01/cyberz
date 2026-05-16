@@ -44,6 +44,22 @@ def callback_url() -> str:
     return "https://callback.cybersquad.com"
 
 
+@pytest.fixture()
+def make_html_page(victim_url: str):
+    """Factory for minimal HTML pages containing script tags.
+
+    Returns a callable: make_html_page(scripts=[...]) -> str.
+    Defaults to a single <script> pointing at {victim_url}/app.js.
+    """
+
+    def _make(scripts: list[str] | None = None) -> str:
+        _scripts = scripts if scripts is not None else [f"{victim_url}/app.js"]
+        tags = "".join(f'<script src="{s}"></script>' for s in _scripts)
+        return f"<html><head>{tags}</head></html>"
+
+    return _make
+
+
 # Programme fixtures
 @pytest.fixture()
 def scope_item_url() -> ScopeItem:
