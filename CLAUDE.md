@@ -190,6 +190,32 @@ Tests that reload modules for config isolation use `importlib.reload()` - this i
 
 Coverage floor is 85%. Every new public function in `tools/` needs a test. Every bug fix needs a regression test.
 
+### Shared fixtures
+
+`tests/conftest.py` provides fixtures for all tests. Use them instead of defining local equivalents:
+
+- **`make_response`** - factory for `MagicMock` objects shaped like `requests.Response`. Accepts `status`, `body`, `headers`, `cookies`, and `json`. Use this for any generic HTTP response mock:
+
+  ```python
+  # correct - uses shared fixture
+  def test_no_finding(self, make_response: Callable) -> None:
+      with patch("requests.get", return_value=make_response(body="<html>ok</html>")):
+          ...
+
+  # wrong - duplicates the fixture locally
+  def _resp(body="", status=200):
+      r = MagicMock()
+      r.text = body
+      r.status_code = status
+      return r
+  ```
+
+  Tool-specific response builders that carry extra logic (e.g. cookie-jar inspection, POST body reflection) can stay local to their test file - they are not generic mocks.
+
+- **`programme`, `endpoint`, `recon_result`, `raw_finding_high/low/oos`, `verified_vuln`, `disclosure_report`** - canonical model instances. Use `model_copy(update={...})` to derive variants.
+
+- **`clean_response_body`** - an HTML body verified at fixture-setup time to contain none of the strings any pentest probe treats as a positive match. Use it for "no finding" cases to avoid false negatives caused by accidental marker collisions.
+
 ---
 
 ## Adding a new agent
@@ -219,6 +245,28 @@ Tools are `@tool`-decorated functions in a `squad/<agent>/__init__.py`. The docs
 One concern per tool. The PT agent selects tools based on nmap evidence and detected technologies; bundling unrelated checks removes that selectivity.
 
 Tests must mock all network and binary calls. Patch `socket.create_connection` at the module path where it is imported (e.g. `tools.cloud.databases.redis.socket.create_connection`), not at the top-level `socket` module.
+
+### Probe enumerations
+
+When a tool iterates over a fixed set of attack vectors (headers, payloads, error markers, URI paths), define them as a `StrEnum` in the tool module rather than a bare list or tuple. This makes the set inspectable, importable in tests, and self-documenting:
+
+```python
+# correct
+from enum import StrEnum
+
+class XSSHeader(StrEnum):
+    USER_AGENT = "User-Agent"
+    REFERER = "Referer"
+    X_FORWARDED_FOR = "X-Forwarded-For"
+
+for header in XSSHeader:
+    ...
+
+# wrong - opaque list, not reusable in tests
+_HEADERS = ["User-Agent", "Referer", "X-Forwarded-For"]
+```
+
+Tests should import the enum and assert against `set(MyEnum)` rather than duplicating the string literals.
 
 ---
 
