@@ -29,6 +29,12 @@ class TestEstimateCost:
     def test_zero_tokens(self) -> None:
         assert estimate_cost("claude-sonnet-4-20250514", 0, 0) == 0.0
 
+    def test_provider_prefix_stripped(self) -> None:
+        cost_bare = estimate_cost("claude-sonnet-4-6", 1_000_000, 1_000_000)
+        cost_prefixed = estimate_cost("anthropic/claude-sonnet-4-6", 1_000_000, 1_000_000)
+        assert cost_prefixed == pytest.approx(cost_bare)
+        assert cost_prefixed > 0
+
     def test_unknown_model_returns_zero(self) -> None:
         assert estimate_cost("gpt-4o", 1_000_000, 1_000_000) == 0.0
 

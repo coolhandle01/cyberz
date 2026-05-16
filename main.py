@@ -57,6 +57,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable per-step LLM output")
     parser.add_argument("--dry-run", action="store_true", help="Show crew layout without executing")
+    parser.add_argument("--ui", action="store_true", help="Launch the Textual TUI")
     return parser.parse_args()
 
 
@@ -105,7 +106,14 @@ def main() -> None:
     args = parse_args()
     check_env()
 
+    if args.ui:
+        from tui import BountySquadTUI
+
+        BountySquadTUI(verbose=args.verbose).run()
+        return
+
     # Import crew after env check
+    import runtime
     from config import config
     from crew import build_crew
     from tools.metrics import build_run_metrics, print_metrics, save_metrics
@@ -117,6 +125,7 @@ def main() -> None:
         return
 
     run_id = datetime.now(UTC).strftime("%Y%m%d-%H%M%S") + "-" + uuid4().hex[:6]
+    runtime.run_id = run_id
     started_at = datetime.now(UTC)
 
     console.rule("[bold]Bounty Squad[/bold]")

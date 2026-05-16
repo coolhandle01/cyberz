@@ -1,0 +1,318 @@
+"""
+tui.py - Textual TUI for the Bounty Squad pipeline.
+
+Launch with: python main.py --ui
+"""
+
+from __future__ import annotations
+
+import logging
+from collections.abc import Callable
+from datetime import UTC, datetime
+from uuid import uuid4
+
+from textual import work
+from textual.app import App, ComposeResult
+from textual.containers import Horizontal, Vertical
+from textual.widgets import Input, Label, RichLog, Static
+
+# Maps agent role -> phase heading shown in the sidebar.
+# Roles not in this dict fall back to the role name itself.
+_PHASE: dict[str, str] = {
+    "Programme Manager": "Select Program",
+    "OSINT Analyst": "Reconnaissance",
+    "Penetration Tester": "Penetration Testing",
+    "Vulnerability Researcher": "Vulnerability Research",
+    "Technical Author": "Reporting",
+    "Disclosure Coordinator": "Disclosure",
+}
+
+_CSS = """
+Screen {
+    layout: horizontal;
+    background: $background;
+}
+
+#sidebar {
+    width: 34;
+    border-right: solid $surface;
+    padding: 1 1;
+    layout: vertical;
+    overflow-y: auto;
+}
+
+#sidebar-title {
+    color: $accent;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+.phase-heading {
+    color: $accent;
+    text-style: bold;
+    margin-top: 1;
+}
+
+.task-name {
+    color: $text-muted;
+    padding-left: 2;
+}
+
+.task-name.running {
+    color: $warning;
+    text-style: bold;
+}
+
+.task-name.done {
+    color: $success;
+}
+
+.task-status {
+    color: $text-muted;
+    padding-left: 4;
+    height: 1;
+}
+
+.task-status.running {
+    color: $warning;
+}
+
+.task-status.done {
+    color: $success;
+}
+
+#metrics {
+    dock: bottom;
+    border-top: solid $surface;
+    padding: 1;
+    color: $text-muted;
+    height: 6;
+}
+
+#main {
+    layout: vertical;
+    width: 1fr;
+}
+
+#messages-pane {
+    height: 60%;
+    border-bottom: solid $surface;
+    layout: vertical;
+}
+
+.pane-title {
+    padding: 0 1;
+    color: $accent;
+    text-style: bold;
+    height: 1;
+}
+
+#agent-log {
+    height: 1fr;
+    padding: 0 1;
+}
+
+#human-input {
+    margin: 0 1 1 1;
+    opacity: 0.4;
+}
+
+#logs-pane {
+    height: 40%;
+    layout: vertical;
+}
+
+#logs-title {
+    padding: 0 1;
+    color: $text-muted;
+    text-style: bold;
+    height: 1;
+}
+
+#crew-log {
+    height: 1fr;
+    padding: 0 1;
+}
+"""
+
+
+class BountySquadTUI(App):
+    CSS = _CSS
+
+    def __init__(self, verbose: bool = False) -> None:
+        super().__init__()
+        self._verbose = verbose
+        # (name_label, status_label) per task, in task order
+        self._task_widgets: list[tuple[Label, Label]] = []
+        from crew import build_crew
+
+        self._crew = build_crew(verbose=verbose)
+        self._task_names = [t.agent.role for t in self._crew.tasks if t.agent is not None]
+
+        self._crew.step_callback = _make_step_callback(self)
+
+    def compose(self) -> ComposeResult:
+        with Horizontal():
+            with Vertical(id="sidebar"):
+                yield Label("Bounty Squad", id="sidebar-title")
+
+                seen_phases: set[str] = set()
+                for name in self._task_names:
+                    phase = _PHASE.get(name, name)
+                    if phase not in seen_phases:
+                        seen_phases.add(phase)
+                        yield Label(phase, classes="phase-heading")
+                    name_lbl = Label(name, classes="task-name")
+                    status_lbl = Label("Waiting", classes="task-status")
+                    self._task_widgets.append((name_lbl, status_lbl))
+                    yield name_lbl
+                    yield status_lbl
+
+                yield Static("", id="metrics")
+
+            with Vertical(id="main"):
+                with Vertical(id="messages-pane"):
+                    yield Label("Agent Output", classes="pane-title")
+                    yield RichLog(id="agent-log", highlight=True, markup=True, wrap=True)
+                    yield Input(
+                        placeholder="Human review input (not yet implemented)",
+                        disabled=True,
+                        id="human-input",
+                    )
+                with Vertical(id="logs-pane"):
+                    yield Label("Pipeline Logs", id="logs-title", classes="pane-title")
+                    yield RichLog(id="crew-log", highlight=True, markup=True)
+
+    def on_mount(self) -> None:
+        logging.getLogger().addHandler(_TUILogHandler(self))
+        self._start_run()
+
+    @work(thread=True)
+    def _start_run(self) -> None:
+        import runtime
+
+        run_id = datetime.now(UTC).strftime("%Y%m%d-%H%M%S") + "-" + uuid4().hex[:6]
+        runtime.run_id = run_id
+        started_at = datetime.now(UTC)
+
+        crew = self._crew
+
+        for i, task in enumerate(crew.tasks):
+            orig: Callable[..., None] | None = task.callback
+            task.callback = _make_task_callback(self, i, orig)
+
+        self.call_from_thread(self._set_task_running, 0)
+
+        try:
+            result = crew.kickoff()
+            self.call_from_thread(self._on_done, result, run_id, started_at)
+        except Exception as exc:
+            self.call_from_thread(self._write_agent, f"[bold red]Pipeline error: {exc}[/bold red]")
+            self.call_from_thread(self._write_crew, f"[bold red]Pipeline error: {exc}[/bold red]")
+
+    def _set_task_running(self, idx: int) -> None:
+        if idx < len(self._task_widgets):
+            name_lbl, status_lbl = self._task_widgets[idx]
+            name_lbl.add_class("running")
+            status_lbl.add_class("running")
+            status_lbl.update("Running...")
+
+    def _set_task_done(self, idx: int) -> None:
+        if idx < len(self._task_widgets):
+            name_lbl, status_lbl = self._task_widgets[idx]
+            name_lbl.remove_class("running")
+            name_lbl.add_class("done")
+            status_lbl.remove_class("running")
+            status_lbl.add_class("done")
+            status_lbl.update("Done")
+        next_idx = idx + 1
+        if next_idx < len(self._task_widgets):
+            self._set_task_running(next_idx)
+
+    def _on_done(self, result: object, run_id: str, started_at: datetime) -> None:
+        from config import config
+        from tools.metrics import build_run_metrics, save_metrics
+
+        raw = getattr(result, "raw", str(result))
+        self._write_agent("[bold green]Pipeline complete.[/bold green]")
+        self._write_agent(raw[:2000] if len(raw) > 2000 else raw)
+
+        usage = getattr(result, "token_usage", None)
+        if usage is None:
+            return
+
+        try:
+            metrics = build_run_metrics(
+                run_id=run_id,
+                started_at=started_at,
+                llm_model=config.llm.model,
+                input_tokens=getattr(usage, "prompt_tokens", 0),
+                output_tokens=getattr(usage, "completion_tokens", 0),
+            )
+            save_metrics(metrics, config.reports_dir)
+            self.query_one("#metrics", Static).update(
+                f" Tokens:  {metrics.total_tokens:,}\n"
+                f" Cost:    ${metrics.estimated_cost_usd:.4f}\n"
+                f" Run:     {run_id}\n"
+                f" Status:  done"
+            )
+        except Exception as exc:  # noqa: BLE001
+            self._write_crew(f"[yellow]Metrics error: {exc}[/yellow]")
+
+    def _write_agent(self, msg: str) -> None:
+        try:
+            self.query_one("#agent-log", RichLog).write(msg)
+        except Exception:  # nosec B110  # noqa: S110
+            pass
+
+    def _write_crew(self, msg: str) -> None:
+        try:
+            self.query_one("#crew-log", RichLog).write(msg)
+        except Exception:  # nosec B110  # noqa: S110
+            pass
+
+
+def _make_task_callback(
+    app: BountySquadTUI, idx: int, orig: Callable[..., None] | None
+) -> Callable[..., None]:
+    def _cb(output: object) -> None:
+        app.call_from_thread(app._set_task_done, idx)
+        if orig is not None:
+            orig(output)
+
+    return _cb
+
+
+def _make_step_callback(app: BountySquadTUI) -> Callable[[object], None]:
+    def _cb(step: object) -> None:
+        try:
+            from crewai.agents.parser import AgentAction, AgentFinish
+
+            if isinstance(step, AgentAction):
+                tool_call = f"[cyan]> {step.tool}[/cyan]({step.tool_input[:120]})"
+                msg = f"[yellow]Thought:[/yellow] {step.thought}\n{tool_call}"
+                if step.result:
+                    msg += f"\n[dim]{step.result[:300]}[/dim]"
+            elif isinstance(step, AgentFinish):
+                out = str(step.output)
+                msg = f"[bold green]Answer:[/bold green] {out[:500]}"
+            else:
+                msg = str(step)[:300]
+            app.call_from_thread(app._write_agent, msg)
+        except Exception:  # nosec B110  # noqa: S110
+            pass
+
+    return _cb
+
+
+class _TUILogHandler(logging.Handler):
+    def __init__(self, app: BountySquadTUI) -> None:
+        super().__init__()
+        self._app = app
+
+    def emit(self, record: logging.LogRecord) -> None:
+        msg = self.format(record)
+        if record.name.startswith("bounty_squad"):
+            self._app.call_from_thread(self._app._write_agent, msg)
+        else:
+            self._app.call_from_thread(self._app._write_crew, msg)
