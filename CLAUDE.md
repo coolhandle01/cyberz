@@ -194,23 +194,21 @@ Coverage floor is 85%. Every new public function in `tools/` needs a test. Every
 
 `tests/conftest.py` provides fixtures for all tests. Use them instead of defining local equivalents:
 
-- **`make_response`** - factory for `MagicMock` objects shaped like `requests.Response`. Accepts `status`, `body`, `headers`, `cookies`, and `json`. Use this for any generic HTTP response mock:
+- **`make_response`** - factory for `MagicMock` objects shaped like `requests.Response`. Accepts `status`, `body`, `headers`, `cookies`, and `json`. Use this for any generic HTTP response mock. Tool-specific response builders that carry extra logic (e.g. cookie-jar inspection, POST body reflection) can stay local to their test file.
 
-  ```python
-  # correct - uses shared fixture
-  def test_no_finding(self, make_response: Callable) -> None:
-      with patch("requests.get", return_value=make_response(body="<html>ok</html>")):
-          ...
+```python
+# correct - uses shared fixture
+def test_no_finding(self, make_response: Callable[..., MagicMock]) -> None:
+    with patch("requests.get", return_value=make_response(body="<html>ok</html>")):
+        ...
 
-  # wrong - duplicates the fixture locally
-  def _resp(body="", status=200):
-      r = MagicMock()
-      r.text = body
-      r.status_code = status
-      return r
-  ```
-
-  Tool-specific response builders that carry extra logic (e.g. cookie-jar inspection, POST body reflection) can stay local to their test file - they are not generic mocks.
+# wrong - duplicates the fixture locally
+def _resp(body="", status=200):
+    r = MagicMock()
+    r.text = body
+    r.status_code = status
+    return r
+```
 
 - **`programme`, `endpoint`, `recon_result`, `raw_finding_high/low/oos`, `verified_vuln`, `disclosure_report`** - canonical model instances. Use `model_copy(update={...})` to derive variants.
 
