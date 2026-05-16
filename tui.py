@@ -16,137 +16,20 @@ from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Input, Label, RichLog, Static
 
-# Maps agent role -> phase heading shown in the sidebar.
-# Roles not in this dict fall back to the role name itself.
-_PHASE: dict[str, str] = {
-    "Programme Manager": "Select Program",
-    "OSINT Analyst": "Reconnaissance",
-    "Penetration Tester": "Penetration Testing",
-    "Vulnerability Researcher": "Vulnerability Research",
-    "Technical Author": "Reporting",
-    "Disclosure Coordinator": "Disclosure",
-}
-
-_CSS = """
-Screen {
-    layout: horizontal;
-    background: $background;
-}
-
-#sidebar {
-    width: 34;
-    border-right: solid $surface;
-    padding: 1 1;
-    layout: vertical;
-    overflow-y: auto;
-}
-
-#sidebar-title {
-    color: $accent;
-    text-style: bold;
-    margin-bottom: 1;
-}
-
-.phase-heading {
-    color: $accent;
-    text-style: bold;
-    margin-top: 1;
-}
-
-.task-name {
-    color: $text-muted;
-    padding-left: 2;
-}
-
-.task-name.running {
-    color: $warning;
-    text-style: bold;
-}
-
-.task-name.done {
-    color: $success;
-}
-
-.task-status {
-    color: $text-muted;
-    padding-left: 4;
-    height: 1;
-}
-
-.task-status.running {
-    color: $warning;
-}
-
-.task-status.done {
-    color: $success;
-}
-
-#metrics {
-    dock: bottom;
-    border-top: solid $surface;
-    padding: 1;
-    color: $text-muted;
-    height: 6;
-}
-
-#main {
-    layout: vertical;
-    width: 1fr;
-}
-
-#messages-pane {
-    height: 60%;
-    border-bottom: solid $surface;
-    layout: vertical;
-}
-
-.pane-title {
-    padding: 0 1;
-    color: $accent;
-    text-style: bold;
-    height: 1;
-}
-
-#agent-log {
-    height: 1fr;
-    padding: 0 1;
-}
-
-#human-input {
-    margin: 0 1 1 1;
-    opacity: 0.4;
-}
-
-#logs-pane {
-    height: 40%;
-    layout: vertical;
-}
-
-#logs-title {
-    padding: 0 1;
-    color: $text-muted;
-    text-style: bold;
-    height: 1;
-}
-
-#crew-log {
-    height: 1fr;
-    padding: 0 1;
-}
-"""
-
 
 class BountySquadTUI(App):
-    CSS = _CSS
+    # TODO: feat(themes-and-fonts)
+    CSS_PATH = "tui.tcss"
 
     def __init__(self, verbose: bool = False) -> None:
         super().__init__()
         self._verbose = verbose
         # (name_label, status_label) per task, in task order
         self._task_widgets: list[tuple[Label, Label]] = []
-        from crew import build_crew
+        from crew import build_crew, squad_phases
 
         self._crew = build_crew(verbose=verbose)
+        self._phase_map = squad_phases()
         self._task_names = [t.agent.role for t in self._crew.tasks if t.agent is not None]
 
         self._crew.step_callback = _make_step_callback(self)
@@ -158,7 +41,7 @@ class BountySquadTUI(App):
 
                 seen_phases: set[str] = set()
                 for name in self._task_names:
-                    phase = _PHASE.get(name, name)
+                    phase = self._phase_map.get(name, name)
                     if phase not in seen_phases:
                         seen_phases.add(phase)
                         yield Label(phase, classes="phase-heading")

@@ -930,4 +930,5 @@ MEMBER = SquadMember(
         prototype_pollution_tool,
         jwt_check_tool,
     ],
+    phase="Penetration Testing",
 )

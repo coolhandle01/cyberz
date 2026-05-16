@@ -28,6 +28,11 @@ _SQUAD: list[SquadMember] = [
 ]
 
 
+def squad_phases() -> dict[str, str]:
+    """Return a role -> phase mapping built from the squad member metadata."""
+    return {m.read("role"): m.phase for m in _SQUAD if m.phase}
+
+
 def build_crew(verbose: bool | None = None) -> Crew:
     """
     Instantiate agents and tasks, then wire them into a sequential Crew.
