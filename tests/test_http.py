@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from config import config
 from tools import http
 
 pytestmark = pytest.mark.unit
@@ -71,9 +72,8 @@ class TestInjectHeaders:
         assert "User-Agent" in out["headers"]
 
     def test_handles_no_headers_kwarg(self):
-        kwargs = {"timeout": 5}
+        kwargs: dict = {}
         out = http._inject_headers(kwargs)
-        assert out["timeout"] == 5
         assert "User-Agent" in out["headers"]
 
 
@@ -83,6 +83,16 @@ class TestVerbWrappers:
             http.get("https://x.example.com/")
         kwargs = mock_get.call_args.kwargs
         assert kwargs["headers"]["User-Agent"] == http.user_agent()
+
+    def test_default_timeout_applied_when_omitted(self):
+        with patch("requests.get", return_value=MagicMock()) as mock_get:
+            http.get("https://x.example.com/")
+        assert mock_get.call_args.kwargs["timeout"] == config.recon.http_timeout
+
+    def test_explicit_timeout_not_overridden(self):
+        with patch("requests.get", return_value=MagicMock()) as mock_get:
+            http.get("https://x.example.com/", timeout=999)
+        assert mock_get.call_args.kwargs["timeout"] == 999
 
     def test_post_calls_requests_post_with_ua(self):
         with patch("requests.post", return_value=MagicMock()) as mock_post:
