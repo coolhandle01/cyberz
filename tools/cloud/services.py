@@ -102,7 +102,7 @@ def _probe_panel(
             resp = http.get(  # nosemgrep
                 url,
                 timeout=5,
-                verify=False,  # nosec B501  # noqa: S501
+                verify=False,  # nosec B501  # noqa: S501 - intentional: probing for self-signed/expired certs is the point
                 allow_redirects=True,
             )
             if resp.status_code == 200 and marker.lower() in resp.text.lower():

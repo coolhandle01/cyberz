@@ -12,13 +12,15 @@ from tools.h1_api import h1
 
 @tool("List HackerOne Programmes")
 def list_programmes_tool(page_size: int = 25) -> list[dict]:
-    """Fetch and return a list of active HackerOne bug bounty programmes."""
+    """Use this to get a list of active HackerOne bug bounty programmes to evaluate."""
     return h1.list_programmes(page_size=page_size)
 
 
 @tool("Get Programme Scope")
 def get_scope_tool(handle: str) -> dict:
-    """Fetch the structured in-scope and out-of-scope assets for a programme."""
+    """Use this to retrieve in-scope and out-of-scope assets for a programme before
+    selecting it. Pass the programme handle (e.g. 'acme') to get its policy text and
+    structured scope targets."""
     policy = h1.get_programme_policy(handle)
     scope = h1.get_structured_scope(handle)
     return {"policy": policy, "scope": scope}
@@ -26,10 +28,8 @@ def get_scope_tool(handle: str) -> dict:
 
 @tool("Get Programme Stats")
 def get_programme_stats_tool(handle: str) -> dict:
-    """
-    Fetch response efficiency, average triage time, and total bounties paid for a
-    programme. Use this to rank programmes by actual payout likelihood.
-    """
+    """Use this to compare programmes by payout likelihood. Pass the programme handle
+    to get response efficiency, average triage time, and total bounties paid."""
     return h1.get_programme_stats(handle)
 
 

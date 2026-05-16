@@ -67,38 +67,45 @@ def _inject_headers(kwargs: dict[str, Any]) -> dict[str, Any]:
 
 # Pass-through wrappers. Each delegates to requests.<verb> so existing test
 # patches against ``requests.get`` and friends continue to intercept calls
-# without modification. The timeout argument is part of the caller's contract
-# (every call site we ship sets one), not the helper's job to default - hence
-# the B113 suppression on each line.
+# without modification. Timeout is an explicit parameter so callers cannot
+# accidentally omit it; the configured default applies when omitted.
 
 
-def request(method: str, url: str, **kwargs: Any) -> requests.Response:
-    return requests.request(method, url, **_inject_headers(kwargs))  # nosec B113
+def request(method: str, url: str, timeout: int | None = None, **kwargs: Any) -> requests.Response:
+    _timeout = config.recon.http_timeout if timeout is None else timeout
+    return requests.request(method, url, timeout=_timeout, **_inject_headers(kwargs))
 
 
-def get(url: str, **kwargs: Any) -> requests.Response:
-    return requests.get(url, **_inject_headers(kwargs))  # nosec B113
+def get(url: str, timeout: int | None = None, **kwargs: Any) -> requests.Response:
+    _timeout = config.recon.http_timeout if timeout is None else timeout
+    return requests.get(url, timeout=_timeout, **_inject_headers(kwargs))
 
 
-def post(url: str, **kwargs: Any) -> requests.Response:
-    return requests.post(url, **_inject_headers(kwargs))  # nosec B113
+def post(url: str, timeout: int | None = None, **kwargs: Any) -> requests.Response:
+    _timeout = config.recon.http_timeout if timeout is None else timeout
+    return requests.post(url, timeout=_timeout, **_inject_headers(kwargs))
 
 
-def put(url: str, **kwargs: Any) -> requests.Response:
-    return requests.put(url, **_inject_headers(kwargs))  # nosec B113
+def put(url: str, timeout: int | None = None, **kwargs: Any) -> requests.Response:
+    _timeout = config.recon.http_timeout if timeout is None else timeout
+    return requests.put(url, timeout=_timeout, **_inject_headers(kwargs))
 
 
-def delete(url: str, **kwargs: Any) -> requests.Response:
-    return requests.delete(url, **_inject_headers(kwargs))  # nosec B113
+def delete(url: str, timeout: int | None = None, **kwargs: Any) -> requests.Response:
+    _timeout = config.recon.http_timeout if timeout is None else timeout
+    return requests.delete(url, timeout=_timeout, **_inject_headers(kwargs))
 
 
-def head(url: str, **kwargs: Any) -> requests.Response:
-    return requests.head(url, **_inject_headers(kwargs))  # nosec B113
+def head(url: str, timeout: int | None = None, **kwargs: Any) -> requests.Response:
+    _timeout = config.recon.http_timeout if timeout is None else timeout
+    return requests.head(url, timeout=_timeout, **_inject_headers(kwargs))
 
 
-def patch(url: str, **kwargs: Any) -> requests.Response:
-    return requests.patch(url, **_inject_headers(kwargs))  # nosec B113
+def patch(url: str, timeout: int | None = None, **kwargs: Any) -> requests.Response:
+    _timeout = config.recon.http_timeout if timeout is None else timeout
+    return requests.patch(url, timeout=_timeout, **_inject_headers(kwargs))
 
 
-def options(url: str, **kwargs: Any) -> requests.Response:
-    return requests.options(url, **_inject_headers(kwargs))  # nosec B113
+def options(url: str, timeout: int | None = None, **kwargs: Any) -> requests.Response:
+    _timeout = config.recon.http_timeout if timeout is None else timeout
+    return requests.options(url, timeout=_timeout, **_inject_headers(kwargs))
