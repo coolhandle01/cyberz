@@ -136,13 +136,12 @@ nuclei -update-templates -update-template-dir "${TEMPLATES_DIR}" 2>/dev/null \
 
 # ---- PATH update ----
 
+# shellcheck disable=SC2016  # single quotes intentional: ${HOME} must expand at source-time, not now
 PATH_LINE='export PATH="${HOME}/.local/bin:${HOME}/go/bin:/usr/local/go/bin:${PATH}"'
 
 for rc_file in "${HOME}/.bashrc" "${HOME}/.zshrc"; do
   if [[ -f "${rc_file}" ]] && ! grep -qF 'go/bin' "${rc_file}"; then
-    echo "" >> "${rc_file}"
-    echo "# Added by cybersquad install-tools.sh" >> "${rc_file}"
-    echo "${PATH_LINE}" >> "${rc_file}"
+    { echo ""; echo "# Added by cybersquad install-tools.sh"; echo "${PATH_LINE}"; } >> "${rc_file}"
     echo "[ok]   Added PATH entry to ${rc_file}"
   elif [[ -f "${rc_file}" ]]; then
     echo "[skip] go/bin already in ${rc_file}"
