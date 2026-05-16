@@ -200,7 +200,7 @@ Coverage floor is 85%. Every new public function in `tools/` needs a test. Every
 # correct - uses shared fixture
 def test_no_finding(self, make_response: Callable[..., MagicMock]) -> None:
     with patch("requests.get", return_value=make_response(body="<html>ok</html>")):
-        ...
+        pass  # assertions go here
 
 # wrong - duplicates the fixture locally
 def _resp(body="", status=200):
