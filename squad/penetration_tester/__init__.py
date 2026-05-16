@@ -249,8 +249,6 @@ def header_xss_tool(
     header_names: optional list of headers to probe; omit or pass null to test
       all five. Narrow this when recon evidence points to a specific header
       (e.g. error pages that echo the User-Agent, analytics that log Referer).
-      Valid values: "User-Agent", "Referer", "X-Forwarded-For",
-      "X-Custom-Header", "Accept-Language".
       Example: ["User-Agent", "Referer"]
 
     Returns raw findings as dicts.
