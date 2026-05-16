@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -21,75 +21,68 @@ _PG_ERROR = "PG::UndefinedTable: ERROR: relation 'users' does not exist"
 _ASPNET_ERROR = "Server Error in '/' Application. Runtime Error"
 
 
-def _resp(body: str, status: int = 200) -> MagicMock:
-    r = MagicMock()
-    r.status_code = status
-    r.text = body
-    return r
-
-
 class TestCheckErrorDisclosure:
-    def test_detects_python_traceback(self):
+    def test_detects_python_traceback(self, make_response):
         ep = Endpoint(url="https://app.example.com/api", status_code=200, parameters=["id"])
-        with patch("requests.get", return_value=_resp(_PYTHON_TRACEBACK)):
+        with patch("requests.get", return_value=make_response(body=_PYTHON_TRACEBACK)):
             results = check_error_disclosure([ep])
         assert len(results) == 1
         assert results[0].vuln_class == "ErrorDisclosure"
         assert results[0].severity_hint == Severity.INFORMATIONAL
         assert "Python traceback" in results[0].evidence
 
-    def test_detects_django_debug(self):
+    def test_detects_django_debug(self, make_response):
         ep = Endpoint(url="https://app.example.com/api", status_code=200, parameters=["id"])
-        with patch("requests.get", return_value=_resp(_DJANGO_ERROR)):
+        with patch("requests.get", return_value=make_response(body=_DJANGO_ERROR)):
             results = check_error_disclosure([ep])
         assert len(results) == 1
         assert "Django debug" in results[0].evidence
 
-    def test_detects_php_fatal_error(self):
+    def test_detects_php_fatal_error(self, make_response):
         ep = Endpoint(url="https://app.example.com/", status_code=200)
-        with patch("requests.get", return_value=_resp(_PHP_ERROR)):
+        with patch("requests.get", return_value=make_response(body=_PHP_ERROR)):
             results = check_error_disclosure([ep])
         assert len(results) == 1
         assert "PHP fatal error" in results[0].evidence
 
-    def test_detects_java_stack_trace(self):
+    def test_detects_java_stack_trace(self, make_response):
         ep = Endpoint(url="https://app.example.com/", status_code=200)
-        with patch("requests.get", return_value=_resp(_JAVA_TRACE)):
+        with patch("requests.get", return_value=make_response(body=_JAVA_TRACE)):
             results = check_error_disclosure([ep])
         assert len(results) == 1
         assert "Java stack trace" in results[0].evidence
 
-    def test_detects_mysql_error(self):
+    def test_detects_mysql_error(self, make_response):
         ep = Endpoint(url="https://app.example.com/", status_code=200, parameters=["q"])
-        with patch("requests.get", return_value=_resp(_MYSQL_ERROR)):
+        with patch("requests.get", return_value=make_response(body=_MYSQL_ERROR)):
             results = check_error_disclosure([ep])
         assert len(results) == 1
         assert "MySQL error" in results[0].evidence
 
-    def test_detects_oracle_error(self):
+    def test_detects_oracle_error(self, make_response):
         ep = Endpoint(url="https://app.example.com/", status_code=200)
-        with patch("requests.get", return_value=_resp(_ORACLE_ERROR)):
+        with patch("requests.get", return_value=make_response(body=_ORACLE_ERROR)):
             results = check_error_disclosure([ep])
         assert len(results) == 1
         assert "Oracle SQL error" in results[0].evidence
 
-    def test_detects_postgresql_error(self):
+    def test_detects_postgresql_error(self, make_response):
         ep = Endpoint(url="https://app.example.com/", status_code=200)
-        with patch("requests.get", return_value=_resp(_PG_ERROR)):
+        with patch("requests.get", return_value=make_response(body=_PG_ERROR)):
             results = check_error_disclosure([ep])
         assert len(results) == 1
         assert "PostgreSQL error" in results[0].evidence
 
-    def test_detects_aspnet_error(self):
+    def test_detects_aspnet_error(self, make_response):
         ep = Endpoint(url="https://app.example.com/", status_code=200)
-        with patch("requests.get", return_value=_resp(_ASPNET_ERROR)):
+        with patch("requests.get", return_value=make_response(body=_ASPNET_ERROR)):
             results = check_error_disclosure([ep])
         assert len(results) == 1
         assert "ASP.NET" in results[0].evidence
 
-    def test_no_finding_for_clean_response(self):
+    def test_no_finding_for_clean_response(self, make_response):
         ep = Endpoint(url="https://app.example.com/", status_code=200)
-        with patch("requests.get", return_value=_resp("<html><body>Not Found</body></html>")):
+        with patch("requests.get", return_value=make_response(body="<html><body>Not Found</body></html>")):
             results = check_error_disclosure([ep])
         assert results == []
 
@@ -106,20 +99,20 @@ class TestCheckErrorDisclosure:
             results = check_error_disclosure([ep])
         assert results == []
 
-    def test_deduplicates_multiple_probe_hits(self):
+    def test_deduplicates_multiple_probe_hits(self, make_response):
         """Only one finding per endpoint even if both probe URLs trigger errors."""
         ep = Endpoint(url="https://app.example.com/api", status_code=200, parameters=["id"])
-        with patch("requests.get", return_value=_resp(_PYTHON_TRACEBACK)):
+        with patch("requests.get", return_value=make_response(body=_PYTHON_TRACEBACK)):
             results = check_error_disclosure([ep])
         assert len(results) == 1
 
-    def test_probes_404_path_even_without_parameters(self):
+    def test_probes_404_path_even_without_parameters(self, make_response):
         ep = Endpoint(url="https://app.example.com/", status_code=200)
         seen_urls: list[str] = []
 
         def recording_get(url, **kwargs):
             seen_urls.append(url)
-            return _resp("")
+            return make_response(body="")
 
         with patch("requests.get", side_effect=recording_get):
             check_error_disclosure([ep])

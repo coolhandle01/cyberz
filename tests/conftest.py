@@ -210,3 +210,32 @@ def clean_response_body() -> str:
         )
 
     return body
+
+
+@pytest.fixture
+def make_response():
+    """Factory for building MagicMock objects shaped like requests.Response.
+
+    Use this instead of local _resp/_mock_resp helpers in individual test files.
+    Tool-specific builders (e.g. _post_resp in test_csrf.py, the cookie-aware
+    _resp in test_cookies.py) stay local - they are not generic response mocks.
+    """
+    from unittest.mock import MagicMock
+
+    def _make(
+        status: int = 200,
+        body: str = "",
+        headers: dict | None = None,
+        cookies: dict | None = None,
+        json: object = None,
+    ) -> MagicMock:
+        resp = MagicMock()
+        resp.status_code = status
+        resp.text = body
+        resp.headers = headers or {}
+        resp.cookies = cookies or {}
+        if json is not None:
+            resp.json.return_value = json
+        return resp
+
+    return _make
