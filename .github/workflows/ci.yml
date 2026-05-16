@@ -189,7 +189,7 @@ jobs:
         uses: Checkmarx/kics-github-action@05aa5eb70eede1355220f4ca5238d96b397e30a6  # v2.1.20
         with:
           path: Dockerfile,docker-compose.yml
-          config_file: .kics.yml
+          config_path: .kics.yml
           output_path: .
           output_formats: sarif
           ignore_on_exit: results
