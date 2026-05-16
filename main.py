@@ -47,7 +47,7 @@ logging.basicConfig(
     datefmt="[%H:%M:%S]",
     handlers=[RichHandler(console=console, rich_tracebacks=True, show_path=False)],
 )
-logger = logging.getLogger("bounty_squad")
+logger = logging.getLogger("cybersquad")
 
 
 def parse_args() -> argparse.Namespace:

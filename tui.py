@@ -201,7 +201,7 @@ class _TUILogHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         msg = self.format(record)
-        if record.name.startswith("bounty_squad"):
+        if record.name.startswith("cybersquad"):
             self._app.call_from_thread(self._app._write_agent, msg)
         else:
             self._app.call_from_thread(self._app._write_crew, msg)
