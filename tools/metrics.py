@@ -27,8 +27,9 @@ _PRICING: dict[str, tuple[float, float]] = {
 
 def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
     """Return estimated USD cost for the given token counts and model."""
+    model_key = model.split("/", 1)[-1]  # strip provider prefix e.g. "anthropic/"
     for prefix, (in_price, out_price) in _PRICING.items():
-        if model.startswith(prefix):
+        if model_key.startswith(prefix):
             return (input_tokens * in_price + output_tokens * out_price) / 1_000_000
     logger.warning("No pricing entry for model %r - cost will show as $0.00", model)
     return 0.0
