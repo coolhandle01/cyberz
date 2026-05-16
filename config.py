@@ -97,6 +97,9 @@ class ScanConfig:
     )
     tls_max_targets: int = field(default_factory=lambda: int(os.getenv("TLS_MAX_TARGETS", "10")))
     testssl_timeout: int = field(default_factory=lambda: int(os.getenv("TESTSSL_TIMEOUT", "300")))
+    waybackurls_timeout: int = field(
+        default_factory=lambda: int(os.getenv("WAYBACKURLS_TIMEOUT", "180"))
+    )
 
     def __post_init__(self) -> None:
         # Per-mode rate defaults. Explicit env vars always win; this only fills
