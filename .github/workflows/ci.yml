@@ -130,6 +130,7 @@ jobs:
         uses: hadolint/hadolint-action@54c9adbab1582c2ef04b2016b760714a4bfde3cf  # v3.1.0
         with:
           dockerfile: Dockerfile
+          config: .hadolint.yaml
           format: sarif
           output-file: hadolint.sarif
           no-fail: true  # let the SARIF upload surface findings; don't gate the build
@@ -148,7 +149,7 @@ jobs:
           path: "Dockerfile,docker-compose.yml"
           output_path: kics-results/
           output_formats: "sarif"
-          ignore_on_exit: results  # don't fail the build on findings
+          ignore_on_exit: all  # informational only - findings surface in Security tab
         continue-on-error: true
 
       - name: Upload KICS SARIF

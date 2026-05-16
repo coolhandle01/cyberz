@@ -60,11 +60,8 @@ CMD ["python", "-m", "main"]
 # ---- debug: dev deps + debugpy for VS Code remote attach ---------------------
 FROM base AS debug
 
-# Install dev deps (includes pytest, mypy, ruff etc for in-container tooling).
+# Install dev deps (includes pytest, mypy, ruff, debugpy etc).
 RUN pip install --no-cache-dir -e ".[dev]" || true
-
-# debugpy is not in pyproject.toml dev deps; install separately.
-RUN pip install --no-cache-dir debugpy
 
 # Source is volume-mounted at runtime so edits are live without rebuilding.
 # We still copy it here so the image is self-contained for CI builds.
