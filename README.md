@@ -169,7 +169,7 @@ H1_API_USERNAME=test H1_API_TOKEN=test CYBERSQUAD_CONTACT_EMAIL=test@example.inv
 H1_API_USERNAME=test H1_API_TOKEN=test CYBERSQUAD_CONTACT_EMAIL=test@example.invalid pytest -m unit --cov --cov-report=term-missing
 ```
 
-Coverage floor is **70%**. Every new public function in `tools/` requires a unit test. Every bug fix requires a regression test.
+Coverage floor is **90%**. Every new public function in `tools/` requires a unit test. Every bug fix requires a regression test.
 
 ### Full CI stack (run before every push)
 
@@ -208,7 +208,7 @@ Edit any of the five prose files in `squad/<member>/`: `role.md`, `goal.md`, `ba
 | Job | Tools |
 |---|---|
 | `lint` | ruff, mypy |
-| `test` | pytest (70% coverage floor) |
+| `test` | pytest (90% coverage floor) |
 | `sast` | bandit, semgrep |
 
 ---
