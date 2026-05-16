@@ -1,6 +1,6 @@
-FROM python:3.12-slim
+# ---- base: system tools shared by all targets --------------------------------
+FROM python:3.12-slim AS base
 
-# ---- system packages --------------------------------------------------------
 # nmap: TCP connect scans (recon/nmap.py)
 # sqlmap: SQL injection (pentest/sqlmap.py)
 # curl + ca-certificates: runtime HTTP + TLS; also used by install scripts
@@ -15,7 +15,7 @@ RUN apt-get update -qq && \
         procps \
     && rm -rf /var/lib/apt/lists/*
 
-# ---- Go toolchain -----------------------------------------------------------
+# ---- Go toolchain ------------------------------------------------------------
 ENV GO_VERSION=1.23.4
 ENV GOPATH=/root/go
 ENV PATH="${GOPATH}/bin:/usr/local/go/bin:${PATH}"
@@ -31,39 +31,53 @@ RUN arch="$(uname -m)" && \
     tar -C /usr/local -xzf /tmp/go.tar.gz && \
     rm /tmp/go.tar.gz
 
-# ---- Go-based security tools ------------------------------------------------
+# ---- Go-based security tools -------------------------------------------------
 RUN go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest && \
     go install github.com/projectdiscovery/httpx/cmd/httpx@latest && \
     go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest && \
     go install github.com/ffuf/ffuf/v2@latest && \
     go install github.com/tomnomnom/waybackurls@latest
 
-# ---- testssl.sh -------------------------------------------------------------
+# ---- testssl.sh --------------------------------------------------------------
 RUN git clone --depth 1 https://github.com/drwetter/testssl.sh.git /opt/testssl && \
     ln -s /opt/testssl/testssl.sh /usr/local/bin/testssl.sh
 
-# ---- Python application ------------------------------------------------------
 WORKDIR /app
 
+# Copy only the project metadata first so pip dependency layers are cached
+# independently of source changes.
 COPY pyproject.toml ./
-# Install deps first so the layer is cached when only source changes
+
+# ---- prod: minimal runtime image ---------------------------------------------
+FROM base AS prod
+
+RUN pip install --no-cache-dir -e . || true
+COPY . .
+RUN pip install --no-cache-dir -e .
+
+CMD ["python", "-m", "main"]
+
+# ---- debug: dev deps + debugpy for VS Code remote attach ---------------------
+FROM base AS debug
+
+# Install dev deps (includes pytest, mypy, ruff etc for in-container tooling).
 RUN pip install --no-cache-dir -e ".[dev]" || true
 
-# debugpy for VS Code remote debugging (attach on port 5678)
+# debugpy is not in pyproject.toml dev deps; install separately.
 RUN pip install --no-cache-dir debugpy
 
-# Source is volume-mounted at runtime in docker-compose so edits are live.
+# Source is volume-mounted at runtime so edits are live without rebuilding.
 # We still copy it here so the image is self-contained for CI builds.
 COPY . .
 RUN pip install --no-cache-dir -e ".[dev]"
 
-# ---- entrypoint -------------------------------------------------------------
-# Default: launch with debugpy waiting for an attach.
-# Override CMD in docker-compose or on the CLI for unattended runs.
-#
-# The --wait-for-client flag means the pipeline will not start until a
-# debugger (VS Code) attaches. Remove it for unattended runs:
-#   docker compose run cybersquad python main.py
+# Note: Python does NOT hot-reload automatically. The volume mount means you
+# do not need to rebuild the image when you edit source, but you do need to
+# restart the process (or reattach the debugger) for changes to take effect.
+# Use VS Code's "Restart" button in the debug toolbar to do this quickly.
+
+# The --wait-for-client flag holds the pipeline until VS Code attaches.
+# Remove it (or override CMD) for unattended runs.
 CMD ["python", "-m", "debugpy", \
      "--listen", "0.0.0.0:5678", \
      "--wait-for-client", \
