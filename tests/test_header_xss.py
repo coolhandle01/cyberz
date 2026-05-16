@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -14,13 +14,13 @@ pytestmark = pytest.mark.unit
 
 
 def _make_reflecting_fake(
-    make_response: Callable,
+    make_response: Callable[..., MagicMock],
     match_header: str | None = None,
-) -> Callable:
+) -> Callable[..., MagicMock]:
     """Return a fake requests.get that reflects any canary injected into the
     given header (or any header when match_header is None)."""
 
-    def fake_get(url: str, headers: dict | None = None, **kwargs: object) -> object:
+    def fake_get(url: str, headers: dict | None = None, **kwargs: object) -> MagicMock:
         h = headers or {}
         for key, val in h.items():
             if _CANARY_PREFIX in str(val):
@@ -32,7 +32,7 @@ def _make_reflecting_fake(
 
 
 class TestCheckHeaderXss:
-    def test_detects_user_agent_reflection(self, make_response: Callable) -> None:
+    def test_detects_user_agent_reflection(self, make_response: Callable[..., MagicMock]) -> None:
         ep = Endpoint(url="https://app.example.com/error", status_code=200)
 
         with patch("requests.get", side_effect=_make_reflecting_fake(make_response, "User-Agent")):
@@ -43,7 +43,7 @@ class TestCheckHeaderXss:
         assert results[0].severity_hint == Severity.HIGH
         assert "User-Agent" in results[0].evidence
 
-    def test_detects_referer_reflection(self, make_response: Callable) -> None:
+    def test_detects_referer_reflection(self, make_response: Callable[..., MagicMock]) -> None:
         ep = Endpoint(url="https://app.example.com/page", status_code=200)
 
         with patch("requests.get", side_effect=_make_reflecting_fake(make_response, "Referer")):
@@ -52,7 +52,9 @@ class TestCheckHeaderXss:
         assert len(results) == 1
         assert "Referer" in results[0].evidence
 
-    def test_detects_x_forwarded_for_reflection(self, make_response: Callable) -> None:
+    def test_detects_x_forwarded_for_reflection(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         ep = Endpoint(url="https://app.example.com/page", status_code=200)
 
         with patch(
@@ -64,7 +66,9 @@ class TestCheckHeaderXss:
         assert len(results) == 1
         assert "X-Forwarded-For" in results[0].evidence
 
-    def test_no_finding_when_canary_is_html_encoded(self, make_response: Callable) -> None:
+    def test_no_finding_when_canary_is_html_encoded(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         ep = Endpoint(url="https://app.example.com/page", status_code=200)
 
         with patch(
@@ -75,7 +79,7 @@ class TestCheckHeaderXss:
 
         assert results == []
 
-    def test_no_finding_when_canary_absent(self, make_response: Callable) -> None:
+    def test_no_finding_when_canary_absent(self, make_response: Callable[..., MagicMock]) -> None:
         ep = Endpoint(url="https://app.example.com/page", status_code=200)
 
         with patch("requests.get", return_value=make_response(body="<html>Normal</html>")):
@@ -93,7 +97,7 @@ class TestCheckHeaderXss:
         assert results == []
 
     def test_one_finding_per_endpoint_even_when_multiple_headers_reflect(
-        self, make_response: Callable
+        self, make_response: Callable[..., MagicMock]
     ) -> None:
         ep = Endpoint(url="https://app.example.com/page", status_code=200)
 
@@ -102,11 +106,13 @@ class TestCheckHeaderXss:
 
         assert len(results) == 1
 
-    def test_stops_after_first_reflecting_header(self, make_response: Callable) -> None:
+    def test_stops_after_first_reflecting_header(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         ep = Endpoint(url="https://app.example.com/page", status_code=200)
         call_count = 0
 
-        def fake_get(url: str, headers: dict | None = None, **kwargs: object) -> object:
+        def fake_get(url: str, headers: dict | None = None, **kwargs: object) -> MagicMock:
             nonlocal call_count
             call_count += 1
             first_val = next(iter((headers or {}).values()), "")
@@ -125,11 +131,11 @@ class TestCheckHeaderXss:
 
         assert results == []
 
-    def test_canary_contains_angle_brackets(self, make_response: Callable) -> None:
+    def test_canary_contains_angle_brackets(self, make_response: Callable[..., MagicMock]) -> None:
         ep = Endpoint(url="https://app.example.com/page", status_code=200)
         seen_canaries: list[str] = []
 
-        def fake_get(url: str, headers: dict | None = None, **kwargs: object) -> object:
+        def fake_get(url: str, headers: dict | None = None, **kwargs: object) -> MagicMock:
             for val in (headers or {}).values():
                 if _CANARY_PREFIX in str(val):
                     seen_canaries.append(str(val))
@@ -141,11 +147,13 @@ class TestCheckHeaderXss:
         assert seen_canaries, "No canary found in any request header"
         assert all(c.startswith("<") and c.endswith(">") for c in seen_canaries)
 
-    def test_all_five_headers_probed_when_no_reflection(self, make_response: Callable) -> None:
+    def test_all_five_headers_probed_when_no_reflection(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         ep = Endpoint(url="https://app.example.com/page", status_code=200)
         probed: set[str] = set()
 
-        def fake_get(url: str, headers: dict | None = None, **kwargs: object) -> object:
+        def fake_get(url: str, headers: dict | None = None, **kwargs: object) -> MagicMock:
             for key, val in (headers or {}).items():
                 if _CANARY_PREFIX in str(val):
                     probed.add(key)
@@ -156,7 +164,9 @@ class TestCheckHeaderXss:
 
         assert probed == set(XSSHeader)
 
-    def test_deduplicates_same_url_across_endpoint_list(self, make_response: Callable) -> None:
+    def test_deduplicates_same_url_across_endpoint_list(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         eps = [
             Endpoint(url="https://app.example.com/page", status_code=200),
             Endpoint(url="https://app.example.com/page", status_code=200),
@@ -167,7 +177,9 @@ class TestCheckHeaderXss:
 
         assert len(results) == 1
 
-    def test_evidence_includes_header_payload_and_snippet(self, make_response: Callable) -> None:
+    def test_evidence_includes_header_payload_and_snippet(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         ep = Endpoint(url="https://app.example.com/page", status_code=200)
 
         with patch("requests.get", side_effect=_make_reflecting_fake(make_response, "Referer")):
@@ -179,11 +191,11 @@ class TestCheckHeaderXss:
         assert _CANARY_PREFIX in ev
         assert "Response snippet" in ev
 
-    def test_unique_canary_per_request(self, make_response: Callable) -> None:
+    def test_unique_canary_per_request(self, make_response: Callable[..., MagicMock]) -> None:
         ep = Endpoint(url="https://app.example.com/page", status_code=200)
         canaries: list[str] = []
 
-        def fake_get(url: str, headers: dict | None = None, **kwargs: object) -> object:
+        def fake_get(url: str, headers: dict | None = None, **kwargs: object) -> MagicMock:
             for val in (headers or {}).values():
                 if _CANARY_PREFIX in str(val):
                     canaries.append(str(val))
