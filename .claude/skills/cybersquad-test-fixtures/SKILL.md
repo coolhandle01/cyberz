@@ -60,6 +60,25 @@ def test_no_finding(make_response, clean_response_body):
     assert result is None
 ```
 
+## Domain fixtures
+
+Use these instead of ad-hoc hostnames so test intent is readable:
+
+- `victim_url` - `"https://victim.example.com"` - the scanning target
+- `callback_url` - `"https://callback.cybersquad.com"` - OOB receiver (placeholder until #77 lands)
+
+```python
+# correct
+def test_detects_injection(make_response, victim_url):
+    ep = Endpoint(url=f"{victim_url}/api/users/42", parameters=["id"])
+    ...
+
+# wrong - opaque hostname, no indication of role
+def test_detects_injection(make_response):
+    ep = Endpoint(url="https://app.example.com/api/users/42", parameters=["id"])
+    ...
+```
+
 ## When in doubt
 
 Read `tests/conftest.py` - it is the source of truth for what is available.

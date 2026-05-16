@@ -28,6 +28,22 @@ from models import (  # noqa: E402
 )
 
 
+# Domain fixtures
+#
+# Use these instead of ad-hoc hostnames so test intent is readable at a glance.
+# victim_url  - the scanning target (an app we are testing)
+# callback_url - OOB receiver (a server we control, used for blind injection);
+#                placeholder until #77 lands real interactsh infrastructure.
+@pytest.fixture()
+def victim_url() -> str:
+    return "https://victim.example.com"
+
+
+@pytest.fixture()
+def callback_url() -> str:
+    return "https://callback.cybersquad.com"
+
+
 # Programme fixtures
 @pytest.fixture()
 def scope_item_url() -> ScopeItem:
