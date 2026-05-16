@@ -41,7 +41,7 @@ class BountySquadTUI(App):
     def compose(self) -> ComposeResult:
         with Horizontal():
             with Vertical(id="sidebar"):
-                yield Label("Bounty Squad", id="sidebar-title")
+                yield Label("cybersquad", id="sidebar-title")
 
                 seen_phases: set[str] = set()
                 for name in self._task_names:
