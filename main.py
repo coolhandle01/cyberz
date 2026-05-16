@@ -57,6 +57,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable per-step LLM output")
     parser.add_argument("--dry-run", action="store_true", help="Show crew layout without executing")
+    parser.add_argument("--headless", action="store_true", help="Run without the Textual TUI")
     return parser.parse_args()
 
 
@@ -105,6 +106,12 @@ def main() -> None:
     args = parse_args()
     check_env()
 
+    if not args.headless and not args.dry_run:
+        from tui import CybersquadTUI
+
+        CybersquadTUI(verbose=args.verbose).run()
+        return
+
     # Import crew after env check
     from config import config
     from crew import build_crew
@@ -116,7 +123,10 @@ def main() -> None:
         dry_run_summary(crew)
         return
 
+    import runtime
+
     run_id = datetime.now(UTC).strftime("%Y%m%d-%H%M%S") + "-" + uuid4().hex[:6]
+    runtime.run_id = run_id
     started_at = datetime.now(UTC)
 
     console.rule("[bold]Bounty Squad[/bold]")

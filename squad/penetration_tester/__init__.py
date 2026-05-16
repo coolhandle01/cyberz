@@ -967,6 +967,7 @@ def jwt_check_tool(
 MEMBER = SquadMember(
     slug="penetration_tester",
     dir=Path(__file__).parent,
+    phase="Penetration Testing",
     tools=[
         nuclei_scan_tool,
         sqlmap_tool,
