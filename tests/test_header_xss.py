@@ -191,6 +191,63 @@ class TestCheckHeaderXss:
         assert _CANARY_PREFIX in ev
         assert "Response snippet" in ev
 
+    def test_header_names_restricts_probed_headers(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
+        ep = Endpoint(url="https://app.example.com/page", status_code=200)
+        probed: set[str] = set()
+
+        def fake_get(url: str, headers: dict | None = None, **kwargs: object) -> MagicMock:
+            for key, val in (headers or {}).items():
+                if _CANARY_PREFIX in str(val):
+                    probed.add(key)
+            return make_response()
+
+        with patch("requests.get", side_effect=fake_get):
+            check_header_xss([ep], header_names=[XSSHeader.REFERER, XSSHeader.X_FORWARDED_FOR])
+
+        assert probed == {"Referer", "X-Forwarded-For"}
+
+    def test_header_names_none_probes_all_headers(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
+        ep = Endpoint(url="https://app.example.com/page", status_code=200)
+        probed: set[str] = set()
+
+        def fake_get(url: str, headers: dict | None = None, **kwargs: object) -> MagicMock:
+            for key, val in (headers or {}).items():
+                if _CANARY_PREFIX in str(val):
+                    probed.add(key)
+            return make_response()
+
+        with patch("requests.get", side_effect=fake_get):
+            check_header_xss([ep], header_names=None)
+
+        assert probed == set(XSSHeader)
+
+    def test_header_names_single_header_finds_reflection(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
+        ep = Endpoint(url="https://app.example.com/page", status_code=200)
+
+        with patch(
+            "requests.get",
+            side_effect=_make_reflecting_fake(make_response, "User-Agent"),
+        ):
+            results = check_header_xss([ep], header_names=[XSSHeader.USER_AGENT])
+
+        assert len(results) == 1
+        assert "User-Agent" in results[0].evidence
+
+    def test_header_names_empty_list_makes_no_requests(self) -> None:
+        ep = Endpoint(url="https://app.example.com/page", status_code=200)
+
+        with patch("requests.get") as mock_get:
+            results = check_header_xss([ep], header_names=[])
+
+        mock_get.assert_not_called()
+        assert results == []
+
     def test_unique_canary_per_request(self, make_response: Callable[..., MagicMock]) -> None:
         ep = Endpoint(url="https://app.example.com/page", status_code=200)
         canaries: list[str] = []
