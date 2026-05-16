@@ -1,7 +1,7 @@
 """
 tui.py - Textual TUI for the Bounty Squad pipeline.
 
-Launch with: python main.py --ui
+Launch with: python main.py  (default) or python main.py --headless to skip the TUI.
 """
 
 from __future__ import annotations
@@ -14,7 +14,10 @@ from uuid import uuid4
 from textual import work
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
+from textual.css.query import NoMatches
 from textual.widgets import Input, Label, RichLog, Static
+
+logger = logging.getLogger(__name__)
 
 
 class BountySquadTUI(App):
@@ -140,20 +143,22 @@ class BountySquadTUI(App):
                 f" Run:     {run_id}\n"
                 f" Status:  done"
             )
-        except Exception as exc:  # noqa: BLE001
+        except OSError as exc:
             self._write_crew(f"[yellow]Metrics error: {exc}[/yellow]")
+        except NoMatches:
+            logger.debug("metrics widget not mounted")
 
     def _write_agent(self, msg: str) -> None:
         try:
             self.query_one("#agent-log", RichLog).write(msg)
-        except Exception:  # nosec B110  # noqa: S110
-            pass
+        except NoMatches:
+            logger.debug("agent-log widget not mounted, dropping message")
 
     def _write_crew(self, msg: str) -> None:
         try:
             self.query_one("#crew-log", RichLog).write(msg)
-        except Exception:  # nosec B110  # noqa: S110
-            pass
+        except NoMatches:
+            logger.debug("crew-log widget not mounted, dropping message")
 
 
 def _make_task_callback(
@@ -183,8 +188,8 @@ def _make_step_callback(app: BountySquadTUI) -> Callable[[object], None]:
             else:
                 msg = str(step)[:300]
             app.call_from_thread(app._write_agent, msg)
-        except Exception:  # nosec B110  # noqa: S110
-            pass
+        except (AttributeError, ImportError, TypeError) as exc:
+            logger.debug("step callback error: %s", exc)
 
     return _cb
 

@@ -2,9 +2,10 @@
 main.py - Bounty Squad pipeline entrypoint.
 
 Usage:
-    python main.py             # single run, settings from .env / env vars
-    python main.py --verbose   # verbose LLM output
-    python main.py --dry-run   # show crew layout without executing
+    python main.py              # launch the Textual TUI (default)
+    python main.py --headless   # run without TUI, plain console output
+    python main.py --verbose    # verbose LLM output
+    python main.py --dry-run    # show crew layout without executing
 
 Environment variables (see config.py for full list):
     H1_API_USERNAME     HackerOne API username         (required)
@@ -57,7 +58,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable per-step LLM output")
     parser.add_argument("--dry-run", action="store_true", help="Show crew layout without executing")
-    parser.add_argument("--ui", action="store_true", help="Launch the Textual TUI")
+    parser.add_argument("--headless", action="store_true", help="Run without the Textual TUI")
     return parser.parse_args()
 
 
@@ -106,7 +107,7 @@ def main() -> None:
     args = parse_args()
     check_env()
 
-    if args.ui:
+    if not args.headless and not args.dry_run:
         from tui import BountySquadTUI
 
         BountySquadTUI(verbose=args.verbose).run()
