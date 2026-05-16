@@ -23,9 +23,9 @@ pytestmark = pytest.mark.unit
 
 class TestCheckXXE:
     def test_detects_linux_file_read_critical(
-        self, make_response: Callable[..., MagicMock]
+        self, make_response: Callable[..., MagicMock], victim_url: str
     ) -> None:
-        ep = Endpoint(url="https://app.example.com/soap", status_code=200)
+        ep = Endpoint(url=f"{victim_url}/soap", status_code=200)
 
         with patch("requests.post", return_value=make_response(body=f"data: {_LINUX_MARKER} more")):
             results = check_xxe([ep])
@@ -36,9 +36,9 @@ class TestCheckXXE:
         assert _LINUX_MARKER in results[0].evidence
 
     def test_detects_windows_file_read_critical(
-        self, make_response: Callable[..., MagicMock]
+        self, make_response: Callable[..., MagicMock], victim_url: str
     ) -> None:
-        ep = Endpoint(url="https://app.example.com/xml", status_code=200)
+        ep = Endpoint(url=f"{victim_url}/xml", status_code=200)
 
         def fake_post(url: str, **kw: object) -> MagicMock:
             body = kw.get("data", "")
@@ -53,8 +53,10 @@ class TestCheckXXE:
         assert results[0].severity_hint == Severity.CRITICAL
         assert _WIN_MARKER in results[0].evidence
 
-    def test_detects_xml_parser_error_medium(self, make_response: Callable[..., MagicMock]) -> None:
-        ep = Endpoint(url="https://app.example.com/api", status_code=200)
+    def test_detects_xml_parser_error_medium(
+        self, make_response: Callable[..., MagicMock], victim_url: str
+    ) -> None:
+        ep = Endpoint(url=f"{victim_url}/api", status_code=200)
 
         def fake_post(url: str, **kw: object) -> MagicMock:
             body = str(kw.get("data", ""))
@@ -71,11 +73,11 @@ class TestCheckXXE:
         assert "SAXParseException" in results[0].evidence
 
     def test_file_read_takes_priority_over_error(
-        self, make_response: Callable[..., MagicMock]
+        self, make_response: Callable[..., MagicMock], victim_url: str
     ) -> None:
         # Both file marker and XML error present - CRITICAL should win because
         # file-read probes are tried first and stop before error probes run.
-        ep = Endpoint(url="https://app.example.com/soap", status_code=200)
+        ep = Endpoint(url=f"{victim_url}/soap", status_code=200)
         body = f"{_LINUX_MARKER}\nSAXParseException: something"
 
         with patch("requests.post", return_value=make_response(body=body)):
@@ -84,16 +86,18 @@ class TestCheckXXE:
         assert len(results) == 1
         assert results[0].severity_hint == Severity.CRITICAL
 
-    def test_no_finding_on_clean_response(self, make_response: Callable[..., MagicMock]) -> None:
-        ep = Endpoint(url="https://app.example.com/api", status_code=200)
+    def test_no_finding_on_clean_response(
+        self, make_response: Callable[..., MagicMock], victim_url: str
+    ) -> None:
+        ep = Endpoint(url=f"{victim_url}/api", status_code=200)
 
         with patch("requests.post", return_value=make_response(body="<response>ok</response>")):
             results = check_xxe([ep])
 
         assert results == []
 
-    def test_skips_server_error_endpoints(self) -> None:
-        ep = Endpoint(url="https://app.example.com/soap", status_code=500)
+    def test_skips_server_error_endpoints(self, victim_url: str) -> None:
+        ep = Endpoint(url=f"{victim_url}/soap", status_code=500)
 
         with patch("requests.post") as mock_post:
             results = check_xxe([ep])
@@ -102,28 +106,32 @@ class TestCheckXXE:
         assert results == []
 
     def test_endpoint_without_status_code_is_probed(
-        self, make_response: Callable[..., MagicMock]
+        self, make_response: Callable[..., MagicMock], victim_url: str
     ) -> None:
         # status_code=None means recon didn't record it - still worth trying.
-        ep = Endpoint(url="https://app.example.com/soap")
+        ep = Endpoint(url=f"{victim_url}/soap")
 
         with patch("requests.post", return_value=make_response(body=_LINUX_MARKER)):
             results = check_xxe([ep])
 
         assert len(results) == 1
 
-    def test_one_finding_per_endpoint(self, make_response: Callable[..., MagicMock]) -> None:
+    def test_one_finding_per_endpoint(
+        self, make_response: Callable[..., MagicMock], victim_url: str
+    ) -> None:
         # Even though multiple probes would match, we stop at the first.
-        ep = Endpoint(url="https://app.example.com/soap", status_code=200)
+        ep = Endpoint(url=f"{victim_url}/soap", status_code=200)
 
         with patch("requests.post", return_value=make_response(body=_LINUX_MARKER)):
             results = check_xxe([ep])
 
         assert len(results) == 1
 
-    def test_deduplicates_same_url(self, make_response: Callable[..., MagicMock]) -> None:
-        ep1 = Endpoint(url="https://app.example.com/soap", status_code=200)
-        ep2 = Endpoint(url="https://app.example.com/soap", status_code=200)
+    def test_deduplicates_same_url(
+        self, make_response: Callable[..., MagicMock], victim_url: str
+    ) -> None:
+        ep1 = Endpoint(url=f"{victim_url}/soap", status_code=200)
+        ep2 = Endpoint(url=f"{victim_url}/soap", status_code=200)
 
         with patch("requests.post", return_value=make_response(body=_LINUX_MARKER)):
             results = check_xxe([ep1, ep2])
@@ -131,18 +139,18 @@ class TestCheckXXE:
         assert len(results) == 1
 
     def test_multiple_distinct_endpoints_each_get_a_finding(
-        self, make_response: Callable[..., MagicMock]
+        self, make_response: Callable[..., MagicMock], victim_url: str
     ) -> None:
-        ep1 = Endpoint(url="https://app.example.com/soap", status_code=200)
-        ep2 = Endpoint(url="https://app.example.com/xml-api", status_code=200)
+        ep1 = Endpoint(url=f"{victim_url}/soap", status_code=200)
+        ep2 = Endpoint(url=f"{victim_url}/xml-api", status_code=200)
 
         with patch("requests.post", return_value=make_response(body=_LINUX_MARKER)):
             results = check_xxe([ep1, ep2])
 
         assert len(results) == 2
 
-    def test_network_exception_is_swallowed(self) -> None:
-        ep = Endpoint(url="https://app.example.com/soap", status_code=200)
+    def test_network_exception_is_swallowed(self, victim_url: str) -> None:
+        ep = Endpoint(url=f"{victim_url}/soap", status_code=200)
 
         with patch("requests.post", side_effect=OSError("connection refused")):
             results = check_xxe([ep])
@@ -177,11 +185,11 @@ class TestCheckXXE:
         assert "expat" in joined
 
     def test_payload_filter_restricts_to_named_probes(
-        self, make_response: Callable[..., MagicMock]
+        self, make_response: Callable[..., MagicMock], victim_url: str
     ) -> None:
         # Restricting to only linux-* probes must skip every windows-* probe
         # and every error-* probe.
-        ep = Endpoint(url="https://app.example.com/api", status_code=200)
+        ep = Endpoint(url=f"{victim_url}/api", status_code=200)
 
         seen_bodies: list[str] = []
 
@@ -206,13 +214,13 @@ class TestCheckXXE:
         assert "cybersquad_xxe_probe" not in joined
 
     def test_payload_filter_only_error_probes_runs_just_error_tier(
-        self, make_response: Callable[..., MagicMock]
+        self, make_response: Callable[..., MagicMock], victim_url: str
     ) -> None:
         # The Tier 1 file-read loop only fires if any active file-read probe
         # exists. Restricting to error-* names should skip Tier 1 entirely
         # and go straight to the parser-error probes - exactly what an agent
         # wants for a low-noise "is this XML-backed?" reconnaissance pass.
-        ep = Endpoint(url="https://app.example.com/api", status_code=200)
+        ep = Endpoint(url=f"{victim_url}/api", status_code=200)
 
         seen_bodies: list[str] = []
 
@@ -230,9 +238,9 @@ class TestCheckXXE:
         assert results[0].severity_hint == Severity.MEDIUM
 
     def test_payload_filter_finding_evidence_names_the_probe(
-        self, make_response: Callable[..., MagicMock]
+        self, make_response: Callable[..., MagicMock], victim_url: str
     ) -> None:
-        ep = Endpoint(url="https://app.example.com/api", status_code=200)
+        ep = Endpoint(url=f"{victim_url}/api", status_code=200)
 
         with patch("requests.post", return_value=make_response(body=_LINUX_MARKER)):
             results = check_xxe([ep], payload_names=[XxePayload.linux_soap])
@@ -240,8 +248,8 @@ class TestCheckXXE:
         assert len(results) == 1
         assert "linux-soap" in results[0].evidence
 
-    def test_payload_filter_empty_list_is_a_noop(self) -> None:
-        ep = Endpoint(url="https://app.example.com/api", status_code=200)
+    def test_payload_filter_empty_list_is_a_noop(self, victim_url: str) -> None:
+        ep = Endpoint(url=f"{victim_url}/api", status_code=200)
 
         with patch("requests.post") as mock_post:
             results = check_xxe([ep], payload_names=[])

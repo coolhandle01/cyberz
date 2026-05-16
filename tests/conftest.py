@@ -28,6 +28,38 @@ from models import (  # noqa: E402
 )
 
 
+# Domain fixtures
+#
+# Use these instead of ad-hoc hostnames so test intent is readable at a glance.
+# victim_url  - the scanning target (an app we are testing)
+# callback_url - OOB receiver (a server we control, used for blind injection);
+#                placeholder until #77 lands real interactsh infrastructure.
+@pytest.fixture()
+def victim_url() -> str:
+    return "https://victim.example.com"
+
+
+@pytest.fixture()
+def callback_url() -> str:
+    return "https://callback.cybersquad.com"
+
+
+@pytest.fixture()
+def make_html_page(victim_url: str):
+    """Factory for minimal HTML pages containing script tags.
+
+    Returns a callable: make_html_page(scripts=[...]) -> str.
+    Defaults to a single <script> pointing at {victim_url}/app.js.
+    """
+
+    def _make(scripts: list[str] | None = None) -> str:
+        _scripts = scripts if scripts is not None else [f"{victim_url}/app.js"]
+        tags = "".join(f'<script src="{s}"></script>' for s in _scripts)
+        return f"<html><head>{tags}</head></html>"
+
+    return _make
+
+
 # Programme fixtures
 @pytest.fixture()
 def scope_item_url() -> ScopeItem:

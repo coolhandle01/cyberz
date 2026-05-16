@@ -13,8 +13,8 @@ pytestmark = pytest.mark.unit
 
 
 class TestCheckReflectedXss:
-    def test_detects_unescaped_reflection(self):
-        ep = Endpoint(url="https://app.example.com/search", status_code=200, parameters=["q"])
+    def test_detects_unescaped_reflection(self, victim_url: str):
+        ep = Endpoint(url=f"{victim_url}/search", status_code=200, parameters=["q"])
 
         def fake_get(url, **kwargs):
             canary = url.split("q=")[1]
@@ -30,8 +30,8 @@ class TestCheckReflectedXss:
         assert results[0].severity_hint == Severity.HIGH
         assert "q" in results[0].evidence
 
-    def test_no_finding_when_canary_is_html_encoded(self):
-        ep = Endpoint(url="https://app.example.com/search", status_code=200, parameters=["q"])
+    def test_no_finding_when_canary_is_html_encoded(self, victim_url: str):
+        ep = Endpoint(url=f"{victim_url}/search", status_code=200, parameters=["q"])
 
         def fake_get(url, **kwargs):
             resp = MagicMock()
@@ -44,8 +44,8 @@ class TestCheckReflectedXss:
 
         assert results == []
 
-    def test_no_finding_when_canary_absent_from_response(self):
-        ep = Endpoint(url="https://app.example.com/search", status_code=200, parameters=["q"])
+    def test_no_finding_when_canary_absent_from_response(self, victim_url: str):
+        ep = Endpoint(url=f"{victim_url}/search", status_code=200, parameters=["q"])
 
         def fake_get(url, **kwargs):
             resp = MagicMock()
@@ -57,23 +57,23 @@ class TestCheckReflectedXss:
 
         assert results == []
 
-    def test_skips_endpoints_without_parameters(self):
-        ep = Endpoint(url="https://app.example.com/about", status_code=200)
+    def test_skips_endpoints_without_parameters(self, victim_url: str):
+        ep = Endpoint(url=f"{victim_url}/about", status_code=200)
         with patch("requests.get") as mock_get:
             results = check_reflected_xss([ep])
         mock_get.assert_not_called()
         assert results == []
 
-    def test_skips_server_error_endpoints(self):
-        ep = Endpoint(url="https://app.example.com/", status_code=500, parameters=["id"])
+    def test_skips_server_error_endpoints(self, victim_url: str):
+        ep = Endpoint(url=f"{victim_url}/", status_code=500, parameters=["id"])
         with patch("requests.get") as mock_get:
             results = check_reflected_xss([ep])
         mock_get.assert_not_called()
         assert results == []
 
-    def test_deduplicates_multiple_reflecting_params(self):
+    def test_deduplicates_multiple_reflecting_params(self, victim_url: str):
         ep = Endpoint(
-            url="https://app.example.com/search",
+            url=f"{victim_url}/search",
             status_code=200,
             parameters=["q", "category"],
         )
@@ -96,15 +96,15 @@ class TestCheckReflectedXss:
         # Only one finding per endpoint despite two reflecting params
         assert len(results) == 1
 
-    def test_network_exception_is_swallowed(self):
-        ep = Endpoint(url="https://app.example.com/search", status_code=200, parameters=["q"])
+    def test_network_exception_is_swallowed(self, victim_url: str):
+        ep = Endpoint(url=f"{victim_url}/search", status_code=200, parameters=["q"])
         with patch("requests.get", side_effect=Exception("network error")):
             results = check_reflected_xss([ep])
         assert results == []
 
-    def test_canary_includes_angle_brackets(self):
+    def test_canary_includes_angle_brackets(self, victim_url: str):
         """The canary must be a real tag to test for XSS, not just text."""
-        ep = Endpoint(url="https://app.example.com/", status_code=200, parameters=["x"])
+        ep = Endpoint(url=f"{victim_url}/", status_code=200, parameters=["x"])
 
         seen_urls: list[str] = []
 

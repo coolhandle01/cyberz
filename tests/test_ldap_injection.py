@@ -27,8 +27,10 @@ def _baseline_or_probe(url: str, baseline_resp: MagicMock, probe_resp: MagicMock
 
 
 class TestCheckLDAPInjection:
-    def test_detects_auth_bypass_high(self, make_response: Callable[..., MagicMock]) -> None:
-        ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["username"])
+    def test_detects_auth_bypass_high(
+        self, make_response: Callable[..., MagicMock], victim_url: str
+    ) -> None:
+        ep = Endpoint(url=f"{victim_url}/login", status_code=200, parameters=["username"])
 
         with patch(
             "requests.get",
@@ -47,9 +49,9 @@ class TestCheckLDAPInjection:
         assert "username" in results[0].evidence
 
     def test_detects_ldap_error_marker_medium(
-        self, make_response: Callable[..., MagicMock]
+        self, make_response: Callable[..., MagicMock], victim_url: str
     ) -> None:
-        ep = Endpoint(url="https://app.example.com/search", status_code=200, parameters=["q"])
+        ep = Endpoint(url=f"{victim_url}/search", status_code=200, parameters=["q"])
 
         with patch(
             "requests.get",
@@ -66,9 +68,9 @@ class TestCheckLDAPInjection:
         assert "javax.naming" in results[0].evidence
 
     def test_detects_server_error_on_payload_medium(
-        self, make_response: Callable[..., MagicMock]
+        self, make_response: Callable[..., MagicMock], victim_url: str
     ) -> None:
-        ep = Endpoint(url="https://app.example.com/auth", status_code=200, parameters=["user"])
+        ep = Endpoint(url=f"{victim_url}/auth", status_code=200, parameters=["user"])
 
         with patch(
             "requests.get",
@@ -84,8 +86,10 @@ class TestCheckLDAPInjection:
         assert results[0].severity_hint == Severity.MEDIUM
         assert "500" in results[0].evidence
 
-    def test_no_finding_on_clean_response(self, make_response: Callable[..., MagicMock]) -> None:
-        ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["username"])
+    def test_no_finding_on_clean_response(
+        self, make_response: Callable[..., MagicMock], victim_url: str
+    ) -> None:
+        ep = Endpoint(url=f"{victim_url}/login", status_code=200, parameters=["username"])
 
         with patch(
             "requests.get", return_value=make_response(status=401, body="Invalid credentials")
@@ -94,8 +98,8 @@ class TestCheckLDAPInjection:
 
         assert results == []
 
-    def test_skips_endpoints_without_parameters(self) -> None:
-        ep = Endpoint(url="https://app.example.com/about", status_code=200)
+    def test_skips_endpoints_without_parameters(self, victim_url: str) -> None:
+        ep = Endpoint(url=f"{victim_url}/about", status_code=200)
 
         with patch("requests.get") as mock_get:
             results = check_ldap_injection([ep])
@@ -103,8 +107,8 @@ class TestCheckLDAPInjection:
         mock_get.assert_not_called()
         assert results == []
 
-    def test_skips_server_error_endpoints(self) -> None:
-        ep = Endpoint(url="https://app.example.com/login", status_code=500, parameters=["username"])
+    def test_skips_server_error_endpoints(self, victim_url: str) -> None:
+        ep = Endpoint(url=f"{victim_url}/login", status_code=500, parameters=["username"])
 
         with patch("requests.get") as mock_get:
             results = check_ldap_injection([ep])
@@ -113,10 +117,10 @@ class TestCheckLDAPInjection:
         assert results == []
 
     def test_one_finding_per_endpoint_with_multiple_params(
-        self, make_response: Callable[..., MagicMock]
+        self, make_response: Callable[..., MagicMock], victim_url: str
     ) -> None:
         ep = Endpoint(
-            url="https://app.example.com/login",
+            url=f"{victim_url}/login",
             status_code=200,
             parameters=["username", "email"],
         )
@@ -133,9 +137,11 @@ class TestCheckLDAPInjection:
 
         assert len(results) == 1
 
-    def test_stops_probing_after_first_match(self, make_response: Callable[..., MagicMock]) -> None:
+    def test_stops_probing_after_first_match(
+        self, make_response: Callable[..., MagicMock], victim_url: str
+    ) -> None:
         ep = Endpoint(
-            url="https://app.example.com/login",
+            url=f"{victim_url}/login",
             status_code=200,
             parameters=["username"],
         )
@@ -153,8 +159,10 @@ class TestCheckLDAPInjection:
         # One baseline + one payload before match - should stop immediately.
         assert mock_get.call_count == 2
 
-    def test_baseline_exception_skips_param(self, make_response: Callable[..., MagicMock]) -> None:
-        ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["username"])
+    def test_baseline_exception_skips_param(
+        self, make_response: Callable[..., MagicMock], victim_url: str
+    ) -> None:
+        ep = Endpoint(url=f"{victim_url}/login", status_code=200, parameters=["username"])
 
         def raise_on_baseline(url: str, **kw: object) -> MagicMock:
             if _BASELINE_VALUE in url:
@@ -166,8 +174,10 @@ class TestCheckLDAPInjection:
 
         assert results == []
 
-    def test_probe_exception_is_swallowed(self, make_response: Callable[..., MagicMock]) -> None:
-        ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["username"])
+    def test_probe_exception_is_swallowed(
+        self, make_response: Callable[..., MagicMock], victim_url: str
+    ) -> None:
+        ep = Endpoint(url=f"{victim_url}/login", status_code=200, parameters=["username"])
 
         def raise_on_probe(url: str, **kw: object) -> MagicMock:
             if _BASELINE_VALUE in url:
@@ -180,12 +190,10 @@ class TestCheckLDAPInjection:
         assert results == []
 
     def test_deduplicates_across_multiple_endpoints_same_url(
-        self, make_response: Callable[..., MagicMock]
+        self, make_response: Callable[..., MagicMock], victim_url: str
     ) -> None:
-        ep1 = Endpoint(
-            url="https://app.example.com/login", status_code=200, parameters=["username"]
-        )
-        ep2 = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["email"])
+        ep1 = Endpoint(url=f"{victim_url}/login", status_code=200, parameters=["username"])
+        ep2 = Endpoint(url=f"{victim_url}/login", status_code=200, parameters=["email"])
 
         with patch(
             "requests.get",
@@ -199,10 +207,12 @@ class TestCheckLDAPInjection:
 
         assert len(results) == 1
 
-    def test_high_takes_priority_over_medium(self, make_response: Callable[..., MagicMock]) -> None:
+    def test_high_takes_priority_over_medium(
+        self, make_response: Callable[..., MagicMock], victim_url: str
+    ) -> None:
         # Response triggers both a status-code bypass AND an error marker -
         # the finding should be HIGH, not MEDIUM.
-        ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["username"])
+        ep = Endpoint(url=f"{victim_url}/login", status_code=200, parameters=["username"])
 
         with patch(
             "requests.get",
@@ -231,11 +241,11 @@ class TestCheckLDAPInjection:
         assert "objectClass" in _LDAP_ERROR_MARKERS
 
     def test_payload_filter_restricts_to_named_variants(
-        self, make_response: Callable[..., MagicMock]
+        self, make_response: Callable[..., MagicMock], victim_url: str
     ) -> None:
         # Asking only for auth-bypass should send one baseline + one probe
         # per parameter - the other five payloads must not fire.
-        ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["username"])
+        ep = Endpoint(url=f"{victim_url}/login", status_code=200, parameters=["username"])
 
         seen_urls: list[str] = []
 
@@ -250,9 +260,9 @@ class TestCheckLDAPInjection:
         assert len(seen_urls) == 2
 
     def test_payload_filter_finding_evidence_names_the_variant(
-        self, make_response: Callable[..., MagicMock]
+        self, make_response: Callable[..., MagicMock], victim_url: str
     ) -> None:
-        ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["username"])
+        ep = Endpoint(url=f"{victim_url}/login", status_code=200, parameters=["username"])
 
         with patch(
             "requests.get",
@@ -268,9 +278,9 @@ class TestCheckLDAPInjection:
         assert "boolean-blind-true" in results[0].evidence
 
     def test_payload_filter_empty_list_is_a_noop(
-        self, make_response: Callable[..., MagicMock]
+        self, make_response: Callable[..., MagicMock], victim_url: str
     ) -> None:
-        ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["username"])
+        ep = Endpoint(url=f"{victim_url}/login", status_code=200, parameters=["username"])
 
         seen_urls: list[str] = []
 
