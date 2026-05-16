@@ -6,6 +6,7 @@ from collections.abc import Callable
 from unittest.mock import MagicMock, patch
 
 import pytest
+from bs4 import BeautifulSoup
 
 from models import Endpoint, Severity
 from tools.pentest.csrf import (
@@ -51,6 +52,10 @@ _HTML_GET_FORM_ONLY = """
 _HTML_NO_FORM = "<html><body><p>Hello world</p></body></html>"
 
 
+def _soup(html: str) -> BeautifulSoup:
+    return BeautifulSoup(html, "html.parser")
+
+
 def _post_resp(status: int = 200) -> MagicMock:
     resp = MagicMock()
     resp.status_code = status
@@ -66,37 +71,37 @@ def _post_resp(status: int = 200) -> MagicMock:
 
 class TestParsePostForms:
     def test_finds_post_form_without_token(self) -> None:
-        forms = _parse_post_forms(_HTML_POST_NO_TOKEN)
+        forms = _parse_post_forms(_soup(_HTML_POST_NO_TOKEN))
         assert len(forms) == 1
         assert forms[0]["has_csrf_input"] is False
         assert forms[0]["action"] == "/submit"
 
     def test_finds_post_form_with_csrf_token(self) -> None:
-        forms = _parse_post_forms(_HTML_POST_WITH_TOKEN)
+        forms = _parse_post_forms(_soup(_HTML_POST_WITH_TOKEN))
         assert len(forms) == 1
         assert forms[0]["has_csrf_input"] is True
 
     def test_ignores_get_form(self) -> None:
-        assert _parse_post_forms(_HTML_GET_FORM_ONLY) == []
+        assert _parse_post_forms(_soup(_HTML_GET_FORM_ONLY)) == []
 
     def test_no_forms(self) -> None:
-        assert _parse_post_forms(_HTML_NO_FORM) == []
+        assert _parse_post_forms(_soup(_HTML_NO_FORM)) == []
 
     def test_case_insensitive_method_attribute(self) -> None:
         html = '<form method="post"><input type="text" name="x"></form>'
-        forms = _parse_post_forms(html)
+        forms = _parse_post_forms(_soup(html))
         assert len(forms) == 1
 
     def test_recognises_xsrf_token(self) -> None:
         html = '<form method="POST"><input type="hidden" name="xsrf_token" value="y"></form>'
-        forms = _parse_post_forms(html)
+        forms = _parse_post_forms(_soup(html))
         assert forms[0]["has_csrf_input"] is True
 
     def test_recognises_authenticity_token(self) -> None:
         html = (
             '<form method="POST"><input type="hidden" name="authenticity_token" value="z"></form>'
         )
-        forms = _parse_post_forms(html)
+        forms = _parse_post_forms(_soup(html))
         assert forms[0]["has_csrf_input"] is True
 
     def test_multiple_forms_tracked_independently(self) -> None:
@@ -108,7 +113,7 @@ class TestParsePostForms:
           <input type="text" name="user">
         </form>
         """
-        forms = _parse_post_forms(html)
+        forms = _parse_post_forms(_soup(html))
         assert len(forms) == 2
         assert forms[0]["has_csrf_input"] is True
         assert forms[1]["has_csrf_input"] is False
@@ -159,15 +164,15 @@ class TestHasCsrfCookie:
 class TestHasCsrfMetaTag:
     def test_detects_rails_csrf_meta(self) -> None:
         html = '<html><head><meta name="csrf-token" content="abc"></head></html>'
-        assert _has_csrf_meta_tag(html) is True
+        assert _has_csrf_meta_tag(_soup(html)) is True
 
     def test_detects_underscore_csrf_meta(self) -> None:
         html = '<html><head><meta name="_csrf" content="abc"></head></html>'
-        assert _has_csrf_meta_tag(html) is True
+        assert _has_csrf_meta_tag(_soup(html)) is True
 
     def test_detects_xsrf_meta(self) -> None:
         html = '<html><head><meta name="xsrf-token" content="abc"></head></html>'
-        assert _has_csrf_meta_tag(html) is True
+        assert _has_csrf_meta_tag(_soup(html)) is True
 
     def test_ignores_unrelated_meta_tags(self) -> None:
         html = (
@@ -176,14 +181,14 @@ class TestHasCsrfMetaTag:
             '<meta name="description" content="A page">'
             "</head></html>"
         )
-        assert _has_csrf_meta_tag(html) is False
+        assert _has_csrf_meta_tag(_soup(html)) is False
 
     def test_no_meta_tags(self) -> None:
-        assert _has_csrf_meta_tag("<html><body>hi</body></html>") is False
+        assert _has_csrf_meta_tag(_soup("<html><body>hi</body></html>")) is False
 
     def test_match_is_case_insensitive(self) -> None:
         html = '<meta name="CSRF-Token" content="abc">'
-        assert _has_csrf_meta_tag(html) is True
+        assert _has_csrf_meta_tag(_soup(html)) is True
 
 
 # ---------------------------------------------------------------------------
