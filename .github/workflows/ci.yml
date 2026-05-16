@@ -193,10 +193,7 @@ jobs:
           output_path: .
           output_formats: sarif
           ignore_on_exit: results
-          # No token: KICS creates its own Check Run when a token is supplied
-          # and marks it failed for any finding - including suppressed ones.
-          # Upload the SARIF separately instead so findings appear in the
-          # Security tab without gating the workflow.
+          token: ""
 
       - name: Upload KICS SARIF
         uses: github/codeql-action/upload-sarif@4e828ff8d448a8a6e532957b1811f387a63867e8  # v3.29.4
