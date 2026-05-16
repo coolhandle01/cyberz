@@ -9,9 +9,36 @@ git pull origin main
 git checkout -b feat/your-branch-name
 ```
 
-For bugs use `bug/your-branch-name` for the branch name, for refactors and ci (non-breaking, non-bugfix) changes use `task/your-branch-name`.
+Substitute `feat/` for the appropriate prefix from the type table below.
 
 A `git diff origin/main --stat` before any push is a fast sanity check that only your intended changes are included.
+
+## Commit and branch type prefixes
+
+This repo follows [Conventional Commits](https://www.conventionalcommits.org/). Branch prefixes match commit types so the two stay in lockstep and `commitizen` lands cleanly when it's wired up.
+
+Format: `<type>(<scope>)?: <subject>` for commit messages, `<type>/<short-description>` for branch names. Scope is optional but encouraged when it sharpens the subject - e.g. `chore(coverage):`, `fix(recon):`, `docs(git-workflow):`.
+
+| Type | When to use |
+|---|---|
+| `feat` | A new feature visible to a user or another agent |
+| `fix` | A bug fix |
+| `docs` | Documentation only - no code or test change |
+| `style` | Formatting, whitespace, missing semicolons - no logic change |
+| `refactor` | Code change that neither fixes a bug nor adds a feature |
+| `perf` | A change that improves performance |
+| `test` | Adding or correcting tests - no production code change |
+| `build` | Build system or dependency changes (`pyproject.toml` deps, packaging) |
+| `ci` | CI configuration only (`.github/workflows/`, pre-commit hooks) |
+| `chore` | Maintenance that doesn't fit the above - bumping a gate value, tidying a config |
+| `revert` | Reverts a previous commit; subject is the reverted commit's subject |
+
+Examples:
+
+- `feat(squad/triage): add CVSS sanity-check pass after vulnerability researcher`
+- `fix(recon/scope): treat sub.example.com as in-scope when pattern is example.com`
+- `chore(coverage): raise fail_under from 70 to 88`
+- `docs(git-workflow): document --force-with-lease policy`
 
 ## One issue, one branch, one PR
 
