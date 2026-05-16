@@ -21,7 +21,7 @@ from crewai import Agent, Task
 
 @dataclass(frozen=True)
 class SquadMember:
-    """A single Bounty Squad member: identity, tools, and prose location."""
+    """A single cybersquad member: identity, tools, and prose location."""
 
     slug: str
     dir: Path

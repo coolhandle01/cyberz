@@ -1,5 +1,5 @@
 """
-tui.py - Textual TUI for the Bounty Squad pipeline.
+tui.py - Textual TUI for the cybersquad pipeline.
 
 Launch with: python main.py  (default) or python main.py --headless to skip the TUI.
 """
@@ -20,7 +20,7 @@ from textual.widgets import Input, Label, RichLog, Static
 logger = logging.getLogger(__name__)
 
 
-class BountySquadTUI(App):
+class CybersquadTUI(App):
     # Textual loads this file automatically via the CSS_PATH class attribute.
     # TODO: feat(themes-and-fonts)
     CSS_PATH = "tui.tcss"
@@ -162,7 +162,7 @@ class BountySquadTUI(App):
 
 
 def _make_task_callback(
-    app: BountySquadTUI, idx: int, orig: Callable[..., None] | None
+    app: CybersquadTUI, idx: int, orig: Callable[..., None] | None
 ) -> Callable[..., None]:
     def _cb(output: object) -> None:
         app.call_from_thread(app._set_task_done, idx)
@@ -172,7 +172,7 @@ def _make_task_callback(
     return _cb
 
 
-def _make_step_callback(app: BountySquadTUI) -> Callable[[object], None]:
+def _make_step_callback(app: CybersquadTUI) -> Callable[[object], None]:
     def _cb(step: object) -> None:
         try:
             from crewai.agents.parser import AgentAction, AgentFinish
@@ -195,7 +195,7 @@ def _make_step_callback(app: BountySquadTUI) -> Callable[[object], None]:
 
 
 class _TUILogHandler(logging.Handler):
-    def __init__(self, app: BountySquadTUI) -> None:
+    def __init__(self, app: CybersquadTUI) -> None:
         super().__init__()
         self._app = app
 

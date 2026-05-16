@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# install-tools.sh - Install external binaries required by the Bounty Squad pipeline.
+# install-tools.sh - Install external binaries required by the cybersquad pipeline.
 #
 # Targets Ubuntu/Debian (WSL). Run once before your first pipeline run.
 # Safe to re-run - skips tools that are already on PATH.

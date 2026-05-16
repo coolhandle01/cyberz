@@ -1,5 +1,5 @@
 """
-config.py - Central configuration for the Bounty Squad pipeline.
+config.py - Central configuration for the cybersquad pipeline.
 Load secrets from environment variables; never hardcode credentials.
 """
 

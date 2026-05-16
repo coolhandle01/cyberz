@@ -94,7 +94,7 @@ _REPORT_TEMPLATE = """\
 
 ---
 
-*Report generated {timestamp} by Bounty Squad.*
+*Report generated {timestamp} by cybersquad.*
 """
 
 

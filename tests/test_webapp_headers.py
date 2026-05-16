@@ -131,7 +131,7 @@ class TestCheckHeaderInjectionCrlf:
     def test_detects_reflected_canary_in_response_headers(self):
         endpoint = Endpoint(url="https://api.example.com/", status_code=200)
         mock_resp = MagicMock()
-        mock_resp.headers = {"BountySquadCanary": "yes"}
+        mock_resp.headers = {"CybersquadCanary": "yes"}
         mock_resp.text = ""
 
         with patch("requests.get", return_value=mock_resp):

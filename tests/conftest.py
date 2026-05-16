@@ -1,5 +1,5 @@
 """
-tests/conftest.py - shared fixtures for the Bounty Squad test suite.
+tests/conftest.py - shared fixtures for the cybersquad test suite.
 """
 
 from __future__ import annotations

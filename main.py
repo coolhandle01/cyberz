@@ -1,5 +1,5 @@
 """
-main.py - Bounty Squad pipeline entrypoint.
+main.py - cybersquad pipeline entrypoint.
 
 Usage:
     python main.py              # launch the Textual TUI (default)
@@ -52,7 +52,7 @@ logger = logging.getLogger("cybersquad")
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Bounty Squad - autonomous bug bounty pipeline",
+        description="cybersquad - autonomous bug bounty pipeline",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
@@ -108,9 +108,9 @@ def main() -> None:
     check_env()
 
     if not args.headless and not args.dry_run:
-        from tui import BountySquadTUI
+        from tui import CybersquadTUI
 
-        BountySquadTUI(verbose=args.verbose).run()
+        CybersquadTUI(verbose=args.verbose).run()
         return
 
     # Import crew after env check
@@ -129,7 +129,7 @@ def main() -> None:
     runtime.run_id = run_id
     started_at = datetime.now(UTC)
 
-    console.rule("[bold]Bounty Squad[/bold]")
+    console.rule("[bold]cybersquad[/bold]")
     logger.info(
         "run=%s  model=%s  min_bounty=$%s  min_severity=%s",
         run_id,
