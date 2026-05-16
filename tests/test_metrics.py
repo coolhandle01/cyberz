@@ -8,9 +8,20 @@ from pathlib import Path
 
 import pytest
 
-from tools.metrics import build_run_metrics, estimate_cost, print_metrics, save_metrics
+from tools.metrics import build_run_metrics, estimate_cost, parse_llm, print_metrics, save_metrics
 
 pytestmark = pytest.mark.unit
+
+
+class TestParseLlm:
+    def test_with_provider(self) -> None:
+        assert parse_llm("anthropic/claude-sonnet-4") == ("anthropic", "claude-sonnet-4")
+
+    def test_without_provider(self) -> None:
+        assert parse_llm("claude-sonnet-4") == ("", "claude-sonnet-4")
+
+    def test_multiple_slashes_uses_last(self) -> None:
+        assert parse_llm("org/team/claude-sonnet-4") == ("org/team", "claude-sonnet-4")
 
 
 class TestEstimateCost:
