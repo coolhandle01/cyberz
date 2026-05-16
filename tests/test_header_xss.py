@@ -3,24 +3,24 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from models import Endpoint, Severity
-from tools.pentest.header_xss import XSSHeader, _CANARY_PREFIX, check_header_xss
+from tools.pentest.header_xss import _CANARY_PREFIX, XSSHeader, check_header_xss
 
 pytestmark = pytest.mark.unit
 
 
 def _make_reflecting_fake(
-    make_response: Callable[..., MagicMock],
+    make_response: Callable,
     match_header: str | None = None,
-) -> Callable[..., MagicMock]:
+) -> Callable:
     """Return a fake requests.get that reflects any canary injected into the
     given header (or any header when match_header is None)."""
 
-    def fake_get(url: str, headers: dict | None = None, **kwargs: object) -> MagicMock:
+    def fake_get(url: str, headers: dict | None = None, **kwargs: object) -> object:
         h = headers or {}
         for key, val in h.items():
             if _CANARY_PREFIX in str(val):
@@ -106,7 +106,7 @@ class TestCheckHeaderXss:
         ep = Endpoint(url="https://app.example.com/page", status_code=200)
         call_count = 0
 
-        def fake_get(url: str, headers: dict | None = None, **kwargs: object) -> MagicMock:
+        def fake_get(url: str, headers: dict | None = None, **kwargs: object) -> object:
             nonlocal call_count
             call_count += 1
             first_val = next(iter((headers or {}).values()), "")
@@ -129,7 +129,7 @@ class TestCheckHeaderXss:
         ep = Endpoint(url="https://app.example.com/page", status_code=200)
         seen_canaries: list[str] = []
 
-        def fake_get(url: str, headers: dict | None = None, **kwargs: object) -> MagicMock:
+        def fake_get(url: str, headers: dict | None = None, **kwargs: object) -> object:
             for val in (headers or {}).values():
                 if _CANARY_PREFIX in str(val):
                     seen_canaries.append(str(val))
@@ -145,7 +145,7 @@ class TestCheckHeaderXss:
         ep = Endpoint(url="https://app.example.com/page", status_code=200)
         probed: set[str] = set()
 
-        def fake_get(url: str, headers: dict | None = None, **kwargs: object) -> MagicMock:
+        def fake_get(url: str, headers: dict | None = None, **kwargs: object) -> object:
             for key, val in (headers or {}).items():
                 if _CANARY_PREFIX in str(val):
                     probed.add(key)
@@ -183,7 +183,7 @@ class TestCheckHeaderXss:
         ep = Endpoint(url="https://app.example.com/page", status_code=200)
         canaries: list[str] = []
 
-        def fake_get(url: str, headers: dict | None = None, **kwargs: object) -> MagicMock:
+        def fake_get(url: str, headers: dict | None = None, **kwargs: object) -> object:
             for val in (headers or {}).values():
                 if _CANARY_PREFIX in str(val):
                     canaries.append(str(val))
