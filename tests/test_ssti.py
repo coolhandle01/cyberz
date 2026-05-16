@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -12,32 +13,21 @@ from tools.pentest.ssti import _EXPECTED, _PROBES, SstiPayload, check_ssti
 pytestmark = pytest.mark.unit
 
 
-def _resp(status: int = 200, body: str = "") -> MagicMock:
-    resp = MagicMock()
-    resp.status_code = status
-    resp.text = body
-    return resp
-
-
-def _echo(url: str) -> MagicMock:
-    """Echo the URL parameter back literally - simulates naive reflection
-    where no template engine is involved. Triggers the literal-absence
-    guard so no probe should fire against this response."""
-    payload = url.split("=", 1)[1] if "=" in url else ""
-    return _resp(body=f"<html>Echo: {payload}</html>")
-
-
 class TestCheckSSTI:
-    def test_detects_jinja_style_evaluation(self):
+    def test_detects_jinja_style_evaluation(self, make_response: Callable[..., MagicMock]) -> None:
         ep = Endpoint(url="https://app.example.com/preview", status_code=200, parameters=["name"])
 
-        def fake_get(url, **kwargs):
+        def echo(url: str) -> MagicMock:
+            payload = url.split("=", 1)[1] if "=" in url else ""
+            return make_response(body=f"<html>Echo: {payload}</html>")
+
+        def fake_get(url, **kwargs) -> MagicMock:
             # Server evaluates {{x+y}} - Jinja2/Twig path. The Jinja2 probe
             # is first in the iteration order so it wins before any other
             # {{...}} payload (Liquid, Django) is even sent.
             if "{{" in url and "+" in url:
-                return _resp(body=f"<html>Hello {_EXPECTED}</html>")
-            return _echo(url)
+                return make_response(body=f"<html>Hello {_EXPECTED}</html>")
+            return echo(url)
 
         with patch("requests.get", side_effect=fake_get):
             results = check_ssti([ep])
@@ -48,14 +38,18 @@ class TestCheckSSTI:
         assert _EXPECTED in results[0].evidence
         assert "Jinja2" in results[0].evidence
 
-    def test_detects_dollar_brace_engine(self):
+    def test_detects_dollar_brace_engine(self, make_response: Callable[..., MagicMock]) -> None:
         ep = Endpoint(url="https://app.example.com/render", status_code=200, parameters=["tpl"])
 
-        def fake_get(url, **kwargs):
+        def echo(url: str) -> MagicMock:
+            payload = url.split("=", 1)[1] if "=" in url else ""
+            return make_response(body=f"<html>Echo: {payload}</html>")
+
+        def fake_get(url, **kwargs) -> MagicMock:
             # Only Mako-style ${...} triggers; everything else is echoed.
             if "${" in url:
-                return _resp(body=f"Result: {_EXPECTED}")
-            return _echo(url)
+                return make_response(body=f"Result: {_EXPECTED}")
+            return echo(url)
 
         with patch("requests.get", side_effect=fake_get):
             results = check_ssti([ep])
@@ -63,16 +57,20 @@ class TestCheckSSTI:
         assert len(results) == 1
         assert "Mako" in results[0].evidence or "FreeMarker" in results[0].evidence
 
-    def test_detects_liquid_plus_filter(self):
+    def test_detects_liquid_plus_filter(self, make_response: Callable[..., MagicMock]) -> None:
         # Liquid has no infix arithmetic - it can only do `{{ x | plus: y }}`.
         # The probe must fire on that signature specifically (not the Jinja2/
         # Twig {{x+y}} form which Liquid would render literally).
         ep = Endpoint(url="https://app.example.com/preview", status_code=200, parameters=["name"])
 
-        def fake_get(url, **kwargs):
+        def echo(url: str) -> MagicMock:
+            payload = url.split("=", 1)[1] if "=" in url else ""
+            return make_response(body=f"<html>Echo: {payload}</html>")
+
+        def fake_get(url, **kwargs) -> MagicMock:
             if "| plus:" in url:
-                return _resp(body=f"<html>Total: {_EXPECTED}</html>")
-            return _echo(url)
+                return make_response(body=f"<html>Total: {_EXPECTED}</html>")
+            return echo(url)
 
         with patch("requests.get", side_effect=fake_get):
             results = check_ssti([ep])
@@ -81,16 +79,20 @@ class TestCheckSSTI:
         assert "Liquid" in results[0].evidence
         assert _EXPECTED in results[0].evidence
 
-    def test_detects_django_add_filter(self):
+    def test_detects_django_add_filter(self, make_response: Callable[..., MagicMock]) -> None:
         # Django does not evaluate raw arithmetic in {{ }} but it does
         # evaluate its built-in filter chain - the |add: filter does integer
         # addition. Only fire when the Django payload signature shows up.
         ep = Endpoint(url="https://app.example.com/preview", status_code=200, parameters=["name"])
 
-        def fake_get(url, **kwargs):
+        def echo(url: str) -> MagicMock:
+            payload = url.split("=", 1)[1] if "=" in url else ""
+            return make_response(body=f"<html>Echo: {payload}</html>")
+
+        def fake_get(url, **kwargs) -> MagicMock:
             if "|add:" in url:
-                return _resp(body=f"<html>Total: {_EXPECTED}</html>")
-            return _echo(url)
+                return make_response(body=f"<html>Total: {_EXPECTED}</html>")
+            return echo(url)
 
         with patch("requests.get", side_effect=fake_get):
             results = check_ssti([ep])
@@ -99,26 +101,28 @@ class TestCheckSSTI:
         assert "Django" in results[0].evidence
         assert _EXPECTED in results[0].evidence
 
-    def test_no_finding_when_input_is_echoed_literally(self):
+    def test_no_finding_when_input_is_echoed_literally(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         # Page reflects the raw payload (input echo) but does not evaluate it.
         # The literal-absence guard must suppress detection even when the
         # expected sum happens to appear somewhere unrelated on the page.
         ep = Endpoint(url="https://app.example.com/preview", status_code=200, parameters=["name"])
 
-        def fake_get(url, **kwargs):
+        def fake_get(url, **kwargs) -> MagicMock:
             payload = url.split("name=", 1)[1]
-            return _resp(body=f"<html>You said: {payload}. Total {_EXPECTED}.</html>")
+            return make_response(body=f"<html>You said: {payload}. Total {_EXPECTED}.</html>")
 
         with patch("requests.get", side_effect=fake_get):
             results = check_ssti([ep])
 
         assert results == []
 
-    def test_no_finding_when_expected_absent(self):
+    def test_no_finding_when_expected_absent(self, make_response: Callable[..., MagicMock]) -> None:
         ep = Endpoint(url="https://app.example.com/preview", status_code=200, parameters=["name"])
 
-        def fake_get(url, **kwargs):
-            return _resp(body="<html>Hello world</html>")
+        def fake_get(url, **kwargs) -> MagicMock:
+            return make_response(body="<html>Hello world</html>")
 
         with patch("requests.get", side_effect=fake_get):
             results = check_ssti([ep])
@@ -139,15 +143,15 @@ class TestCheckSSTI:
         mock_get.assert_not_called()
         assert results == []
 
-    def test_one_finding_per_endpoint(self):
+    def test_one_finding_per_endpoint(self, make_response: Callable[..., MagicMock]) -> None:
         ep = Endpoint(
             url="https://app.example.com/preview",
             status_code=200,
             parameters=["name", "title"],
         )
 
-        def fake_get(url, **kwargs):
-            return _resp(body=f"Hello {_EXPECTED}!")
+        def fake_get(url, **kwargs) -> MagicMock:
+            return make_response(body=f"Hello {_EXPECTED}!")
 
         with patch("requests.get", side_effect=fake_get) as mock_get:
             results = check_ssti([ep])
@@ -190,16 +194,18 @@ class TestCheckSSTI:
         assert any("| plus:" in p for p in payloads)
         assert any("|add:" in p for p in payloads)
 
-    def test_payload_filter_restricts_to_named_engines(self):
+    def test_payload_filter_restricts_to_named_engines(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         # When the agent knows the stack is Jinja2 it should only fire that
         # one probe - five other engine probes must be skipped.
         ep = Endpoint(url="https://app.example.com/preview", status_code=200, parameters=["name"])
 
         seen_urls: list[str] = []
 
-        def record(url, **_):
+        def record(url, **_) -> MagicMock:
             seen_urls.append(url)
-            return _resp(body="<html>no eval</html>")
+            return make_response(body="<html>no eval</html>")
 
         with patch("requests.get", side_effect=record):
             check_ssti([ep], payload_names=[SstiPayload.jinja2])
@@ -209,15 +215,21 @@ class TestCheckSSTI:
         joined = " ".join(seen_urls)
         assert "%7B%7B" in joined or "{{" in joined
 
-    def test_payload_filter_finding_uses_engine_label_in_evidence(self):
+    def test_payload_filter_finding_uses_engine_label_in_evidence(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         # The agent picked "django" by name; the finding evidence must still
         # carry the verbose engine label so reports name what was probed.
         ep = Endpoint(url="https://app.example.com/preview", status_code=200, parameters=["name"])
 
-        def fake_get(url, **_):
+        def echo(url: str) -> MagicMock:
+            payload = url.split("=", 1)[1] if "=" in url else ""
+            return make_response(body=f"<html>Echo: {payload}</html>")
+
+        def fake_get(url, **_) -> MagicMock:
             if "|add:" in url:
-                return _resp(body=f"<html>Total: {_EXPECTED}</html>")
-            return _echo(url)
+                return make_response(body=f"<html>Total: {_EXPECTED}</html>")
+            return echo(url)
 
         with patch("requests.get", side_effect=fake_get):
             results = check_ssti([ep], payload_names=[SstiPayload.django])

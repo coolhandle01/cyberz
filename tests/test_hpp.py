@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -12,23 +13,16 @@ from tools.pentest.hpp import check_hpp
 pytestmark = pytest.mark.unit
 
 
-def _resp(status: int = 200, body: str = "") -> MagicMock:
-    resp = MagicMock()
-    resp.status_code = status
-    resp.text = body
-    return resp
-
-
 class TestCheckHPP:
-    def test_detects_status_delta(self):
+    def test_detects_status_delta(self, make_response: Callable[..., MagicMock]) -> None:
         # Baseline returns 200, polluted returns 302 - server picked one of
         # the duplicate values and triggered a redirect.
         ep = Endpoint(url="https://app.example.com/", status_code=200, parameters=["id"])
 
-        def fake_get(url, **kwargs):
+        def fake_get(url, **kwargs) -> MagicMock:
             if "id=1&id=2" in url:
-                return _resp(status=302, body="")
-            return _resp(status=200, body="ok")
+                return make_response(status=302, body="")
+            return make_response(status=200, body="ok")
 
         with patch("requests.get", side_effect=fake_get):
             results = check_hpp([ep])
@@ -39,15 +33,15 @@ class TestCheckHPP:
         assert "id" in results[0].evidence
         assert "302" in results[0].evidence
 
-    def test_detects_length_delta(self):
+    def test_detects_length_delta(self, make_response: Callable[..., MagicMock]) -> None:
         # Same status code, but the polluted response body is materially
         # longer because the server combined both values into the output.
         ep = Endpoint(url="https://app.example.com/", status_code=200, parameters=["q"])
 
-        def fake_get(url, **kwargs):
+        def fake_get(url, **kwargs) -> MagicMock:
             if "q=1&q=2" in url:
-                return _resp(status=200, body="results: 1, 2 (combined)")
-            return _resp(status=200, body="results: 1")
+                return make_response(status=200, body="results: 1, 2 (combined)")
+            return make_response(status=200, body="results: 1")
 
         with patch("requests.get", side_effect=fake_get):
             results = check_hpp([ep])
@@ -55,11 +49,13 @@ class TestCheckHPP:
         assert len(results) == 1
         assert "HPP behaviour confirmed" in results[0].evidence
 
-    def test_no_finding_when_responses_identical(self):
+    def test_no_finding_when_responses_identical(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         # Server collapses duplicates - baseline and polluted look the same.
         ep = Endpoint(url="https://app.example.com/", status_code=200, parameters=["id"])
 
-        with patch("requests.get", return_value=_resp(status=200, body="ok")):
+        with patch("requests.get", return_value=make_response(status=200, body="ok")):
             results = check_hpp([ep])
 
         assert results == []
@@ -78,7 +74,7 @@ class TestCheckHPP:
         mock_get.assert_not_called()
         assert results == []
 
-    def test_one_finding_per_endpoint(self):
+    def test_one_finding_per_endpoint(self, make_response: Callable[..., MagicMock]) -> None:
         # First param triggers - subsequent params should not be probed.
         ep = Endpoint(
             url="https://app.example.com/",
@@ -86,10 +82,10 @@ class TestCheckHPP:
             parameters=["a", "b", "c"],
         )
 
-        def fake_get(url, **kwargs):
+        def fake_get(url, **kwargs) -> MagicMock:
             if "a=1&a=2" in url:
-                return _resp(status=200, body="much longer body here than baseline")
-            return _resp(status=200, body="ok")
+                return make_response(status=200, body="much longer body here than baseline")
+            return make_response(status=200, body="ok")
 
         with patch("requests.get", side_effect=fake_get) as mock_get:
             results = check_hpp([ep])
@@ -98,13 +94,13 @@ class TestCheckHPP:
         # Only param 'a' probed: baseline + polluted = 2 calls
         assert mock_get.call_count == 2
 
-    def test_baseline_and_polluted_both_sent(self):
+    def test_baseline_and_polluted_both_sent(self, make_response: Callable[..., MagicMock]) -> None:
         ep = Endpoint(url="https://app.example.com/", status_code=200, parameters=["q"])
         urls_seen: list[str] = []
 
-        def fake_get(url, **kwargs):
+        def fake_get(url, **kwargs) -> MagicMock:
             urls_seen.append(url)
-            return _resp(status=200, body="ok")
+            return make_response(status=200, body="ok")
 
         with patch("requests.get", side_effect=fake_get):
             check_hpp([ep])
@@ -113,7 +109,9 @@ class TestCheckHPP:
         assert any(url.endswith("?q=1&q=2") for url in urls_seen)
         assert len(urls_seen) == 2
 
-    def test_continues_to_next_param_when_first_does_not_trigger(self):
+    def test_continues_to_next_param_when_first_does_not_trigger(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         # Param 'a' shows no delta; param 'b' does. Tool must keep probing.
         ep = Endpoint(
             url="https://app.example.com/",
@@ -121,10 +119,10 @@ class TestCheckHPP:
             parameters=["a", "b"],
         )
 
-        def fake_get(url, **kwargs):
+        def fake_get(url, **kwargs) -> MagicMock:
             if "b=1&b=2" in url:
-                return _resp(status=500, body="error: ambiguous parameter")
-            return _resp(status=200, body="ok")
+                return make_response(status=500, body="error: ambiguous parameter")
+            return make_response(status=200, body="ok")
 
         with patch("requests.get", side_effect=fake_get):
             results = check_hpp([ep])
@@ -138,13 +136,15 @@ class TestCheckHPP:
             results = check_hpp([ep])
         assert results == []
 
-    def test_evidence_records_both_signatures(self):
+    def test_evidence_records_both_signatures(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         ep = Endpoint(url="https://app.example.com/", status_code=200, parameters=["id"])
 
-        def fake_get(url, **kwargs):
+        def fake_get(url, **kwargs) -> MagicMock:
             if "id=1&id=2" in url:
-                return _resp(status=403, body="forbidden")
-            return _resp(status=200, body="ok")
+                return make_response(status=403, body="forbidden")
+            return make_response(status=200, body="ok")
 
         with patch("requests.get", side_effect=fake_get):
             results = check_hpp([ep])

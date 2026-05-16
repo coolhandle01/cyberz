@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -12,19 +13,12 @@ from tools.pentest.ssrf import _SSRF_PAYLOADS, SsrfPayload, check_ssrf
 pytestmark = pytest.mark.unit
 
 
-def _resp(status: int = 200, body: str = "") -> MagicMock:
-    resp = MagicMock()
-    resp.status_code = status
-    resp.text = body
-    return resp
-
-
 class TestCheckSSRF:
-    def test_detects_aws_imds_response(self) -> None:
+    def test_detects_aws_imds_response(self, make_response: Callable[..., MagicMock]) -> None:
         ep = Endpoint(url="https://app.example.com/fetch", status_code=200, parameters=["url"])
 
         body = "ami-id\nami-launch-index\nhostname\n"
-        with patch("requests.get", return_value=_resp(body=body)):
+        with patch("requests.get", return_value=make_response(body=body)):
             results = check_ssrf([ep])
 
         assert len(results) == 1
@@ -32,10 +26,12 @@ class TestCheckSSRF:
         assert results[0].severity_hint == Severity.CRITICAL
         assert "url" in results[0].evidence
 
-    def test_no_finding_when_no_marker_in_response(self) -> None:
+    def test_no_finding_when_no_marker_in_response(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         ep = Endpoint(url="https://app.example.com/fetch", status_code=200, parameters=["url"])
 
-        with patch("requests.get", return_value=_resp(body="<html>nothing here</html>")):
+        with patch("requests.get", return_value=make_response(body="<html>nothing here</html>")):
             results = check_ssrf([ep])
 
         assert results == []
@@ -66,7 +62,9 @@ class TestCheckSSRF:
         # IPv6 loopback for dual-stack servers.
         assert "[::1]" in joined
 
-    def test_payload_filter_restricts_to_named_variants(self) -> None:
+    def test_payload_filter_restricts_to_named_variants(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         # An agent on a known AWS target should be able to fire only the
         # AWS IMDS payload and skip the two loopback probes.
         ep = Endpoint(url="https://app.example.com/fetch", status_code=200, parameters=["url"])
@@ -75,7 +73,7 @@ class TestCheckSSRF:
 
         def record(url: str, **_: object) -> MagicMock:
             seen_urls.append(url)
-            return _resp(body="no metadata here")
+            return make_response(body="no metadata here")
 
         with patch("requests.get", side_effect=record):
             check_ssrf([ep], payload_names=[SsrfPayload.aws_imds])
@@ -87,23 +85,27 @@ class TestCheckSSRF:
         assert "127.0.0.1" not in joined
         assert "%5B%3A%3A1%5D" not in joined  # urlencoded [::1]
 
-    def test_payload_filter_finding_evidence_names_the_variant(self) -> None:
+    def test_payload_filter_finding_evidence_names_the_variant(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         ep = Endpoint(url="https://app.example.com/fetch", status_code=200, parameters=["url"])
 
-        with patch("requests.get", return_value=_resp(body="ami-id")):
+        with patch("requests.get", return_value=make_response(body="ami-id")):
             results = check_ssrf([ep], payload_names=[SsrfPayload.aws_imds])
 
         assert len(results) == 1
         assert "aws-imds" in results[0].evidence
 
-    def test_payload_filter_none_runs_all_variants(self) -> None:
+    def test_payload_filter_none_runs_all_variants(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         ep = Endpoint(url="https://app.example.com/fetch", status_code=200, parameters=["url"])
 
         seen_urls: list[str] = []
 
         def record(url: str, **_: object) -> MagicMock:
             seen_urls.append(url)
-            return _resp(body="clean")
+            return make_response(body="clean")
 
         with patch("requests.get", side_effect=record):
             check_ssrf([ep], payload_names=None)
