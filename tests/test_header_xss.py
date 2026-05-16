@@ -73,7 +73,7 @@ class TestCheckHeaderXss:
 
         with patch(
             "requests.get",
-            return_value=make_response(body="<html>&lt;bountysquad-hxss-test&gt;</html>"),
+            return_value=make_response(body="<html>&lt;cybersquad-hxss-test&gt;</html>"),
         ):
             results = check_header_xss([ep])
 

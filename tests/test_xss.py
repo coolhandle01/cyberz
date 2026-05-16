@@ -36,7 +36,7 @@ class TestCheckReflectedXss:
         def fake_get(url, **kwargs):
             resp = MagicMock()
             # Application HTML-encodes < and >
-            resp.text = "<html><body>Results for &lt;bountysquad-xss-test&gt;</body></html>"
+            resp.text = "<html><body>Results for &lt;cybersquad-xss-test&gt;</body></html>"
             return resp
 
         with patch("requests.get", side_effect=fake_get):

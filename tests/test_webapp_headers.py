@@ -21,7 +21,7 @@ class TestCheckHostHeadersReflection:
     def test_detects_canary_host_in_response_body(self):
         endpoint = Endpoint(url="https://app.example.com/", status_code=200)
         mock_resp = MagicMock()
-        mock_resp.text = "href=https://bountysquad-canary.invalid/reset"
+        mock_resp.text = "href=https://cybersquad-canary.invalid/reset"
         mock_resp.headers = {}
 
         with patch("requests.get", return_value=mock_resp):
@@ -35,7 +35,7 @@ class TestCheckHostHeadersReflection:
         endpoint = Endpoint(url="https://app.example.com/", status_code=200)
         mock_resp = MagicMock()
         mock_resp.text = "redirecting..."
-        mock_resp.headers = {"Location": "https://bountysquad-canary.invalid/login"}
+        mock_resp.headers = {"Location": "https://cybersquad-canary.invalid/login"}
 
         with patch("requests.get", return_value=mock_resp):
             results = check_host_headers([endpoint])
@@ -67,7 +67,7 @@ class TestCheckHostHeadersReflection:
             Endpoint(url="https://app.example.com/page2", status_code=200),
         ]
         mock_resp = MagicMock()
-        mock_resp.text = "bountysquad-canary.invalid in body"
+        mock_resp.text = "cybersquad-canary.invalid in body"
         mock_resp.headers = {}
 
         call_count = 0
