@@ -1,6 +1,6 @@
 # CI
 
-Three jobs run on every push: `lint` (ruff + mypy), `test` (pytest, 70% coverage floor), and `sast` (bandit + semgrep). The local commands in the pre-commit checklist in `CLAUDE.md` mirror them exactly - use those.
+Three jobs run on every push: `lint` (ruff + mypy), `test` (pytest, 88% coverage floor), and `sast` (bandit + semgrep). The local commands in the pre-commit checklist in `CLAUDE.md` mirror them exactly - use those.
 
 ## Notes on fixing findings
 
