@@ -18,6 +18,7 @@ from textual.widgets import Input, Label, RichLog, Static
 
 
 class BountySquadTUI(App):
+    # Textual loads this file automatically via the CSS_PATH class attribute.
     # TODO: feat(themes-and-fonts)
     CSS_PATH = "tui.tcss"
 
