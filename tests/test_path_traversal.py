@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from collections.abc import Callable
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -20,7 +21,7 @@ _WIN_INI_BODY = "; for 16-bit app support\n[fonts]\n[extensions]\n"
 
 
 class TestCheckPathTraversal:
-    def test_detects_linux_passwd_marker(self, make_response):
+    def test_detects_linux_passwd_marker(self, make_response: Callable[..., MagicMock]) -> None:
         ep = Endpoint(url="https://app.example.com/download", status_code=200, parameters=["file"])
 
         with patch("requests.get", return_value=make_response(body=_PASSWD_BODY)):
@@ -32,10 +33,10 @@ class TestCheckPathTraversal:
         assert "file" in results[0].evidence
         assert "root:x:0:0:" in results[0].evidence
 
-    def test_detects_windows_win_ini_marker(self, make_response):
+    def test_detects_windows_win_ini_marker(self, make_response: Callable[..., MagicMock]) -> None:
         ep = Endpoint(url="https://app.example.com/view", status_code=200, parameters=["page"])
 
-        def fake_get(url, **kwargs):
+        def fake_get(url, **kwargs) -> MagicMock:
             # Only respond with win.ini content when the Windows payload is sent
             if "windows" in url.lower() and "win.ini" in url.lower():
                 return make_response(body=_WIN_INI_BODY)
@@ -47,12 +48,14 @@ class TestCheckPathTraversal:
         assert len(results) == 1
         assert "for 16-bit app support" in results[0].evidence
 
-    def test_detects_url_encoded_payload_only(self, make_response):
+    def test_detects_url_encoded_payload_only(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         # Server sanitises plain "../" but not "%2f" - the encoded variant
         # must still be tried so this is detected.
         ep = Endpoint(url="https://app.example.com/dl", status_code=200, parameters=["f"])
 
-        def fake_get(url, **kwargs):
+        def fake_get(url, **kwargs) -> MagicMock:
             # Plain "../" is stripped by the (fake) server's filter
             if "../" in url:
                 return make_response(body="forbidden")
@@ -66,7 +69,7 @@ class TestCheckPathTraversal:
         assert len(results) == 1
         assert "%2f" in results[0].evidence.lower()
 
-    def test_no_finding_when_marker_absent(self, make_response):
+    def test_no_finding_when_marker_absent(self, make_response: Callable[..., MagicMock]) -> None:
         ep = Endpoint(url="https://app.example.com/download", status_code=200, parameters=["file"])
 
         with patch("requests.get", return_value=make_response(body="<html>Not Found</html>")):
@@ -74,7 +77,9 @@ class TestCheckPathTraversal:
 
         assert results == []
 
-    def test_no_false_positive_when_only_word_root_present(self, make_response):
+    def test_no_false_positive_when_only_word_root_present(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         # Body mentions "root" but not the unique "root:x:0:0:" prefix - the
         # marker check must be strict enough to skip this.
         ep = Endpoint(url="https://app.example.com/download", status_code=200, parameters=["file"])
@@ -98,7 +103,9 @@ class TestCheckPathTraversal:
         mock_get.assert_not_called()
         assert results == []
 
-    def test_one_finding_per_endpoint_even_with_multiple_vuln_params(self, make_response):
+    def test_one_finding_per_endpoint_even_with_multiple_vuln_params(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         ep = Endpoint(
             url="https://app.example.com/dl",
             status_code=200,
@@ -110,7 +117,7 @@ class TestCheckPathTraversal:
 
         assert len(results) == 1
 
-    def test_stops_calling_after_first_match(self, make_response):
+    def test_stops_calling_after_first_match(self, make_response: Callable[..., MagicMock]) -> None:
         # Once we have a finding for an endpoint we should not keep firing
         # additional payloads against later parameters.
         ep = Endpoint(
@@ -142,14 +149,16 @@ class TestCheckPathTraversal:
         assert "%00" in joined
         assert "\\" in joined
 
-    def test_payload_filter_restricts_to_named_variants(self, make_response):
+    def test_payload_filter_restricts_to_named_variants(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         # Asking for just the Linux variants should skip both Windows probes
         # entirely - useful when recon already confirms the target OS.
         ep = Endpoint(url="https://app.example.com/dl", status_code=200, parameters=["file"])
 
         seen_urls: list[str] = []
 
-        def record(url, **_):
+        def record(url, **_) -> MagicMock:
             seen_urls.append(url)
             return make_response(body="not found")
 
@@ -168,7 +177,9 @@ class TestCheckPathTraversal:
         assert "win.ini" not in joined.lower()
         assert "windows" not in joined.lower()
 
-    def test_payload_filter_finding_evidence_names_the_variant(self, make_response):
+    def test_payload_filter_finding_evidence_names_the_variant(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         ep = Endpoint(url="https://app.example.com/dl", status_code=200, parameters=["file"])
 
         with patch("requests.get", return_value=make_response(body=_PASSWD_BODY)):
@@ -179,12 +190,14 @@ class TestCheckPathTraversal:
         assert len(results) == 1
         assert "unix-null-byte" in results[0].evidence
 
-    def test_payload_filter_none_runs_all_variants(self, make_response):
+    def test_payload_filter_none_runs_all_variants(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         ep = Endpoint(url="https://app.example.com/dl", status_code=200, parameters=["file"])
 
         seen_urls: list[str] = []
 
-        def record(url, **_):
+        def record(url, **_) -> MagicMock:
             seen_urls.append(url)
             return make_response(body="not found")
 

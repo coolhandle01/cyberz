@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from collections.abc import Callable
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -13,7 +14,7 @@ pytestmark = pytest.mark.unit
 
 
 class TestCheckSSRF:
-    def test_detects_aws_imds_response(self, make_response) -> None:
+    def test_detects_aws_imds_response(self, make_response: Callable[..., MagicMock]) -> None:
         ep = Endpoint(url="https://app.example.com/fetch", status_code=200, parameters=["url"])
 
         body = "ami-id\nami-launch-index\nhostname\n"
@@ -25,7 +26,9 @@ class TestCheckSSRF:
         assert results[0].severity_hint == Severity.CRITICAL
         assert "url" in results[0].evidence
 
-    def test_no_finding_when_no_marker_in_response(self, make_response) -> None:
+    def test_no_finding_when_no_marker_in_response(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         ep = Endpoint(url="https://app.example.com/fetch", status_code=200, parameters=["url"])
 
         with patch("requests.get", return_value=make_response(body="<html>nothing here</html>")):
@@ -59,14 +62,16 @@ class TestCheckSSRF:
         # IPv6 loopback for dual-stack servers.
         assert "[::1]" in joined
 
-    def test_payload_filter_restricts_to_named_variants(self, make_response) -> None:
+    def test_payload_filter_restricts_to_named_variants(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         # An agent on a known AWS target should be able to fire only the
         # AWS IMDS payload and skip the two loopback probes.
         ep = Endpoint(url="https://app.example.com/fetch", status_code=200, parameters=["url"])
 
         seen_urls: list[str] = []
 
-        def record(url: str, **_: object):
+        def record(url: str, **_: object) -> MagicMock:
             seen_urls.append(url)
             return make_response(body="no metadata here")
 
@@ -80,7 +85,9 @@ class TestCheckSSRF:
         assert "127.0.0.1" not in joined
         assert "%5B%3A%3A1%5D" not in joined  # urlencoded [::1]
 
-    def test_payload_filter_finding_evidence_names_the_variant(self, make_response) -> None:
+    def test_payload_filter_finding_evidence_names_the_variant(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         ep = Endpoint(url="https://app.example.com/fetch", status_code=200, parameters=["url"])
 
         with patch("requests.get", return_value=make_response(body="ami-id")):
@@ -89,12 +96,14 @@ class TestCheckSSRF:
         assert len(results) == 1
         assert "aws-imds" in results[0].evidence
 
-    def test_payload_filter_none_runs_all_variants(self, make_response) -> None:
+    def test_payload_filter_none_runs_all_variants(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         ep = Endpoint(url="https://app.example.com/fetch", status_code=200, parameters=["url"])
 
         seen_urls: list[str] = []
 
-        def record(url: str, **_: object):
+        def record(url: str, **_: object) -> MagicMock:
             seen_urls.append(url)
             return make_response(body="clean")
 

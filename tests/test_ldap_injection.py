@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -26,7 +27,7 @@ def _baseline_or_probe(url: str, baseline_resp: MagicMock, probe_resp: MagicMock
 
 
 class TestCheckLDAPInjection:
-    def test_detects_auth_bypass_high(self, make_response) -> None:
+    def test_detects_auth_bypass_high(self, make_response: Callable[..., MagicMock]) -> None:
         ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["username"])
 
         with patch(
@@ -45,7 +46,9 @@ class TestCheckLDAPInjection:
         assert "auth-bypass" in results[0].evidence or "bypass" in results[0].evidence.lower()
         assert "username" in results[0].evidence
 
-    def test_detects_ldap_error_marker_medium(self, make_response) -> None:
+    def test_detects_ldap_error_marker_medium(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         ep = Endpoint(url="https://app.example.com/search", status_code=200, parameters=["q"])
 
         with patch(
@@ -62,7 +65,9 @@ class TestCheckLDAPInjection:
         assert results[0].severity_hint == Severity.MEDIUM
         assert "javax.naming" in results[0].evidence
 
-    def test_detects_server_error_on_payload_medium(self, make_response) -> None:
+    def test_detects_server_error_on_payload_medium(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         ep = Endpoint(url="https://app.example.com/auth", status_code=200, parameters=["user"])
 
         with patch(
@@ -79,7 +84,7 @@ class TestCheckLDAPInjection:
         assert results[0].severity_hint == Severity.MEDIUM
         assert "500" in results[0].evidence
 
-    def test_no_finding_on_clean_response(self, make_response) -> None:
+    def test_no_finding_on_clean_response(self, make_response: Callable[..., MagicMock]) -> None:
         ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["username"])
 
         with patch(
@@ -107,7 +112,9 @@ class TestCheckLDAPInjection:
         mock_get.assert_not_called()
         assert results == []
 
-    def test_one_finding_per_endpoint_with_multiple_params(self, make_response) -> None:
+    def test_one_finding_per_endpoint_with_multiple_params(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         ep = Endpoint(
             url="https://app.example.com/login",
             status_code=200,
@@ -126,7 +133,7 @@ class TestCheckLDAPInjection:
 
         assert len(results) == 1
 
-    def test_stops_probing_after_first_match(self, make_response) -> None:
+    def test_stops_probing_after_first_match(self, make_response: Callable[..., MagicMock]) -> None:
         ep = Endpoint(
             url="https://app.example.com/login",
             status_code=200,
@@ -146,10 +153,10 @@ class TestCheckLDAPInjection:
         # One baseline + one payload before match - should stop immediately.
         assert mock_get.call_count == 2
 
-    def test_baseline_exception_skips_param(self, make_response) -> None:
+    def test_baseline_exception_skips_param(self, make_response: Callable[..., MagicMock]) -> None:
         ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["username"])
 
-        def raise_on_baseline(url: str, **kw: object):
+        def raise_on_baseline(url: str, **kw: object) -> MagicMock:
             if _BASELINE_VALUE in url:
                 raise OSError("connection refused")
             return make_response(status=200, body="Welcome!")
@@ -159,10 +166,10 @@ class TestCheckLDAPInjection:
 
         assert results == []
 
-    def test_probe_exception_is_swallowed(self, make_response) -> None:
+    def test_probe_exception_is_swallowed(self, make_response: Callable[..., MagicMock]) -> None:
         ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["username"])
 
-        def raise_on_probe(url: str, **kw: object):
+        def raise_on_probe(url: str, **kw: object) -> MagicMock:
             if _BASELINE_VALUE in url:
                 return make_response(status=401, body="bad")
             raise OSError("timeout")
@@ -172,7 +179,9 @@ class TestCheckLDAPInjection:
 
         assert results == []
 
-    def test_deduplicates_across_multiple_endpoints_same_url(self, make_response) -> None:
+    def test_deduplicates_across_multiple_endpoints_same_url(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         ep1 = Endpoint(
             url="https://app.example.com/login", status_code=200, parameters=["username"]
         )
@@ -190,7 +199,7 @@ class TestCheckLDAPInjection:
 
         assert len(results) == 1
 
-    def test_high_takes_priority_over_medium(self, make_response) -> None:
+    def test_high_takes_priority_over_medium(self, make_response: Callable[..., MagicMock]) -> None:
         # Response triggers both a status-code bypass AND an error marker -
         # the finding should be HIGH, not MEDIUM.
         ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["username"])
@@ -221,14 +230,16 @@ class TestCheckLDAPInjection:
         assert "ldap_search" in _LDAP_ERROR_MARKERS
         assert "objectClass" in _LDAP_ERROR_MARKERS
 
-    def test_payload_filter_restricts_to_named_variants(self, make_response) -> None:
+    def test_payload_filter_restricts_to_named_variants(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         # Asking only for auth-bypass should send one baseline + one probe
         # per parameter - the other five payloads must not fire.
         ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["username"])
 
         seen_urls: list[str] = []
 
-        def record(url: str, **_: object):
+        def record(url: str, **_: object) -> MagicMock:
             seen_urls.append(url)
             return make_response(status=401, body="Invalid credentials")
 
@@ -238,7 +249,9 @@ class TestCheckLDAPInjection:
         # 1 baseline + 1 payload only.
         assert len(seen_urls) == 2
 
-    def test_payload_filter_finding_evidence_names_the_variant(self, make_response) -> None:
+    def test_payload_filter_finding_evidence_names_the_variant(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["username"])
 
         with patch(
@@ -254,12 +267,14 @@ class TestCheckLDAPInjection:
         assert len(results) == 1
         assert "boolean-blind-true" in results[0].evidence
 
-    def test_payload_filter_empty_list_is_a_noop(self, make_response) -> None:
+    def test_payload_filter_empty_list_is_a_noop(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["username"])
 
         seen_urls: list[str] = []
 
-        def record(url: str, **_: object):
+        def record(url: str, **_: object) -> MagicMock:
             seen_urls.append(url)
             return make_response(status=401, body="bad")
 

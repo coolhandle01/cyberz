@@ -6,8 +6,9 @@ import base64
 import hashlib
 import hmac
 import json
+from collections.abc import Callable
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -90,7 +91,7 @@ class TestHelpers:
 
 
 class TestAlgNone:
-    def test_detects_alg_none_bypass(self, make_response) -> None:
+    def test_detects_alg_none_bypass(self, make_response: Callable[..., MagicMock]) -> None:
         token = _make_token({"alg": "HS256", "typ": "JWT"}, {"sub": "1", "role": "user"})
         with patch("requests.get", return_value=make_response(status=200, body="{}")):
             results = check_jwt(token, _ENDPOINT)
@@ -98,13 +99,15 @@ class TestAlgNone:
         assert len(alg_none) == 1
         assert alg_none[0].severity_hint == Severity.CRITICAL
 
-    def test_no_finding_when_none_rejected(self, make_response) -> None:
+    def test_no_finding_when_none_rejected(self, make_response: Callable[..., MagicMock]) -> None:
         token = _make_token({"alg": "HS256", "typ": "JWT"}, {"sub": "1"})
         with patch("requests.get", return_value=make_response(status=401, body="{}")):
             results = check_jwt(token, _ENDPOINT)
         assert not any("alg:none" in r.title for r in results)
 
-    def test_stops_after_first_accepted_variant(self, make_response) -> None:
+    def test_stops_after_first_accepted_variant(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         # Only one alg:none finding should be reported even though 4 variants exist.
         token = _make_token({"alg": "HS256", "typ": "JWT"}, {"sub": "1"})
 
@@ -123,7 +126,7 @@ class TestAlgNone:
 
 
 class TestWeakSecret:
-    def test_detects_weak_secret(self, make_response) -> None:
+    def test_detects_weak_secret(self, make_response: Callable[..., MagicMock]) -> None:
         header = {"alg": "HS256", "typ": "JWT"}
         payload = {"sub": "1", "role": "user"}
         token = _make_hmac_signed_token(header, payload, b"secret")
@@ -136,7 +139,7 @@ class TestWeakSecret:
         assert weak[0].severity_hint == Severity.CRITICAL
         assert "secret" in weak[0].evidence
 
-    def test_no_finding_on_strong_secret(self, make_response) -> None:
+    def test_no_finding_on_strong_secret(self, make_response: Callable[..., MagicMock]) -> None:
         header = {"alg": "HS256", "typ": "JWT"}
         payload = {"sub": "1"}
         token = _make_hmac_signed_token(header, payload, b"v3ryStr0ngS3cr3t!XYZ987")
@@ -146,7 +149,9 @@ class TestWeakSecret:
 
         assert not any("weak HMAC" in r.title for r in results)
 
-    def test_weak_secret_reported_even_without_2xx_replay(self, make_response) -> None:
+    def test_weak_secret_reported_even_without_2xx_replay(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         # Cracking the secret offline is proof enough - even if replay returns 403.
         header = {"alg": "HS256", "typ": "JWT"}
         payload = {"sub": "1"}
@@ -163,10 +168,10 @@ class TestWeakSecret:
         assert "password" in _WEAK_SECRETS
         assert "" in _WEAK_SECRETS
 
-    def test_non_hs_alg_skips_brute_force(self, make_response) -> None:
+    def test_non_hs_alg_skips_brute_force(self, make_response: Callable[..., MagicMock]) -> None:
         token = _make_token({"alg": "RS256", "typ": "JWT"}, {"sub": "1"})
 
-        def fake_get(url: str, **kw: Any):
+        def fake_get(url: str, **kw: Any) -> MagicMock:
             r = make_response(status=404, body="{}")
             r.json.return_value = {}
             return r
@@ -178,10 +183,10 @@ class TestWeakSecret:
 
 
 class TestKidInjection:
-    def test_detects_kid_path_traversal(self, make_response) -> None:
+    def test_detects_kid_path_traversal(self, make_response: Callable[..., MagicMock]) -> None:
         token = _make_token({"alg": "HS256", "typ": "JWT", "kid": "key-1"}, {"sub": "1"})
 
-        def fake_get(url: str, **kw: Any):
+        def fake_get(url: str, **kw: Any) -> MagicMock:
             # Only the path-traversal probe is accepted.
             auth = str(kw.get("headers", {}).get("Authorization", ""))
             t = auth.removeprefix("Bearer ") if "Bearer " in auth else ""
@@ -198,10 +203,10 @@ class TestKidInjection:
         assert trav[0].severity_hint == Severity.CRITICAL
         assert _KID_PATH_TRAVERSAL in trav[0].evidence
 
-    def test_detects_kid_sql_injection(self, make_response) -> None:
+    def test_detects_kid_sql_injection(self, make_response: Callable[..., MagicMock]) -> None:
         token = _make_token({"alg": "HS256", "typ": "JWT", "kid": "key-1"}, {"sub": "1"})
 
-        def fake_get(url: str, **kw: Any):
+        def fake_get(url: str, **kw: Any) -> MagicMock:
             auth = str(kw.get("headers", {}).get("Authorization", ""))
             t = auth.removeprefix("Bearer ") if "Bearer " in auth else ""
             h = _decode_token_part(t, 0) if t else {}
@@ -216,10 +221,10 @@ class TestKidInjection:
         assert len(sqli) == 1
         assert sqli[0].severity_hint == Severity.CRITICAL
 
-    def test_detects_kid_nosql_injection(self, make_response) -> None:
+    def test_detects_kid_nosql_injection(self, make_response: Callable[..., MagicMock]) -> None:
         token = _make_token({"alg": "HS256", "typ": "JWT", "kid": "key-1"}, {"sub": "1"})
 
-        def fake_get(url: str, **kw: Any):
+        def fake_get(url: str, **kw: Any) -> MagicMock:
             auth = str(kw.get("headers", {}).get("Authorization", ""))
             t = auth.removeprefix("Bearer ") if "Bearer " in auth else ""
             h = _decode_token_part(t, 0) if t else {}
@@ -239,7 +244,7 @@ class TestKidInjection:
         assert "$gt" in operators
         assert "$ne" in operators
 
-    def test_kid_attacks_skipped_when_no_kid(self, make_response) -> None:
+    def test_kid_attacks_skipped_when_no_kid(self, make_response: Callable[..., MagicMock]) -> None:
         token = _make_token({"alg": "HS256", "typ": "JWT"}, {"sub": "1"})
         with patch("requests.get", return_value=make_response(status=401, body="{}")):
             results = check_jwt(token, _ENDPOINT)
@@ -248,10 +253,12 @@ class TestKidInjection:
 
 
 class TestClaimsTampering:
-    def test_detects_missing_signature_verification(self, make_response) -> None:
+    def test_detects_missing_signature_verification(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         token = _make_token({"alg": "HS256", "typ": "JWT"}, {"sub": "1", "role": "user"})
 
-        def fake_get(url: str, **kw: Any):
+        def fake_get(url: str, **kw: Any) -> MagicMock:
             # Accept any token with modified payload regardless of signature.
             auth = str(kw.get("headers", {}).get("Authorization", ""))
             if "Bearer " in auth:
@@ -272,7 +279,9 @@ class TestClaimsTampering:
         assert tamper[0].severity_hint == Severity.CRITICAL
         assert "Original signature retained" in tamper[0].evidence
 
-    def test_no_tamper_finding_when_signature_checked(self, make_response) -> None:
+    def test_no_tamper_finding_when_signature_checked(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         token = _make_token({"alg": "HS256", "typ": "JWT"}, {"sub": "1", "role": "user"})
         with patch("requests.get", return_value=make_response(status=401, body="{}")):
             results = check_jwt(token, _ENDPOINT)
@@ -281,7 +290,7 @@ class TestClaimsTampering:
 
 
 class TestRS256Confusion:
-    def test_detects_rs256_hs256_confusion(self, make_response) -> None:
+    def test_detects_rs256_hs256_confusion(self, make_response: Callable[..., MagicMock]) -> None:
         token = _make_token({"alg": "RS256", "typ": "JWT", "kid": "k1"}, {"sub": "1"})
 
         # Minimal self-signed RSA public key as a JWK (tiny key, test only).
@@ -312,7 +321,7 @@ class TestRS256Confusion:
         }
         pem_secret = pub.public_bytes(Encoding.PEM, PublicFormat.SubjectPublicKeyInfo)
 
-        def fake_get(url: str, **kw: Any):
+        def fake_get(url: str, **kw: Any) -> MagicMock:
             if "jwks" in url:
                 r = make_response(status=200, body=json.dumps(jwks_payload))
                 r.json.return_value = jwks_payload
@@ -336,7 +345,7 @@ class TestRS256Confusion:
         assert len(confusion) == 1
         assert confusion[0].severity_hint == Severity.CRITICAL
 
-    def test_rs256_skipped_when_no_jwks(self, make_response) -> None:
+    def test_rs256_skipped_when_no_jwks(self, make_response: Callable[..., MagicMock]) -> None:
         token = _make_token({"alg": "RS256", "typ": "JWT"}, {"sub": "1"})
         with patch("requests.get", return_value=make_response(status=404, body="{}")):
             results = check_jwt(token, _ENDPOINT)
@@ -344,7 +353,7 @@ class TestRS256Confusion:
 
 
 class TestEdgeCases:
-    def test_invalid_token_returns_empty(self, make_response) -> None:
+    def test_invalid_token_returns_empty(self, make_response: Callable[..., MagicMock]) -> None:
         with patch("requests.get", return_value=make_response(status=200, body="{}")):
             results = check_jwt("not.a.jwt", _ENDPOINT)
         assert results == []
@@ -355,7 +364,7 @@ class TestEdgeCases:
             results = check_jwt(token, _ENDPOINT)
         assert isinstance(results, list)
 
-    def test_two_part_token_returns_empty(self, make_response) -> None:
+    def test_two_part_token_returns_empty(self, make_response: Callable[..., MagicMock]) -> None:
         with patch("requests.get", return_value=make_response(status=200, body="{}")):
             results = check_jwt("onlytwoparts.here", _ENDPOINT)
         assert results == []
@@ -372,7 +381,9 @@ class TestAttackFilter:
     def _token_with_kid(self) -> str:
         return _make_token({"alg": "HS256", "kid": "k1", "typ": "JWT"}, {"sub": "1"})
 
-    def test_only_alg_none_runs_when_filtered(self, make_response) -> None:
+    def test_only_alg_none_runs_when_filtered(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         # A token with kid set would normally trigger alg-none + kid-traversal
         # + kid-sqli + kid-nosqli + claims-escalation = 5 attack classes.
         # With attack_names=["alg-none"] we must only see alg-none requests.
@@ -380,7 +391,7 @@ class TestAttackFilter:
 
         replayed_tokens: list[str] = []
 
-        def record(url: str, **kw: Any):
+        def record(url: str, **kw: Any) -> MagicMock:
             auth = str(kw.get("headers", {}).get("Authorization", ""))
             if "Bearer " in auth:
                 replayed_tokens.append(auth.removeprefix("Bearer "))
@@ -395,12 +406,14 @@ class TestAttackFilter:
         for replayed in replayed_tokens:
             assert replayed.endswith(".")
 
-    def test_only_claims_escalation_runs_when_filtered(self, make_response) -> None:
+    def test_only_claims_escalation_runs_when_filtered(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         token = self._token_with_kid()
 
         seen_tokens: list[str] = []
 
-        def record(url: str, **kw: Any):
+        def record(url: str, **kw: Any) -> MagicMock:
             auth = str(kw.get("headers", {}).get("Authorization", ""))
             if "Bearer " in auth:
                 seen_tokens.append(auth.removeprefix("Bearer "))
@@ -415,7 +428,9 @@ class TestAttackFilter:
         orig_sig = token.split(".")[2]
         assert seen_tokens[0].split(".")[2] == orig_sig
 
-    def test_kid_attacks_only_runs_when_filtered(self, make_response) -> None:
+    def test_kid_attacks_only_runs_when_filtered(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         # The agent wants to focus on kid-* attacks because the token has a
         # kid header. Passing the three kid-* attack names should run them
         # all and skip alg-none, weak-secret, and claims-escalation.
@@ -423,7 +438,7 @@ class TestAttackFilter:
 
         replayed: list[str] = []
 
-        def record(url: str, **kw: Any):
+        def record(url: str, **kw: Any) -> MagicMock:
             auth = str(kw.get("headers", {}).get("Authorization", ""))
             if "Bearer " in auth:
                 replayed.append(auth.removeprefix("Bearer "))
@@ -455,14 +470,16 @@ class TestAttackFilter:
         assert results == []
         mock_get.assert_not_called()
 
-    def test_attack_filter_none_runs_every_attack(self, make_response) -> None:
+    def test_attack_filter_none_runs_every_attack(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         # Sanity check: default attack_names=None must run all seven attack
         # blocks (those whose preconditions hold for this token).
         token = self._token_with_kid()
 
         attempted: list[str] = []
 
-        def record(url: str, **kw: Any):
+        def record(url: str, **kw: Any) -> MagicMock:
             auth = str(kw.get("headers", {}).get("Authorization", ""))
             if "Bearer " in auth:
                 attempted.append(auth.removeprefix("Bearer "))
@@ -476,12 +493,14 @@ class TestAttackFilter:
         # alg-confusion needs RS256, claims-escalation always runs once.
         assert len(attempted) == 9
 
-    def test_filtered_finding_evidence_names_the_attack(self, make_response) -> None:
+    def test_filtered_finding_evidence_names_the_attack(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         # When alg-none succeeds, evidence must name the attack class so the
         # agent and report know what fired.
         token = self._token_with_kid()
 
-        def accept_unsigned(url: str, **kw: Any):
+        def accept_unsigned(url: str, **kw: Any) -> MagicMock:
             auth = str(kw.get("headers", {}).get("Authorization", ""))
             if "Bearer " in auth:
                 t = auth.removeprefix("Bearer ")

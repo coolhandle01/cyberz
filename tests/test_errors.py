@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from collections.abc import Callable
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -22,7 +23,7 @@ _ASPNET_ERROR = "Server Error in '/' Application. Runtime Error"
 
 
 class TestCheckErrorDisclosure:
-    def test_detects_python_traceback(self, make_response):
+    def test_detects_python_traceback(self, make_response: Callable[..., MagicMock]) -> None:
         ep = Endpoint(url="https://app.example.com/api", status_code=200, parameters=["id"])
         with patch("requests.get", return_value=make_response(body=_PYTHON_TRACEBACK)):
             results = check_error_disclosure([ep])
@@ -31,56 +32,56 @@ class TestCheckErrorDisclosure:
         assert results[0].severity_hint == Severity.INFORMATIONAL
         assert "Python traceback" in results[0].evidence
 
-    def test_detects_django_debug(self, make_response):
+    def test_detects_django_debug(self, make_response: Callable[..., MagicMock]) -> None:
         ep = Endpoint(url="https://app.example.com/api", status_code=200, parameters=["id"])
         with patch("requests.get", return_value=make_response(body=_DJANGO_ERROR)):
             results = check_error_disclosure([ep])
         assert len(results) == 1
         assert "Django debug" in results[0].evidence
 
-    def test_detects_php_fatal_error(self, make_response):
+    def test_detects_php_fatal_error(self, make_response: Callable[..., MagicMock]) -> None:
         ep = Endpoint(url="https://app.example.com/", status_code=200)
         with patch("requests.get", return_value=make_response(body=_PHP_ERROR)):
             results = check_error_disclosure([ep])
         assert len(results) == 1
         assert "PHP fatal error" in results[0].evidence
 
-    def test_detects_java_stack_trace(self, make_response):
+    def test_detects_java_stack_trace(self, make_response: Callable[..., MagicMock]) -> None:
         ep = Endpoint(url="https://app.example.com/", status_code=200)
         with patch("requests.get", return_value=make_response(body=_JAVA_TRACE)):
             results = check_error_disclosure([ep])
         assert len(results) == 1
         assert "Java stack trace" in results[0].evidence
 
-    def test_detects_mysql_error(self, make_response):
+    def test_detects_mysql_error(self, make_response: Callable[..., MagicMock]) -> None:
         ep = Endpoint(url="https://app.example.com/", status_code=200, parameters=["q"])
         with patch("requests.get", return_value=make_response(body=_MYSQL_ERROR)):
             results = check_error_disclosure([ep])
         assert len(results) == 1
         assert "MySQL error" in results[0].evidence
 
-    def test_detects_oracle_error(self, make_response):
+    def test_detects_oracle_error(self, make_response: Callable[..., MagicMock]) -> None:
         ep = Endpoint(url="https://app.example.com/", status_code=200)
         with patch("requests.get", return_value=make_response(body=_ORACLE_ERROR)):
             results = check_error_disclosure([ep])
         assert len(results) == 1
         assert "Oracle SQL error" in results[0].evidence
 
-    def test_detects_postgresql_error(self, make_response):
+    def test_detects_postgresql_error(self, make_response: Callable[..., MagicMock]) -> None:
         ep = Endpoint(url="https://app.example.com/", status_code=200)
         with patch("requests.get", return_value=make_response(body=_PG_ERROR)):
             results = check_error_disclosure([ep])
         assert len(results) == 1
         assert "PostgreSQL error" in results[0].evidence
 
-    def test_detects_aspnet_error(self, make_response):
+    def test_detects_aspnet_error(self, make_response: Callable[..., MagicMock]) -> None:
         ep = Endpoint(url="https://app.example.com/", status_code=200)
         with patch("requests.get", return_value=make_response(body=_ASPNET_ERROR)):
             results = check_error_disclosure([ep])
         assert len(results) == 1
         assert "ASP.NET" in results[0].evidence
 
-    def test_no_finding_for_clean_response(self, make_response):
+    def test_no_finding_for_clean_response(self, make_response: Callable[..., MagicMock]) -> None:
         ep = Endpoint(url="https://app.example.com/", status_code=200)
         with patch(
             "requests.get", return_value=make_response(body="<html><body>Not Found</body></html>")
@@ -101,18 +102,22 @@ class TestCheckErrorDisclosure:
             results = check_error_disclosure([ep])
         assert results == []
 
-    def test_deduplicates_multiple_probe_hits(self, make_response):
+    def test_deduplicates_multiple_probe_hits(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         """Only one finding per endpoint even if both probe URLs trigger errors."""
         ep = Endpoint(url="https://app.example.com/api", status_code=200, parameters=["id"])
         with patch("requests.get", return_value=make_response(body=_PYTHON_TRACEBACK)):
             results = check_error_disclosure([ep])
         assert len(results) == 1
 
-    def test_probes_404_path_even_without_parameters(self, make_response):
+    def test_probes_404_path_even_without_parameters(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         ep = Endpoint(url="https://app.example.com/", status_code=200)
         seen_urls: list[str] = []
 
-        def recording_get(url, **kwargs):
+        def recording_get(url, **kwargs) -> MagicMock:
             seen_urls.append(url)
             return make_response(body="")
 

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from collections.abc import Callable
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -20,23 +21,23 @@ pytestmark = pytest.mark.unit
 
 
 class TestRedirectTarget:
-    def test_picks_up_location_header(self, make_response):
+    def test_picks_up_location_header(self, make_response: Callable[..., MagicMock]) -> None:
         assert (
             _redirect_target(make_response(status=302, headers={"Location": "https://x/"}))
             == "https://x/"
         )
 
-    def test_picks_up_refresh_header(self, make_response):
+    def test_picks_up_refresh_header(self, make_response: Callable[..., MagicMock]) -> None:
         target = _redirect_target(
             make_response(status=200, headers={"Refresh": "0; url=https://x/"})
         )
         assert target == "https://x/"
 
-    def test_picks_up_meta_refresh(self, make_response):
+    def test_picks_up_meta_refresh(self, make_response: Callable[..., MagicMock]) -> None:
         body = '<html><head><meta http-equiv="refresh" content="0;url=https://x/"></head></html>'
         assert _redirect_target(make_response(status=200, body=body)) == "https://x/"
 
-    def test_returns_none_when_no_redirect(self, make_response):
+    def test_returns_none_when_no_redirect(self, make_response: Callable[..., MagicMock]) -> None:
         assert _redirect_target(make_response(status=200, body="<html>plain page</html>")) is None
 
 
@@ -60,10 +61,10 @@ class TestRedirectsToCanary:
 
 
 class TestCheckOpenRedirect:
-    def test_detects_30x_to_canary(self, make_response):
+    def test_detects_30x_to_canary(self, make_response: Callable[..., MagicMock]) -> None:
         ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["next"])
 
-        def fake_get(url, **kwargs):
+        def fake_get(url, **kwargs) -> MagicMock:
             payload = url.split("next=", 1)[1]
             return make_response(status=302, headers={"Location": payload})
 
@@ -76,10 +77,10 @@ class TestCheckOpenRedirect:
         assert "next" in results[0].evidence
         assert _PAYLOAD_HOST in results[0].evidence
 
-    def test_detects_meta_refresh_redirect(self, make_response):
+    def test_detects_meta_refresh_redirect(self, make_response: Callable[..., MagicMock]) -> None:
         ep = Endpoint(url="https://app.example.com/go", status_code=200, parameters=["dest"])
 
-        def fake_get(url, **kwargs):
+        def fake_get(url, **kwargs) -> MagicMock:
             payload = url.split("dest=", 1)[1]
             body = (
                 f'<html><head><meta http-equiv="refresh" content="0;url={payload}"></head></html>'
@@ -92,11 +93,13 @@ class TestCheckOpenRedirect:
         assert len(results) == 1
         assert "Redirect target" in results[0].evidence
 
-    def test_no_finding_when_redirect_stays_on_origin(self, make_response):
+    def test_no_finding_when_redirect_stays_on_origin(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         # Application sanitises by ignoring our payload and redirecting home
         ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["next"])
 
-        def fake_get(url, **kwargs):
+        def fake_get(url, **kwargs) -> MagicMock:
             return make_response(status=302, headers={"Location": "/dashboard"})
 
         with patch("requests.get", side_effect=fake_get):
@@ -104,10 +107,12 @@ class TestCheckOpenRedirect:
 
         assert results == []
 
-    def test_no_finding_when_no_redirect_at_all(self, make_response):
+    def test_no_finding_when_no_redirect_at_all(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["next"])
 
-        def fake_get(url, **kwargs):
+        def fake_get(url, **kwargs) -> MagicMock:
             return make_response(status=200, body="<html>login form</html>")
 
         with patch("requests.get", side_effect=fake_get):
@@ -129,14 +134,16 @@ class TestCheckOpenRedirect:
         mock_get.assert_not_called()
         assert results == []
 
-    def test_one_finding_per_endpoint_even_with_multiple_vuln_params(self, make_response):
+    def test_one_finding_per_endpoint_even_with_multiple_vuln_params(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         ep = Endpoint(
             url="https://app.example.com/login",
             status_code=200,
             parameters=["next", "return_to"],
         )
 
-        def fake_get(url, **kwargs):
+        def fake_get(url, **kwargs) -> MagicMock:
             # Both params would redirect if probed
             for key in ("next=", "return_to="):
                 if key in url:
@@ -149,11 +156,13 @@ class TestCheckOpenRedirect:
 
         assert len(results) == 1
 
-    def test_protocol_relative_payload_in_location(self, make_response):
+    def test_protocol_relative_payload_in_location(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         # Server normalises a backslash payload to protocol-relative
         ep = Endpoint(url="https://app.example.com/r", status_code=200, parameters=["u"])
 
-        def fake_get(url, **kwargs):
+        def fake_get(url, **kwargs) -> MagicMock:
             return make_response(status=302, headers={"Location": f"//{_PAYLOAD_HOST}/"})
 
         with patch("requests.get", side_effect=fake_get):
@@ -172,14 +181,16 @@ class TestCheckOpenRedirect:
         # if a victim browser followed the redirect, no live service receives it.
         assert _PAYLOAD_HOST.endswith(".invalid")
 
-    def test_payload_filter_restricts_to_named_variants(self, make_response):
+    def test_payload_filter_restricts_to_named_variants(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         # Selecting only "https" should fire one request per parameter,
         # not four.
         ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["next"])
 
         seen_urls: list[str] = []
 
-        def record(url, **_):
+        def record(url, **_) -> MagicMock:
             seen_urls.append(url)
             return make_response(status=200)
 
@@ -188,7 +199,9 @@ class TestCheckOpenRedirect:
 
         assert len(seen_urls) == 1
 
-    def test_payload_filter_finding_evidence_names_the_variant(self, make_response):
+    def test_payload_filter_finding_evidence_names_the_variant(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["next"])
 
         with patch(
@@ -202,12 +215,14 @@ class TestCheckOpenRedirect:
         assert len(results) == 1
         assert "https" in results[0].evidence
 
-    def test_payload_filter_none_runs_all_variants(self, make_response):
+    def test_payload_filter_none_runs_all_variants(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["next"])
 
         seen_urls: list[str] = []
 
-        def record(url, **_):
+        def record(url, **_) -> MagicMock:
             seen_urls.append(url)
             return make_response(status=200)
 

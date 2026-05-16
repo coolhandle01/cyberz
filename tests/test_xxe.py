@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from collections.abc import Callable
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -21,7 +22,9 @@ pytestmark = pytest.mark.unit
 
 
 class TestCheckXXE:
-    def test_detects_linux_file_read_critical(self, make_response) -> None:
+    def test_detects_linux_file_read_critical(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         ep = Endpoint(url="https://app.example.com/soap", status_code=200)
 
         with patch("requests.post", return_value=make_response(body=f"data: {_LINUX_MARKER} more")):
@@ -32,10 +35,12 @@ class TestCheckXXE:
         assert results[0].severity_hint == Severity.CRITICAL
         assert _LINUX_MARKER in results[0].evidence
 
-    def test_detects_windows_file_read_critical(self, make_response) -> None:
+    def test_detects_windows_file_read_critical(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         ep = Endpoint(url="https://app.example.com/xml", status_code=200)
 
-        def fake_post(url: str, **kw: object):
+        def fake_post(url: str, **kw: object) -> MagicMock:
             body = kw.get("data", "")
             if "Windows" in str(body):
                 return make_response(body=f"result {_WIN_MARKER} end")
@@ -48,10 +53,10 @@ class TestCheckXXE:
         assert results[0].severity_hint == Severity.CRITICAL
         assert _WIN_MARKER in results[0].evidence
 
-    def test_detects_xml_parser_error_medium(self, make_response) -> None:
+    def test_detects_xml_parser_error_medium(self, make_response: Callable[..., MagicMock]) -> None:
         ep = Endpoint(url="https://app.example.com/api", status_code=200)
 
-        def fake_post(url: str, **kw: object):
+        def fake_post(url: str, **kw: object) -> MagicMock:
             body = str(kw.get("data", ""))
             # Only the error probe (undefined entity) triggers a parser error.
             if "cybersquad_xxe_probe" in body:
@@ -65,7 +70,9 @@ class TestCheckXXE:
         assert results[0].severity_hint == Severity.MEDIUM
         assert "SAXParseException" in results[0].evidence
 
-    def test_file_read_takes_priority_over_error(self, make_response) -> None:
+    def test_file_read_takes_priority_over_error(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         # Both file marker and XML error present - CRITICAL should win because
         # file-read probes are tried first and stop before error probes run.
         ep = Endpoint(url="https://app.example.com/soap", status_code=200)
@@ -77,7 +84,7 @@ class TestCheckXXE:
         assert len(results) == 1
         assert results[0].severity_hint == Severity.CRITICAL
 
-    def test_no_finding_on_clean_response(self, make_response) -> None:
+    def test_no_finding_on_clean_response(self, make_response: Callable[..., MagicMock]) -> None:
         ep = Endpoint(url="https://app.example.com/api", status_code=200)
 
         with patch("requests.post", return_value=make_response(body="<response>ok</response>")):
@@ -94,7 +101,9 @@ class TestCheckXXE:
         mock_post.assert_not_called()
         assert results == []
 
-    def test_endpoint_without_status_code_is_probed(self, make_response) -> None:
+    def test_endpoint_without_status_code_is_probed(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         # status_code=None means recon didn't record it - still worth trying.
         ep = Endpoint(url="https://app.example.com/soap")
 
@@ -103,7 +112,7 @@ class TestCheckXXE:
 
         assert len(results) == 1
 
-    def test_one_finding_per_endpoint(self, make_response) -> None:
+    def test_one_finding_per_endpoint(self, make_response: Callable[..., MagicMock]) -> None:
         # Even though multiple probes would match, we stop at the first.
         ep = Endpoint(url="https://app.example.com/soap", status_code=200)
 
@@ -112,7 +121,7 @@ class TestCheckXXE:
 
         assert len(results) == 1
 
-    def test_deduplicates_same_url(self, make_response) -> None:
+    def test_deduplicates_same_url(self, make_response: Callable[..., MagicMock]) -> None:
         ep1 = Endpoint(url="https://app.example.com/soap", status_code=200)
         ep2 = Endpoint(url="https://app.example.com/soap", status_code=200)
 
@@ -121,7 +130,9 @@ class TestCheckXXE:
 
         assert len(results) == 1
 
-    def test_multiple_distinct_endpoints_each_get_a_finding(self, make_response) -> None:
+    def test_multiple_distinct_endpoints_each_get_a_finding(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         ep1 = Endpoint(url="https://app.example.com/soap", status_code=200)
         ep2 = Endpoint(url="https://app.example.com/xml-api", status_code=200)
 
@@ -165,14 +176,16 @@ class TestCheckXXE:
         assert "undefined entity" in joined
         assert "expat" in joined
 
-    def test_payload_filter_restricts_to_named_probes(self, make_response) -> None:
+    def test_payload_filter_restricts_to_named_probes(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         # Restricting to only linux-* probes must skip every windows-* probe
         # and every error-* probe.
         ep = Endpoint(url="https://app.example.com/api", status_code=200)
 
         seen_bodies: list[str] = []
 
-        def record(url: str, **kw: object):
+        def record(url: str, **kw: object) -> MagicMock:
             seen_bodies.append(str(kw.get("data", "")))
             return make_response(body="clean")
 
@@ -192,7 +205,9 @@ class TestCheckXXE:
         # No error-only probes (those use a separate body shape).
         assert "cybersquad_xxe_probe" not in joined
 
-    def test_payload_filter_only_error_probes_runs_just_error_tier(self, make_response) -> None:
+    def test_payload_filter_only_error_probes_runs_just_error_tier(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         # The Tier 1 file-read loop only fires if any active file-read probe
         # exists. Restricting to error-* names should skip Tier 1 entirely
         # and go straight to the parser-error probes - exactly what an agent
@@ -201,7 +216,7 @@ class TestCheckXXE:
 
         seen_bodies: list[str] = []
 
-        def record(url: str, **kw: object):
+        def record(url: str, **kw: object) -> MagicMock:
             seen_bodies.append(str(kw.get("data", "")))
             return make_response(body="SAXParseException: undefined entity")
 
@@ -214,7 +229,9 @@ class TestCheckXXE:
         assert len(results) == 1
         assert results[0].severity_hint == Severity.MEDIUM
 
-    def test_payload_filter_finding_evidence_names_the_probe(self, make_response) -> None:
+    def test_payload_filter_finding_evidence_names_the_probe(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         ep = Endpoint(url="https://app.example.com/api", status_code=200)
 
         with patch("requests.post", return_value=make_response(body=_LINUX_MARKER)):

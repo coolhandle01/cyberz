@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from collections.abc import Callable
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -19,7 +20,9 @@ pytestmark = pytest.mark.unit
 
 
 class TestCheckPrototypePollution:
-    def test_detects_canary_in_url_param_get_response(self, make_response) -> None:
+    def test_detects_canary_in_url_param_get_response(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         ep = Endpoint(url="https://app.example.com/api", status_code=200)
 
         # Baseline GET returns clean body; second GET (URL param probe) reflects canary.
@@ -36,7 +39,9 @@ class TestCheckPrototypePollution:
         assert _CANARY in results[0].evidence
         assert "URL parameter" in results[0].evidence
 
-    def test_detects_canary_in_json_post_response(self, make_response) -> None:
+    def test_detects_canary_in_json_post_response(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         ep = Endpoint(url="https://app.example.com/api", status_code=200)
 
         # All GETs return empty; first POST reflects canary.
@@ -60,7 +65,9 @@ class TestCheckPrototypePollution:
         assert _CANARY in results[0].evidence
         assert "JSON body" in results[0].evidence
 
-    def test_no_finding_when_canary_absent_and_no_500(self, make_response) -> None:
+    def test_no_finding_when_canary_absent_and_no_500(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         ep = Endpoint(url="https://app.example.com/api", status_code=200)
 
         with (
@@ -71,7 +78,9 @@ class TestCheckPrototypePollution:
 
         assert results == []
 
-    def test_detects_server_error_after_injection_medium(self, make_response) -> None:
+    def test_detects_server_error_after_injection_medium(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         ep = Endpoint(url="https://app.example.com/api", status_code=200)
 
         baseline = make_response(status=200, body="ok")
@@ -90,7 +99,9 @@ class TestCheckPrototypePollution:
         assert "server error" in results[0].title.lower() or "injection" in results[0].title.lower()
         assert "500" in results[0].evidence
 
-    def test_critical_takes_priority_over_medium(self, make_response) -> None:
+    def test_critical_takes_priority_over_medium(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         ep = Endpoint(url="https://app.example.com/api", status_code=200)
 
         baseline = make_response(status=200, body="ok")
@@ -119,7 +130,7 @@ class TestCheckPrototypePollution:
         mock_post.assert_not_called()
         assert results == []
 
-    def test_deduplicates_same_url(self, make_response) -> None:
+    def test_deduplicates_same_url(self, make_response: Callable[..., MagicMock]) -> None:
         ep1 = Endpoint(url="https://app.example.com/api", status_code=200)
         ep2 = Endpoint(url="https://app.example.com/api", status_code=200)
 
@@ -136,7 +147,9 @@ class TestCheckPrototypePollution:
         # ep2 is a duplicate URL; only one finding expected.
         assert len(results) == 1
 
-    def test_multiple_distinct_endpoints_each_get_a_finding(self, make_response) -> None:
+    def test_multiple_distinct_endpoints_each_get_a_finding(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         ep1 = Endpoint(url="https://app.example.com/api/users", status_code=200)
         ep2 = Endpoint(url="https://app.example.com/api/posts", status_code=200)
 
@@ -176,18 +189,20 @@ class TestCheckPrototypePollution:
         assert "constructor" in serialised
         assert _CANARY in serialised
 
-    def test_payload_filter_restricts_to_json_vector_only(self, make_response) -> None:
+    def test_payload_filter_restricts_to_json_vector_only(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         # Selecting only json-* names should skip the URL GET loop entirely.
         ep = Endpoint(url="https://api.example.com/users", status_code=200)
 
         get_calls: list[str] = []
         post_calls: list[dict] = []
 
-        def record_get(url: str, **_: object):
+        def record_get(url: str, **_: object) -> MagicMock:
             get_calls.append(url)
             return make_response(body="baseline")
 
-        def record_post(url: str, **kw: object):
+        def record_post(url: str, **kw: object) -> MagicMock:
             post_calls.append(kw)
             return make_response(body="no canary")
 
@@ -209,17 +224,19 @@ class TestCheckPrototypePollution:
         # Both JSON POSTs fire.
         assert len(post_calls) == 2
 
-    def test_payload_filter_url_only_skips_json(self, make_response) -> None:
+    def test_payload_filter_url_only_skips_json(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         ep = Endpoint(url="https://api.example.com/users", status_code=200)
 
         get_calls: list[str] = []
         post_calls: list[dict] = []
 
-        def record_get(url: str, **_: object):
+        def record_get(url: str, **_: object) -> MagicMock:
             get_calls.append(url)
             return make_response(body="no canary")
 
-        def record_post(url: str, **kw: object):
+        def record_post(url: str, **kw: object) -> MagicMock:
             post_calls.append(kw)
             return make_response(body="no canary")
 
@@ -236,7 +253,9 @@ class TestCheckPrototypePollution:
         assert len(get_calls) == 2
         assert post_calls == []
 
-    def test_payload_filter_finding_evidence_names_the_variant(self, make_response) -> None:
+    def test_payload_filter_finding_evidence_names_the_variant(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         ep = Endpoint(url="https://api.example.com/users", status_code=200)
 
         with (
@@ -251,7 +270,9 @@ class TestCheckPrototypePollution:
         assert len(results) == 1
         assert "proto-dot" in results[0].evidence
 
-    def test_payload_filter_empty_list_is_a_noop(self, make_response) -> None:
+    def test_payload_filter_empty_list_is_a_noop(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         ep = Endpoint(url="https://api.example.com/users", status_code=200)
 
         with (
@@ -265,7 +286,9 @@ class TestCheckPrototypePollution:
         assert mock_get.call_count == 1
         mock_post.assert_not_called()
 
-    def test_endpoint_with_none_status_code_is_probed(self, make_response) -> None:
+    def test_endpoint_with_none_status_code_is_probed(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         # status_code=None means the endpoint was discovered but not yet probed.
         ep = Endpoint(url="https://app.example.com/api", status_code=None)
 
@@ -278,7 +301,9 @@ class TestCheckPrototypePollution:
         assert len(results) == 1
         assert results[0].severity_hint == Severity.CRITICAL
 
-    def test_endpoint_with_400_status_is_probed(self, make_response) -> None:
+    def test_endpoint_with_400_status_is_probed(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         # Non-5xx error responses should still be probed.
         ep = Endpoint(url="https://app.example.com/api", status_code=400)
 
@@ -290,7 +315,9 @@ class TestCheckPrototypePollution:
 
         assert len(results) == 1
 
-    def test_medium_not_emitted_when_baseline_already_500(self, make_response) -> None:
+    def test_medium_not_emitted_when_baseline_already_500(
+        self, make_response: Callable[..., MagicMock]
+    ) -> None:
         # If the baseline itself is 500, a 500 on injection is not evidence.
         ep = Endpoint(url="https://app.example.com/api", status_code=200)
 
