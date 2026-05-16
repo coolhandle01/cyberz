@@ -33,6 +33,7 @@ from tools.pentest.cookies import check_cookies
 from tools.pentest.cors import check_cors_misconfiguration
 from tools.pentest.csrf import check_csrf
 from tools.pentest.errors import check_error_disclosure
+from tools.pentest.header_xss import check_header_xss
 from tools.pentest.hpp import check_hpp
 from tools.pentest.jwt import JwtAttack, check_jwt
 from tools.pentest.ldap_injection import LdapPayload, check_ldap_injection
@@ -219,6 +220,33 @@ def host_header_tool(recon_result_json: str) -> list[dict]:
     """
     recon = _recon_from_json(recon_result_json)
     return [f.model_dump() for f in check_host_headers(recon.endpoints)]
+
+
+@tool("Header XSS Probe")
+def header_xss_tool(endpoints_json: str) -> list[dict]:
+    """
+    Inject an angle-bracket canary into User-Agent, Referer, X-Forwarded-For,
+    X-Custom-Header, and Accept-Language headers and check whether the response
+    body contains the canary verbatim (unencoded).
+
+    Unencoded reflection confirms the application echoes raw header values into
+    HTML output without sanitisation, which is sufficient evidence of a Header
+    XSS vulnerability (H1 weakness: Improper Neutralization of HTTP Headers for
+    Scripting Syntax).
+
+    Use when:
+      - The target renders content server-side (templates, SSR, admin dashboards)
+      - Error pages are verbose and likely to echo request metadata
+      - Recon found analytics or logging endpoints that display User-Agent strings
+      - The target is an older web application (PHP, JSP, ASP) with legacy templating
+
+    endpoints_json: JSON array of endpoint objects. Pass a broad set of live
+      HTML-serving endpoints; error pages and admin paths are especially fruitful.
+      Example: '[{"url": "https://example.com/error", "status_code": 404}]'
+
+    Returns raw findings as dicts.
+    """
+    return [f.model_dump() for f in check_header_xss(_parse_endpoints(endpoints_json))]
 
 
 @tool("JS Source Map Scan")
@@ -895,6 +923,7 @@ MEMBER = SquadMember(
         csrf_check_tool,
         ssrf_probe_tool,
         header_injection_tool,
+        header_xss_tool,
         host_header_tool,
         source_maps_tool,
         ssti_probe_tool,
