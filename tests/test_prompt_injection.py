@@ -179,7 +179,7 @@ class TestCheckPromptInjection:
         ep = Endpoint(url="https://example.com/chat", status_code=200)
 
         with patch("requests.post", return_value=_mock_resp(200, "CYBERSQUADCANARY")):
-            results = check_prompt_injection([ep], payload_names=[PromptPayload.token_boundary])
+            results = check_prompt_injection([ep], payload_names=[PromptPayload.chat_delimiters])
 
         assert len(results) == 1
         # The token-boundary payload contains <|im_end|>.

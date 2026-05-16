@@ -141,8 +141,8 @@ def main() -> None:
             )
         )
 
-        try:
-            usage = result.token_usage  # type: ignore[union-attr]
+        usage = getattr(result, "token_usage", None)
+        if usage is not None:
             metrics = build_run_metrics(
                 run_id=run_id,
                 started_at=started_at,
@@ -152,8 +152,6 @@ def main() -> None:
             )
             print_metrics(metrics)
             save_metrics(metrics, config.reports_dir)
-        except AttributeError:
-            logger.debug("token_usage not available on this CrewOutput")
 
     except KeyboardInterrupt:
         console.print("\n[yellow]Interrupted.[/yellow]")
