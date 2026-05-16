@@ -1,0 +1,11 @@
+# .trivyignore - Trivy CVE and secret scan ignore list for cybersquad.
+#
+# Format (one entry per line):
+#   CVE-YYYY-NNNNN  # brief reason - accepted because X
+#
+# Only add entries here after reviewing the finding, confirming it is not
+# exploitable in this context, and documenting why.
+#
+# Run locally:
+#   docker build --target prod -t cybersquad:prod .
+#   trivy image --severity HIGH,CRITICAL --scanners vuln,secret cybersquad:prod

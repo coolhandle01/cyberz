@@ -35,6 +35,9 @@ dev = [
     # SAST
     "bandit[toml]>=1.7",
     "semgrep>=1.75",
+
+    # Debug tooling (used in Docker debug target and local attach)
+    "debugpy>=1.8",
 ]
 
 [project.scripts]

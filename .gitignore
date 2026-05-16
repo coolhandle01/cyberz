@@ -23,7 +23,9 @@ reports/
 
 # IDE
 .idea/
-.vscode/
+.vscode/*
+!.vscode/launch.json
+!.vscode/extensions.json
 *.swp
 *.swo
 

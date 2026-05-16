@@ -1,0 +1,9 @@
+# .hadolint.yaml - Hadolint configuration for cybersquad Dockerfile.
+#
+# DL3008: Pin versions in apt-get install.
+# Suppressed because pinning apt package versions to exact epoch:version strings
+# is not practical - versions differ across Debian/Ubuntu point releases and
+# the pins would need updating on every base image bump. The base image itself
+# is pinned (python:3.12-slim) which bounds the available package set.
+ignore:
+  - DL3008

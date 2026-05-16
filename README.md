@@ -117,6 +117,45 @@ Generated reports are saved to `REPORTS_DIR` as Markdown files.
 
 ---
 
+## Docker / local debug environment
+
+**Prerequisites:** Docker Desktop or Docker Engine + Compose plugin.
+
+### Quick start
+
+```bash
+cp .env.example .env   # fill in H1_API_USERNAME, H1_API_TOKEN, ANTHROPIC_API_KEY
+docker compose up
+```
+
+This starts three services:
+
+| Service | Port | Purpose |
+|---|---|---|
+| `postgres` | - | LiteLLM request log and cost database |
+| `litellm` | 4000 | LLM proxy; routes model aliases to Anthropic and records every call |
+| `cybersquad` | 5678 | Built from the `debug` target; pauses until VS Code attaches |
+
+### VS Code debugging
+
+1. Install the recommended extensions (`.vscode/extensions.json` - accepted automatically on first open).
+2. Open **Run and Debug** (`Ctrl+Shift+D`) and select **Attach to Docker (debugpy)**.
+3. Press `F5`. The pipeline starts and breakpoints work across the mounted source tree.
+
+Python does not hot-reload. After editing source files you do not need to rebuild the image, but you do need to restart the process: use the VS Code debug toolbar restart button or `docker compose restart cybersquad`.
+
+### Unattended run
+
+```bash
+docker compose run --rm cybersquad python main.py
+```
+
+### LiteLLM proxy
+
+The proxy is available at `http://localhost:4000`. Set `CREWAI_MODEL=litellm/claude-sonnet` in `.env` to route traffic through it. The dashboard at `http://localhost:4000/ui` shows per-request token counts and costs.
+
+---
+
 ## Project layout
 
 ```
@@ -210,6 +249,7 @@ Edit any of the five prose files in `squad/<member>/`: `role.md`, `goal.md`, `ba
 | `lint` | ruff, mypy |
 | `test` | pytest (70% coverage floor) |
 | `sast` | bandit, semgrep |
+| `docker` | Hadolint (Dockerfile lint), Trivy (image CVE + secrets), KICS (IaC) |
 
 ---
 
