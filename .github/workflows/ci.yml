@@ -117,11 +117,48 @@ jobs:
           category: semgrep
 
   docker:
-    name: Docker build
+    name: Docker build & scan
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write  # required by upload-sarif for SARIF results
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
 
+      # ---- Hadolint: Dockerfile best-practice lint -------------------------
+      - name: Hadolint - lint Dockerfile
+        uses: hadolint/hadolint-action@54c9adbab1582c2ef04b2016b760714a4bfde3cf  # v3.1.0
+        with:
+          dockerfile: Dockerfile
+          format: sarif
+          output-file: hadolint.sarif
+          no-fail: true  # let the SARIF upload surface findings; don't gate the build
+
+      - name: Upload Hadolint SARIF
+        uses: github/codeql-action/upload-sarif@4e828ff8d448a8a6e532957b1811f387a63867e8  # v3.29.4
+        if: always()
+        with:
+          sarif_file: hadolint.sarif
+          category: hadolint
+
+      # ---- KICS: Dockerfile + docker-compose misconfiguration scan ---------
+      - name: KICS - IaC misconfiguration scan
+        uses: Checkmarx/kics-github-action@05aa5eb70eede1355220f4ca5238d96b397e30a6  # v2.1.20
+        with:
+          path: "Dockerfile,docker-compose.yml"
+          output_path: kics-results/
+          output_formats: "sarif"
+          ignore_on_exit: results  # don't fail the build on findings
+        continue-on-error: true
+
+      - name: Upload KICS SARIF
+        uses: github/codeql-action/upload-sarif@4e828ff8d448a8a6e532957b1811f387a63867e8  # v3.29.4
+        if: always()
+        with:
+          sarif_file: kics-results/results.sarif
+          category: kics
+
+      # ---- Docker build ----------------------------------------------------
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2  # v3.10.0
 
@@ -143,3 +180,20 @@ jobs:
           push: false
           tags: cybersquad:debug
           cache-from: type=gha
+
+      # ---- Trivy: CVE + secrets scan of the built image -------------------
+      - name: Trivy - scan prod image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
+        with:
+          image-ref: cybersquad:prod
+          format: sarif
+          output: trivy.sarif
+          severity: HIGH,CRITICAL
+          scanners: vuln,secret
+
+      - name: Upload Trivy SARIF
+        uses: github/codeql-action/upload-sarif@4e828ff8d448a8a6e532957b1811f387a63867e8  # v3.29.4
+        if: always()
+        with:
+          sarif_file: trivy.sarif
+          category: trivy
