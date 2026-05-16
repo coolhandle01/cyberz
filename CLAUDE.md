@@ -224,7 +224,7 @@ Tests must mock all network and binary calls. Patch `socket.create_connection` a
 
 ## CI
 
-Three jobs run on every push: `lint` (ruff + mypy), `test` (pytest, 70% coverage floor), and `sast` (bandit + semgrep). The local commands in the "Before you push" section above mirror them exactly - use those.
+Four jobs run on every push: `lint` (ruff + mypy), `test` (pytest, 70% coverage floor), `sast` (bandit + semgrep), and `docker` (Hadolint + Trivy + KICS). The local commands in the "Before you push" section above mirror the first three - use those.
 
 Notes on fixing findings:
 
@@ -236,6 +236,9 @@ Notes on fixing findings:
   os.getenv("FOO", "/tmp/bar")  # nosec B108  # noqa: S108
   ```
 
+- **Hadolint** - suppressed queries live in `.hadolint.yaml`. Each entry must have a comment explaining why it is accepted.
+- **Trivy** - CVE and secret ignores live in `.trivyignore`. Each entry must have a comment explaining why it is accepted.
+- **KICS** - suppressed query UUIDs live in `.kics.yml`. Each entry must have a comment explaining why it is accepted.
 - **GitHub Actions pins** - every action must be pinned to a full-length commit SHA, not a tag. Branch protection enforces this. Add the version as a trailing comment for readability:
 
   ```yaml
@@ -243,3 +246,21 @@ Notes on fixing findings:
   ```
 
 - **upload-artifact v4 and hidden files** - `.coverage` and other dotfiles are skipped by default. Set `include-hidden-files: true` on the step.
+
+---
+
+## Docker environment
+
+The repo ships a `docker-compose.yml` local debug environment. See the "Docker / local debug environment" section in `README.md` for prerequisites, `docker compose up` usage, VS Code attach workflow, and unattended run instructions.
+
+Key files:
+
+| File | Purpose |
+|---|---|
+| `Dockerfile` | Multi-stage: `base` (system tools + Go + security binaries), `prod` (runtime deps), `debug` (dev deps + debugpy) |
+| `docker-compose.yml` | Three services: postgres (LiteLLM DB), litellm (LLM proxy on :4000), cybersquad (debug target on :5678) |
+| `litellm_config.yml` | Routes `claude-sonnet` / `claude-haiku` aliases to Anthropic API |
+| `.vscode/launch.json` | VS Code debug configs: "Attach to Docker (debugpy)" and "Run main.py (local)" |
+| `.kics.yml` | KICS IaC scan suppressions (accepted risks) |
+| `.trivyignore` | Trivy CVE/secret ignores (accepted risks) |
+| `.hadolint.yaml` | Hadolint Dockerfile lint suppressions |

@@ -1,19 +1,4 @@
-# docker-compose.yml - Local debug environment for cybersquad.
-#
-# Usage:
-#   cp .env .env          # ensure H1_* and ANTHROPIC_API_KEY are set
-#   docker compose up
-#
-# Then in VS Code: Run > Start Debugging > "Attach to Docker (debugpy)".
-# The pipeline will not start until the debugger attaches.
-#
-# Note: Python does NOT hot-reload. The source volume mount means edits are
-# visible inside the container without rebuilding, but you need to restart
-# the process for them to take effect. Use the VS Code debug toolbar restart
-# button or: docker compose restart cybersquad
-#
-# For an unattended run without debugpy:
-#   docker compose run --rm cybersquad python main.py
+# docker-compose.yml - Local debug environment. See README.md for usage.
 
 services:
   postgres:
@@ -36,11 +21,7 @@ services:
       - "4000:4000"
     environment:
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}"
-      # LiteLLM uses postgres to persist request logs and cost data.
       DATABASE_URL: "postgresql://litellm:litellm@postgres:5432/litellm"
-      # Optional: Langfuse / OpenTelemetry observability (see litellm docs).
-      # LANGFUSE_PUBLIC_KEY: "${LANGFUSE_PUBLIC_KEY:-}"
-      # LANGFUSE_SECRET_KEY: "${LANGFUSE_SECRET_KEY:-}"
     volumes:
       - ./litellm_config.yml:/app/config.yaml:ro
     command: ["--config", "/app/config.yaml", "--port", "4000"]
@@ -57,23 +38,16 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: debug        # use the prod target for production deployments
+      target: debug
     ports:
-      - "5678:5678"        # debugpy attach port
+      - "5678:5678"
     env_file:
       - .env
     environment:
-      # Route LLM calls through the local litellm proxy so you get request
-      # logs, cost tracking, and can swap models without code changes.
       OPENAI_API_BASE: "http://litellm:4000"
-      # Use the proxy's virtual model alias (defined in litellm_config.yml).
-      # Comment out to use the model from .env directly via Anthropic API.
-      # CREWAI_MODEL: "litellm/claude-sonnet"
+      # CREWAI_MODEL: "litellm/claude-sonnet"  # uncomment to route via proxy
     volumes:
-      # Mount source so code edits are visible without rebuilding.
-      # Restart the container (not just re-attach) for changes to take effect.
       - .:/app
-      # Persist reports and nuclei templates between runs.
       - cybersquad-reports:/app/reports
       - nuclei-templates:/root/.local/nuclei-templates
     depends_on:

@@ -60,21 +60,10 @@ CMD ["python", "-m", "main"]
 # ---- debug: dev deps + debugpy for VS Code remote attach ---------------------
 FROM base AS debug
 
-# Install dev deps (includes pytest, mypy, ruff, debugpy etc).
 RUN pip install --no-cache-dir -e ".[dev]" || true
-
-# Source is volume-mounted at runtime so edits are live without rebuilding.
-# We still copy it here so the image is self-contained for CI builds.
 COPY . .
 RUN pip install --no-cache-dir -e ".[dev]"
 
-# Note: Python does NOT hot-reload automatically. The volume mount means you
-# do not need to rebuild the image when you edit source, but you do need to
-# restart the process (or reattach the debugger) for changes to take effect.
-# Use VS Code's "Restart" button in the debug toolbar to do this quickly.
-
-# The --wait-for-client flag holds the pipeline until VS Code attaches.
-# Remove it (or override CMD) for unattended runs.
 CMD ["python", "-m", "debugpy", \
      "--listen", "0.0.0.0:5678", \
      "--wait-for-client", \

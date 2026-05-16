@@ -1,0 +1,32 @@
+# .kics.yml - KICS IaC scan configuration for cybersquad.
+#
+# Format: exclude-queries accepts KICS query UUIDs. See each entry for the
+# rationale. This mirrors the pattern used by .hadolint.yaml and pyproject.toml
+# [tool.bandit] - suppress known-acceptable deviations, scan everything else.
+
+exclude-queries:
+  # Dockerfile: security tools (nmap, nuclei, sqlmap, nuclei) must run as root.
+  # Adding a USER instruction would break every binary in the image.
+  - fd54f200-402c-4333-a5a4-36ef6709af2f  # Missing User Instruction
+  - 67fd0c4a-68cf-46d7-8c41-bc9fba7e40ae  # Last User Is Root
+
+  # Dockerfile + Compose: no HEALTHCHECK meaningful for a batch pipeline whose
+  # CMD varies by target (prod: python -m main, debug: debugpy).
+  - b03a748a-542d-44f4-bb86-9199ab4fd2d5  # Healthcheck Instruction Missing (Dockerfile)
+  - 698ed579-b239-4f8f-a388-baa4bcb13ef8  # Healthcheck Not Set (Compose)
+
+  # Compose: dev-only environment - resource limits would cap scan throughput
+  # and obscure real performance characteristics. Apply limits in production.
+  - 6b610c50-99fb-4ef0-a5f3-e312fd945bc3  # CPUs Not Limited
+  - bb9ac4f7-e13b-423d-a010-c74a1bfbe492  # Memory Not Limited
+  - 221e0658-cb2a-44e3-b08a-db96a341d6fa  # PIDs Limit Not Set
+
+  # Compose: security tools need unrestricted capabilities and privilege
+  # escalation paths (e.g. nmap raw socket, nuclei template execution).
+  - 27fcc7d6-c49b-46e0-98f1-6c082a6a2750  # No New Privileges Not Set
+  - 610e266e-6c12-4bca-9925-1ed0cd29742b  # Security Opt Not Set
+  - ce76b7d0-9e77-464d-b86f-c5c48e03e22d  # Container Capabilities Unrestricted
+
+  # Compose: batch pipeline, not a persistent service - restart policies are
+  # not meaningful (container exits when the run completes).
+  - 2fc99041-ddad-49d5-853f-e35e70a48391  # Restart Policy Not Set

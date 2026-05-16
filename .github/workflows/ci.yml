@@ -152,6 +152,7 @@ jobs:
           context: .
           target: prod
           push: false
+          load: true   # export to local daemon so Trivy can scan it
           tags: cybersquad:prod
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -174,6 +175,7 @@ jobs:
           output: trivy.sarif
           severity: HIGH,CRITICAL
           scanners: vuln,secret
+          trivyignores: .trivyignore
 
       - name: Upload Trivy SARIF
         uses: github/codeql-action/upload-sarif@4e828ff8d448a8a6e532957b1811f387a63867e8  # v3.29.4
@@ -181,3 +183,24 @@ jobs:
         with:
           sarif_file: trivy.sarif
           category: trivy
+
+      # ---- KICS: IaC scan of Dockerfile and docker-compose.yml ------------
+      - name: KICS - IaC scan
+        uses: Checkmarx/kics-github-action@05aa5eb70eede1355220f4ca5238d96b397e30a6  # v2.1.20
+        with:
+          path: Dockerfile,docker-compose.yml
+          config_file: .kics.yml
+          output_path: .
+          output_formats: sarif
+          ignore_on_exit: results
+          # No token: KICS creates its own Check Run when a token is supplied
+          # and marks it failed for any finding - including suppressed ones.
+          # Upload the SARIF separately instead so findings appear in the
+          # Security tab without gating the workflow.
+
+      - name: Upload KICS SARIF
+        uses: github/codeql-action/upload-sarif@4e828ff8d448a8a6e532957b1811f387a63867e8  # v3.29.4
+        if: always()
+        with:
+          sarif_file: results.sarif
+          category: kics
