@@ -57,6 +57,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable per-step LLM output")
     parser.add_argument("--dry-run", action="store_true", help="Show crew layout without executing")
+    parser.add_argument("--headless", action="store_true", help="Run without the Textual TUI")
     return parser.parse_args()
 
 
@@ -104,6 +105,12 @@ def dry_run_summary(crew: Any) -> None:  # noqa: ANN401
 def main() -> None:
     args = parse_args()
     check_env()
+
+    if not args.headless and not args.dry_run:
+        from tui import CybersquadTUI
+
+        CybersquadTUI(verbose=args.verbose).run()
+        return
 
     # Import crew after env check
     import runtime
