@@ -18,21 +18,14 @@ from tools.pentest.prototype_pollution import (
 pytestmark = pytest.mark.unit
 
 
-def _resp(status: int = 200, body: str = "") -> MagicMock:
-    resp = MagicMock()
-    resp.status_code = status
-    resp.text = body
-    return resp
-
-
 class TestCheckPrototypePollution:
-    def test_detects_canary_in_url_param_get_response(self) -> None:
+    def test_detects_canary_in_url_param_get_response(self, make_response) -> None:
         ep = Endpoint(url="https://app.example.com/api", status_code=200)
 
         # Baseline GET returns clean body; second GET (URL param probe) reflects canary.
         responses = [
-            _resp(body="normal response"),  # baseline
-            _resp(body=f"response containing {_CANARY}"),  # first URL param vector
+            make_response(body="normal response"),  # baseline
+            make_response(body=f"response containing {_CANARY}"),  # first URL param vector
         ]
         with patch("requests.get", side_effect=responses):
             results = check_prototype_pollution([ep])
@@ -43,12 +36,12 @@ class TestCheckPrototypePollution:
         assert _CANARY in results[0].evidence
         assert "URL parameter" in results[0].evidence
 
-    def test_detects_canary_in_json_post_response(self) -> None:
+    def test_detects_canary_in_json_post_response(self, make_response) -> None:
         ep = Endpoint(url="https://app.example.com/api", status_code=200)
 
         # All GETs return empty; first POST reflects canary.
-        clean_get = _resp(body="")
-        canary_post = _resp(body=f"echo: {_CANARY}")
+        clean_get = make_response(body="")
+        canary_post = make_response(body=f"echo: {_CANARY}")
 
         def fake_get(url: str, **kw: object) -> MagicMock:
             return clean_get
@@ -67,28 +60,28 @@ class TestCheckPrototypePollution:
         assert _CANARY in results[0].evidence
         assert "JSON body" in results[0].evidence
 
-    def test_no_finding_when_canary_absent_and_no_500(self) -> None:
+    def test_no_finding_when_canary_absent_and_no_500(self, make_response) -> None:
         ep = Endpoint(url="https://app.example.com/api", status_code=200)
 
         with (
-            patch("requests.get", return_value=_resp(body="nothing here")),
-            patch("requests.post", return_value=_resp(body="still nothing")),
+            patch("requests.get", return_value=make_response(body="nothing here")),
+            patch("requests.post", return_value=make_response(body="still nothing")),
         ):
             results = check_prototype_pollution([ep])
 
         assert results == []
 
-    def test_detects_server_error_after_injection_medium(self) -> None:
+    def test_detects_server_error_after_injection_medium(self, make_response) -> None:
         ep = Endpoint(url="https://app.example.com/api", status_code=200)
 
-        baseline = _resp(status=200, body="ok")
-        error_resp = _resp(status=500, body="Internal Server Error")
+        baseline = make_response(status=200, body="ok")
+        error_resp = make_response(status=500, body="Internal Server Error")
 
         # Baseline GET is 200; first URL param probe triggers 500.
         responses = [baseline, error_resp]
         with (
             patch("requests.get", side_effect=responses),
-            patch("requests.post", return_value=_resp(body="")),
+            patch("requests.post", return_value=make_response(body="")),
         ):
             results = check_prototype_pollution([ep])
 
@@ -97,19 +90,19 @@ class TestCheckPrototypePollution:
         assert "server error" in results[0].title.lower() or "injection" in results[0].title.lower()
         assert "500" in results[0].evidence
 
-    def test_critical_takes_priority_over_medium(self) -> None:
+    def test_critical_takes_priority_over_medium(self, make_response) -> None:
         ep = Endpoint(url="https://app.example.com/api", status_code=200)
 
-        baseline = _resp(status=200, body="ok")
+        baseline = make_response(status=200, body="ok")
 
         # First URL param probe gives 500 (would be MEDIUM), but second gives canary (CRITICAL).
-        url_probe_1 = _resp(status=500, body="err")
-        url_probe_2 = _resp(body=f"reflected {_CANARY}")
+        url_probe_1 = make_response(status=500, body="err")
+        url_probe_2 = make_response(body=f"reflected {_CANARY}")
 
         responses = [baseline, url_probe_1, url_probe_2]
         with (
             patch("requests.get", side_effect=responses),
-            patch("requests.post", return_value=_resp(body="")),
+            patch("requests.post", return_value=make_response(body="")),
         ):
             results = check_prototype_pollution([ep])
 
@@ -126,30 +119,30 @@ class TestCheckPrototypePollution:
         mock_post.assert_not_called()
         assert results == []
 
-    def test_deduplicates_same_url(self) -> None:
+    def test_deduplicates_same_url(self, make_response) -> None:
         ep1 = Endpoint(url="https://app.example.com/api", status_code=200)
         ep2 = Endpoint(url="https://app.example.com/api", status_code=200)
 
         responses_get = [
-            _resp(body=""),  # baseline for ep1
-            _resp(body=f"{_CANARY}"),  # first URL probe for ep1 -> CRITICAL
+            make_response(body=""),  # baseline for ep1
+            make_response(body=f"{_CANARY}"),  # first URL probe for ep1 -> CRITICAL
         ]
         with (
             patch("requests.get", side_effect=responses_get),
-            patch("requests.post", return_value=_resp(body="")),
+            patch("requests.post", return_value=make_response(body="")),
         ):
             results = check_prototype_pollution([ep1, ep2])
 
         # ep2 is a duplicate URL; only one finding expected.
         assert len(results) == 1
 
-    def test_multiple_distinct_endpoints_each_get_a_finding(self) -> None:
+    def test_multiple_distinct_endpoints_each_get_a_finding(self, make_response) -> None:
         ep1 = Endpoint(url="https://app.example.com/api/users", status_code=200)
         ep2 = Endpoint(url="https://app.example.com/api/posts", status_code=200)
 
         with (
-            patch("requests.get", return_value=_resp(body=f"{_CANARY}")),
-            patch("requests.post", return_value=_resp(body="")),
+            patch("requests.get", return_value=make_response(body=f"{_CANARY}")),
+            patch("requests.post", return_value=make_response(body="")),
         ):
             results = check_prototype_pollution([ep1, ep2])
 
@@ -183,7 +176,7 @@ class TestCheckPrototypePollution:
         assert "constructor" in serialised
         assert _CANARY in serialised
 
-    def test_payload_filter_restricts_to_json_vector_only(self) -> None:
+    def test_payload_filter_restricts_to_json_vector_only(self, make_response) -> None:
         # Selecting only json-* names should skip the URL GET loop entirely.
         ep = Endpoint(url="https://api.example.com/users", status_code=200)
 
@@ -192,11 +185,11 @@ class TestCheckPrototypePollution:
 
         def record_get(url: str, **_: object) -> MagicMock:
             get_calls.append(url)
-            return _resp(body="baseline")
+            return make_response(body="baseline")
 
         def record_post(url: str, **kw: object) -> MagicMock:
             post_calls.append(kw)
-            return _resp(body="no canary")
+            return make_response(body="no canary")
 
         with (
             patch("requests.get", side_effect=record_get),
@@ -216,7 +209,7 @@ class TestCheckPrototypePollution:
         # Both JSON POSTs fire.
         assert len(post_calls) == 2
 
-    def test_payload_filter_url_only_skips_json(self) -> None:
+    def test_payload_filter_url_only_skips_json(self, make_response) -> None:
         ep = Endpoint(url="https://api.example.com/users", status_code=200)
 
         get_calls: list[str] = []
@@ -224,11 +217,11 @@ class TestCheckPrototypePollution:
 
         def record_get(url: str, **_: object) -> MagicMock:
             get_calls.append(url)
-            return _resp(body="no canary")
+            return make_response(body="no canary")
 
         def record_post(url: str, **kw: object) -> MagicMock:
             post_calls.append(kw)
-            return _resp(body="no canary")
+            return make_response(body="no canary")
 
         with (
             patch("requests.get", side_effect=record_get),
@@ -243,12 +236,12 @@ class TestCheckPrototypePollution:
         assert len(get_calls) == 2
         assert post_calls == []
 
-    def test_payload_filter_finding_evidence_names_the_variant(self) -> None:
+    def test_payload_filter_finding_evidence_names_the_variant(self, make_response) -> None:
         ep = Endpoint(url="https://api.example.com/users", status_code=200)
 
         with (
-            patch("requests.get", return_value=_resp(body=f"reflected {_CANARY}")),
-            patch("requests.post", return_value=_resp(body="")),
+            patch("requests.get", return_value=make_response(body=f"reflected {_CANARY}")),
+            patch("requests.post", return_value=make_response(body="")),
         ):
             results = check_prototype_pollution(
                 [ep],
@@ -258,11 +251,11 @@ class TestCheckPrototypePollution:
         assert len(results) == 1
         assert "proto-dot" in results[0].evidence
 
-    def test_payload_filter_empty_list_is_a_noop(self) -> None:
+    def test_payload_filter_empty_list_is_a_noop(self, make_response) -> None:
         ep = Endpoint(url="https://api.example.com/users", status_code=200)
 
         with (
-            patch("requests.get", return_value=_resp(body="baseline")) as mock_get,
+            patch("requests.get", return_value=make_response(body="baseline")) as mock_get,
             patch("requests.post") as mock_post,
         ):
             results = check_prototype_pollution([ep], payload_names=[])
@@ -272,39 +265,39 @@ class TestCheckPrototypePollution:
         assert mock_get.call_count == 1
         mock_post.assert_not_called()
 
-    def test_endpoint_with_none_status_code_is_probed(self) -> None:
+    def test_endpoint_with_none_status_code_is_probed(self, make_response) -> None:
         # status_code=None means the endpoint was discovered but not yet probed.
         ep = Endpoint(url="https://app.example.com/api", status_code=None)
 
         with (
-            patch("requests.get", return_value=_resp(body=f"{_CANARY}")),
-            patch("requests.post", return_value=_resp(body="")),
+            patch("requests.get", return_value=make_response(body=f"{_CANARY}")),
+            patch("requests.post", return_value=make_response(body="")),
         ):
             results = check_prototype_pollution([ep])
 
         assert len(results) == 1
         assert results[0].severity_hint == Severity.CRITICAL
 
-    def test_endpoint_with_400_status_is_probed(self) -> None:
+    def test_endpoint_with_400_status_is_probed(self, make_response) -> None:
         # Non-5xx error responses should still be probed.
         ep = Endpoint(url="https://app.example.com/api", status_code=400)
 
         with (
-            patch("requests.get", return_value=_resp(body=f"{_CANARY}")),
-            patch("requests.post", return_value=_resp(body="")),
+            patch("requests.get", return_value=make_response(body=f"{_CANARY}")),
+            patch("requests.post", return_value=make_response(body="")),
         ):
             results = check_prototype_pollution([ep])
 
         assert len(results) == 1
 
-    def test_medium_not_emitted_when_baseline_already_500(self) -> None:
+    def test_medium_not_emitted_when_baseline_already_500(self, make_response) -> None:
         # If the baseline itself is 500, a 500 on injection is not evidence.
         ep = Endpoint(url="https://app.example.com/api", status_code=200)
 
         # Baseline returns 500 too, so server was already broken.
         with (
-            patch("requests.get", return_value=_resp(status=500, body="")),
-            patch("requests.post", return_value=_resp(status=500, body="")),
+            patch("requests.get", return_value=make_response(status=500, body="")),
+            patch("requests.post", return_value=make_response(status=500, body="")),
         ):
             results = check_prototype_pollution([ep])
 

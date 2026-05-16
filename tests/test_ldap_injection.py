@@ -18,13 +18,6 @@ from tools.pentest.ldap_injection import (
 pytestmark = pytest.mark.unit
 
 
-def _resp(status: int = 200, body: str = "") -> MagicMock:
-    resp = MagicMock()
-    resp.status_code = status
-    resp.text = body
-    return resp
-
-
 def _baseline_or_probe(
     url: str, baseline_resp: MagicMock, probe_resp: MagicMock, **_: object
 ) -> MagicMock:
@@ -35,13 +28,15 @@ def _baseline_or_probe(
 
 
 class TestCheckLDAPInjection:
-    def test_detects_auth_bypass_high(self) -> None:
+    def test_detects_auth_bypass_high(self, make_response) -> None:
         ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["username"])
 
         with patch(
             "requests.get",
             side_effect=lambda url, **kw: _baseline_or_probe(
-                url, _resp(401, "Invalid credentials"), _resp(200, "Welcome!")
+                url,
+                make_response(status=401, body="Invalid credentials"),
+                make_response(status=200, body="Welcome!"),
             ),
         ):
             results = check_ldap_injection([ep])
@@ -52,15 +47,15 @@ class TestCheckLDAPInjection:
         assert "auth-bypass" in results[0].evidence or "bypass" in results[0].evidence.lower()
         assert "username" in results[0].evidence
 
-    def test_detects_ldap_error_marker_medium(self) -> None:
+    def test_detects_ldap_error_marker_medium(self, make_response) -> None:
         ep = Endpoint(url="https://app.example.com/search", status_code=200, parameters=["q"])
 
         with patch(
             "requests.get",
             side_effect=lambda url, **kw: _baseline_or_probe(
                 url,
-                _resp(200, "No results"),
-                _resp(200, "javax.naming.NamingException: invalid attribute"),
+                make_response(status=200, body="No results"),
+                make_response(status=200, body="javax.naming.NamingException: invalid attribute"),
             ),
         ):
             results = check_ldap_injection([ep])
@@ -69,13 +64,15 @@ class TestCheckLDAPInjection:
         assert results[0].severity_hint == Severity.MEDIUM
         assert "javax.naming" in results[0].evidence
 
-    def test_detects_server_error_on_payload_medium(self) -> None:
+    def test_detects_server_error_on_payload_medium(self, make_response) -> None:
         ep = Endpoint(url="https://app.example.com/auth", status_code=200, parameters=["user"])
 
         with patch(
             "requests.get",
             side_effect=lambda url, **kw: _baseline_or_probe(
-                url, _resp(200, "ok"), _resp(500, "Internal Server Error")
+                url,
+                make_response(status=200, body="ok"),
+                make_response(status=500, body="Internal Server Error"),
             ),
         ):
             results = check_ldap_injection([ep])
@@ -84,10 +81,10 @@ class TestCheckLDAPInjection:
         assert results[0].severity_hint == Severity.MEDIUM
         assert "500" in results[0].evidence
 
-    def test_no_finding_on_clean_response(self) -> None:
+    def test_no_finding_on_clean_response(self, make_response) -> None:
         ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["username"])
 
-        with patch("requests.get", return_value=_resp(401, "Invalid credentials")):
+        with patch("requests.get", return_value=make_response(status=401, body="Invalid credentials")):
             results = check_ldap_injection([ep])
 
         assert results == []
@@ -110,7 +107,7 @@ class TestCheckLDAPInjection:
         mock_get.assert_not_called()
         assert results == []
 
-    def test_one_finding_per_endpoint_with_multiple_params(self) -> None:
+    def test_one_finding_per_endpoint_with_multiple_params(self, make_response) -> None:
         ep = Endpoint(
             url="https://app.example.com/login",
             status_code=200,
@@ -120,14 +117,16 @@ class TestCheckLDAPInjection:
         with patch(
             "requests.get",
             side_effect=lambda url, **kw: _baseline_or_probe(
-                url, _resp(401, "bad"), _resp(200, "Welcome!")
+                url,
+                make_response(status=401, body="bad"),
+                make_response(status=200, body="Welcome!"),
             ),
         ):
             results = check_ldap_injection([ep])
 
         assert len(results) == 1
 
-    def test_stops_probing_after_first_match(self) -> None:
+    def test_stops_probing_after_first_match(self, make_response) -> None:
         ep = Endpoint(
             url="https://app.example.com/login",
             status_code=200,
@@ -137,7 +136,9 @@ class TestCheckLDAPInjection:
         with patch(
             "requests.get",
             side_effect=lambda url, **kw: _baseline_or_probe(
-                url, _resp(401, "bad"), _resp(200, "Welcome!")
+                url,
+                make_response(status=401, body="bad"),
+                make_response(status=200, body="Welcome!"),
             ),
         ) as mock_get:
             check_ldap_injection([ep])
@@ -145,25 +146,25 @@ class TestCheckLDAPInjection:
         # One baseline + one payload before match - should stop immediately.
         assert mock_get.call_count == 2
 
-    def test_baseline_exception_skips_param(self) -> None:
+    def test_baseline_exception_skips_param(self, make_response) -> None:
         ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["username"])
 
         def raise_on_baseline(url: str, **kw: object) -> MagicMock:
             if _BASELINE_VALUE in url:
                 raise OSError("connection refused")
-            return _resp(200, "Welcome!")
+            return make_response(status=200, body="Welcome!")
 
         with patch("requests.get", side_effect=raise_on_baseline):
             results = check_ldap_injection([ep])
 
         assert results == []
 
-    def test_probe_exception_is_swallowed(self) -> None:
+    def test_probe_exception_is_swallowed(self, make_response) -> None:
         ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["username"])
 
         def raise_on_probe(url: str, **kw: object) -> MagicMock:
             if _BASELINE_VALUE in url:
-                return _resp(401, "bad")
+                return make_response(status=401, body="bad")
             raise OSError("timeout")
 
         with patch("requests.get", side_effect=raise_on_probe):
@@ -171,7 +172,7 @@ class TestCheckLDAPInjection:
 
         assert results == []
 
-    def test_deduplicates_across_multiple_endpoints_same_url(self) -> None:
+    def test_deduplicates_across_multiple_endpoints_same_url(self, make_response) -> None:
         ep1 = Endpoint(
             url="https://app.example.com/login", status_code=200, parameters=["username"]
         )
@@ -180,14 +181,16 @@ class TestCheckLDAPInjection:
         with patch(
             "requests.get",
             side_effect=lambda url, **kw: _baseline_or_probe(
-                url, _resp(401, "bad"), _resp(200, "Welcome!")
+                url,
+                make_response(status=401, body="bad"),
+                make_response(status=200, body="Welcome!"),
             ),
         ):
             results = check_ldap_injection([ep1, ep2])
 
         assert len(results) == 1
 
-    def test_high_takes_priority_over_medium(self) -> None:
+    def test_high_takes_priority_over_medium(self, make_response) -> None:
         # Response triggers both a status-code bypass AND an error marker -
         # the finding should be HIGH, not MEDIUM.
         ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["username"])
@@ -196,8 +199,8 @@ class TestCheckLDAPInjection:
             "requests.get",
             side_effect=lambda url, **kw: _baseline_or_probe(
                 url,
-                _resp(401, "bad"),
-                _resp(200, "Welcome! objectClass=person"),
+                make_response(status=401, body="bad"),
+                make_response(status=200, body="Welcome! objectClass=person"),
             ),
         ):
             results = check_ldap_injection([ep])
@@ -218,7 +221,7 @@ class TestCheckLDAPInjection:
         assert "ldap_search" in _LDAP_ERROR_MARKERS
         assert "objectClass" in _LDAP_ERROR_MARKERS
 
-    def test_payload_filter_restricts_to_named_variants(self) -> None:
+    def test_payload_filter_restricts_to_named_variants(self, make_response) -> None:
         # Asking only for auth-bypass should send one baseline + one probe
         # per parameter - the other five payloads must not fire.
         ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["username"])
@@ -227,7 +230,7 @@ class TestCheckLDAPInjection:
 
         def record(url: str, **_: object) -> MagicMock:
             seen_urls.append(url)
-            return _resp(401, "Invalid credentials")
+            return make_response(status=401, body="Invalid credentials")
 
         with patch("requests.get", side_effect=record):
             check_ldap_injection([ep], payload_names=[LdapPayload.auth_bypass])
@@ -235,13 +238,15 @@ class TestCheckLDAPInjection:
         # 1 baseline + 1 payload only.
         assert len(seen_urls) == 2
 
-    def test_payload_filter_finding_evidence_names_the_variant(self) -> None:
+    def test_payload_filter_finding_evidence_names_the_variant(self, make_response) -> None:
         ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["username"])
 
         with patch(
             "requests.get",
             side_effect=lambda url, **kw: _baseline_or_probe(
-                url, _resp(401, "bad"), _resp(200, "Welcome!")
+                url,
+                make_response(status=401, body="bad"),
+                make_response(status=200, body="Welcome!"),
             ),
         ):
             results = check_ldap_injection([ep], payload_names=[LdapPayload.boolean_blind_true])
@@ -249,14 +254,14 @@ class TestCheckLDAPInjection:
         assert len(results) == 1
         assert "boolean-blind-true" in results[0].evidence
 
-    def test_payload_filter_empty_list_is_a_noop(self) -> None:
+    def test_payload_filter_empty_list_is_a_noop(self, make_response) -> None:
         ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["username"])
 
         seen_urls: list[str] = []
 
         def record(url: str, **_: object) -> MagicMock:
             seen_urls.append(url)
-            return _resp(401, "bad")
+            return make_response(status=401, body="bad")
 
         with patch("requests.get", side_effect=record):
             results = check_ldap_injection([ep], payload_names=[])
