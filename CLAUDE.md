@@ -71,6 +71,10 @@ This project relies on MCP servers for local execution and file management. Belo
 
 5. **Never include session URLs in commit messages.** Links of the form `https://claude.ai/code/session_...` embed a reference to a private conversation and must not appear in commit history. Use a plain one- or two-sentence description instead.
 
+6. **Never force-push under any circumstances.** Force-pushing rewrites history and permanently destroys commits, including work that took significant time and money to produce. This has already caused serious damage in this project. There is no situation where force-pushing is acceptable. If you think a force-push is the only way forward, stop and ask the user instead. Violating this rule is grounds for termination of the AI assistant on this project.
+
+7. **Never post GitHub comments, reviews, or issue replies without explicit instruction.** The GitHub MCP server authenticates as the repository owner, so every comment you post appears to come from them. Only use GitHub write tools when explicitly asked, and prefix any comment with `[Claude]:`.
+
 ---
 
 ## Git workflow
