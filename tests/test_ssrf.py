@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -66,7 +66,7 @@ class TestCheckSSRF:
 
         seen_urls: list[str] = []
 
-        def record(url: str, **_: object) -> MagicMock:
+        def record(url: str, **_: object):
             seen_urls.append(url)
             return make_response(body="no metadata here")
 
@@ -94,7 +94,7 @@ class TestCheckSSRF:
 
         seen_urls: list[str] = []
 
-        def record(url: str, **_: object) -> MagicMock:
+        def record(url: str, **_: object):
             seen_urls.append(url)
             return make_response(body="clean")
 

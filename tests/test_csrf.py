@@ -50,20 +50,6 @@ _HTML_GET_FORM_ONLY = """
 _HTML_NO_FORM = "<html><body><p>Hello world</p></body></html>"
 
 
-def _get_resp(
-    status: int = 200,
-    body: str = "",
-    content_type: str = "text/html; charset=utf-8",
-    cookies: dict[str, str] | None = None,
-) -> MagicMock:
-    resp = MagicMock()
-    resp.status_code = status
-    resp.text = body
-    resp.headers = {"Content-Type": content_type}
-    resp.cookies = cookies or {}
-    return resp
-
-
 def _post_resp(status: int = 200) -> MagicMock:
     resp = MagicMock()
     resp.status_code = status
@@ -133,28 +119,39 @@ class TestParsePostForms:
 
 
 class TestHasCsrfCookie:
-    def test_detects_angular_xsrf_token(self) -> None:
-        resp = _get_resp(cookies={"XSRF-TOKEN": "abc"})
+    def test_detects_angular_xsrf_token(self, make_response) -> None:
+        resp = make_response(
+            headers={"Content-Type": "text/html; charset=utf-8"}, cookies={"XSRF-TOKEN": "abc"}
+        )
         assert _has_csrf_cookie(resp) is True
 
-    def test_detects_django_csrftoken(self) -> None:
-        resp = _get_resp(cookies={"csrftoken": "abc"})
+    def test_detects_django_csrftoken(self, make_response) -> None:
+        resp = make_response(
+            headers={"Content-Type": "text/html; charset=utf-8"}, cookies={"csrftoken": "abc"}
+        )
         assert _has_csrf_cookie(resp) is True
 
-    def test_detects_tornado_xsrf(self) -> None:
-        resp = _get_resp(cookies={"_xsrf": "abc"})
+    def test_detects_tornado_xsrf(self, make_response) -> None:
+        resp = make_response(
+            headers={"Content-Type": "text/html; charset=utf-8"}, cookies={"_xsrf": "abc"}
+        )
         assert _has_csrf_cookie(resp) is True
 
-    def test_ignores_session_cookies(self) -> None:
-        resp = _get_resp(cookies={"JSESSIONID": "abc", "session_id": "xyz"})
+    def test_ignores_session_cookies(self, make_response) -> None:
+        resp = make_response(
+            headers={"Content-Type": "text/html; charset=utf-8"},
+            cookies={"JSESSIONID": "abc", "session_id": "xyz"},
+        )
         assert _has_csrf_cookie(resp) is False
 
-    def test_no_cookies(self) -> None:
-        resp = _get_resp(cookies={})
+    def test_no_cookies(self, make_response) -> None:
+        resp = make_response(headers={"Content-Type": "text/html; charset=utf-8"})
         assert _has_csrf_cookie(resp) is False
 
-    def test_match_is_case_insensitive(self) -> None:
-        resp = _get_resp(cookies={"xsrf-token": "abc"})
+    def test_match_is_case_insensitive(self, make_response) -> None:
+        resp = make_response(
+            headers={"Content-Type": "text/html; charset=utf-8"}, cookies={"xsrf-token": "abc"}
+        )
         assert _has_csrf_cookie(resp) is True
 
 
@@ -198,11 +195,16 @@ class TestCheckCSRF:
     # Tier 1: missing CSRF token -> MEDIUM
     # ------------------------------------------------------------------
 
-    def test_detects_missing_csrf_token_medium(self) -> None:
+    def test_detects_missing_csrf_token_medium(self, make_response) -> None:
         ep = Endpoint(url="https://app.example.com/login", status_code=200)
 
         with (
-            patch("requests.get", return_value=_get_resp(body=_HTML_POST_NO_TOKEN)),
+            patch(
+                "requests.get",
+                return_value=make_response(
+                    body=_HTML_POST_NO_TOKEN, headers={"Content-Type": "text/html; charset=utf-8"}
+                ),
+            ),
             patch("requests.post", return_value=_post_resp(status=400)),
         ):
             results = check_csrf([ep])
@@ -213,20 +215,27 @@ class TestCheckCSRF:
         assert "Missing CSRF Token" in tier1[0].title
         assert "/submit" in tier1[0].evidence
 
-    def test_no_finding_when_csrf_token_present(self) -> None:
+    def test_no_finding_when_csrf_token_present(self, make_response) -> None:
         ep = Endpoint(url="https://app.example.com/login", status_code=200)
 
-        with patch("requests.get", return_value=_get_resp(body=_HTML_POST_WITH_TOKEN)):
+        with patch(
+            "requests.get",
+            return_value=make_response(
+                body=_HTML_POST_WITH_TOKEN, headers={"Content-Type": "text/html; charset=utf-8"}
+            ),
+        ):
             results = check_csrf([ep])
 
         assert results == []
 
-    def test_skips_non_html_responses(self) -> None:
+    def test_skips_non_html_responses(self, make_response) -> None:
         ep = Endpoint(url="https://app.example.com/api/data", status_code=200)
 
         with patch(
             "requests.get",
-            return_value=_get_resp(body='{"key": "val"}', content_type="application/json"),
+            return_value=make_response(
+                body='{"key": "val"}', headers={"Content-Type": "application/json"}
+            ),
         ) as mock_get:
             results = check_csrf([ep])
 
@@ -242,18 +251,28 @@ class TestCheckCSRF:
         mock_get.assert_not_called()
         assert results == []
 
-    def test_skips_endpoints_with_get_forms_only(self) -> None:
+    def test_skips_endpoints_with_get_forms_only(self, make_response) -> None:
         ep = Endpoint(url="https://app.example.com/search", status_code=200)
 
-        with patch("requests.get", return_value=_get_resp(body=_HTML_GET_FORM_ONLY)):
+        with patch(
+            "requests.get",
+            return_value=make_response(
+                body=_HTML_GET_FORM_ONLY, headers={"Content-Type": "text/html; charset=utf-8"}
+            ),
+        ):
             results = check_csrf([ep])
 
         assert results == []
 
-    def test_no_finding_on_page_with_no_forms(self) -> None:
+    def test_no_finding_on_page_with_no_forms(self, make_response) -> None:
         ep = Endpoint(url="https://app.example.com/about", status_code=200)
 
-        with patch("requests.get", return_value=_get_resp(body=_HTML_NO_FORM)):
+        with patch(
+            "requests.get",
+            return_value=make_response(
+                body=_HTML_NO_FORM, headers={"Content-Type": "text/html; charset=utf-8"}
+            ),
+        ):
             results = check_csrf([ep])
 
         assert results == []
@@ -266,7 +285,7 @@ class TestCheckCSRF:
 
         assert results == []
 
-    def test_no_tier1_finding_when_xsrf_cookie_set(self) -> None:
+    def test_no_tier1_finding_when_xsrf_cookie_set(self, make_response) -> None:
         # Angular-style cookie suppresses the missing-input finding (Tier 1)
         # but Tier 2 still runs - a per-view bypass could expose the endpoint.
         ep = Endpoint(url="https://app.example.com/login", status_code=200)
@@ -274,8 +293,9 @@ class TestCheckCSRF:
         with (
             patch(
                 "requests.get",
-                return_value=_get_resp(
+                return_value=make_response(
                     body=_HTML_POST_NO_TOKEN,
+                    headers={"Content-Type": "text/html; charset=utf-8"},
                     cookies={"XSRF-TOKEN": "abc"},
                 ),
             ),
@@ -285,15 +305,16 @@ class TestCheckCSRF:
 
         assert not any(r.severity_hint == Severity.MEDIUM for r in results)
 
-    def test_no_tier1_finding_when_csrftoken_cookie_set(self) -> None:
+    def test_no_tier1_finding_when_csrftoken_cookie_set(self, make_response) -> None:
         # Django pattern - Tier 1 suppressed, Tier 2 still runs.
         ep = Endpoint(url="https://app.example.com/login", status_code=200)
 
         with (
             patch(
                 "requests.get",
-                return_value=_get_resp(
+                return_value=make_response(
                     body=_HTML_POST_NO_TOKEN,
+                    headers={"Content-Type": "text/html; charset=utf-8"},
                     cookies={"csrftoken": "abc"},
                 ),
             ),
@@ -303,7 +324,7 @@ class TestCheckCSRF:
 
         assert not any(r.severity_hint == Severity.MEDIUM for r in results)
 
-    def test_no_tier1_finding_when_csrf_meta_tag_present(self) -> None:
+    def test_no_tier1_finding_when_csrf_meta_tag_present(self, make_response) -> None:
         # Rails-style meta tag suppresses Tier 1 but Tier 2 still runs.
         html = (
             '<html><head><meta name="csrf-token" content="abc"></head>'
@@ -312,22 +333,28 @@ class TestCheckCSRF:
         ep = Endpoint(url="https://app.example.com/login", status_code=200)
 
         with (
-            patch("requests.get", return_value=_get_resp(body=html)),
+            patch(
+                "requests.get",
+                return_value=make_response(
+                    body=html, headers={"Content-Type": "text/html; charset=utf-8"}
+                ),
+            ),
             patch("requests.post", return_value=_post_resp(status=403)),
         ):
             results = check_csrf([ep])
 
         assert not any(r.severity_hint == Severity.MEDIUM for r in results)
 
-    def test_tier2_fires_despite_csrf_cookie_bypass(self) -> None:
+    def test_tier2_fires_despite_csrf_cookie_bypass(self, make_response) -> None:
         # Cookie present but endpoint accepts cross-origin POST (e.g. @csrf_exempt).
         ep = Endpoint(url="https://app.example.com/login", status_code=200)
 
         with (
             patch(
                 "requests.get",
-                return_value=_get_resp(
+                return_value=make_response(
                     body=_HTML_POST_NO_TOKEN,
+                    headers={"Content-Type": "text/html; charset=utf-8"},
                     cookies={"XSRF-TOKEN": "abc"},
                 ),
             ),
@@ -340,7 +367,7 @@ class TestCheckCSRF:
         assert "csrf_exempt" in tier2[0].evidence or "bypass" in tier2[0].evidence.lower()
         assert not any(r.severity_hint == Severity.MEDIUM for r in results)
 
-    def test_tier2_fires_despite_csrf_meta_tag_bypass(self) -> None:
+    def test_tier2_fires_despite_csrf_meta_tag_bypass(self, make_response) -> None:
         # Meta tag present but endpoint accepts cross-origin POST (e.g. skip_before_action).
         html = (
             '<html><head><meta name="csrf-token" content="abc"></head>'
@@ -349,7 +376,12 @@ class TestCheckCSRF:
         ep = Endpoint(url="https://app.example.com/login", status_code=200)
 
         with (
-            patch("requests.get", return_value=_get_resp(body=html)),
+            patch(
+                "requests.get",
+                return_value=make_response(
+                    body=html, headers={"Content-Type": "text/html; charset=utf-8"}
+                ),
+            ),
             patch("requests.post", return_value=_post_resp(status=200)),
         ):
             results = check_csrf([ep])
@@ -358,15 +390,16 @@ class TestCheckCSRF:
         assert len(tier2) == 1
         assert "skip_before_action" in tier2[0].evidence
 
-    def test_session_cookies_do_not_suppress_finding(self) -> None:
+    def test_session_cookies_do_not_suppress_finding(self, make_response) -> None:
         # Cookies that aren't CSRF-related shouldn't act as a free pass.
         ep = Endpoint(url="https://app.example.com/login", status_code=200)
 
         with (
             patch(
                 "requests.get",
-                return_value=_get_resp(
+                return_value=make_response(
                     body=_HTML_POST_NO_TOKEN,
+                    headers={"Content-Type": "text/html; charset=utf-8"},
                     cookies={"JSESSIONID": "abc"},
                 ),
             ),
@@ -381,11 +414,16 @@ class TestCheckCSRF:
     # Tier 2: origin not validated -> HIGH
     # ------------------------------------------------------------------
 
-    def test_detects_origin_not_validated_high(self) -> None:
+    def test_detects_origin_not_validated_high(self, make_response) -> None:
         ep = Endpoint(url="https://app.example.com/login", status_code=200)
 
         with (
-            patch("requests.get", return_value=_get_resp(body=_HTML_POST_NO_TOKEN)),
+            patch(
+                "requests.get",
+                return_value=make_response(
+                    body=_HTML_POST_NO_TOKEN, headers={"Content-Type": "text/html; charset=utf-8"}
+                ),
+            ),
             patch("requests.post", return_value=_post_resp(status=200)),
         ):
             results = check_csrf([ep])
@@ -395,7 +433,7 @@ class TestCheckCSRF:
         assert "Origin Header Not Validated" in tier2[0].title
         assert "evil.example.com" in tier2[0].evidence
 
-    def test_no_high_finding_when_origin_validated(self) -> None:
+    def test_no_high_finding_when_origin_validated(self, make_response) -> None:
         # Evil origin gets 403, correct origin gets 200 -> origin is validated.
         ep = Endpoint(url="https://app.example.com/login", status_code=200)
 
@@ -407,7 +445,12 @@ class TestCheckCSRF:
             return _post_resp(status=200)
 
         with (
-            patch("requests.get", return_value=_get_resp(body=_HTML_POST_NO_TOKEN)),
+            patch(
+                "requests.get",
+                return_value=make_response(
+                    body=_HTML_POST_NO_TOKEN, headers={"Content-Type": "text/html; charset=utf-8"}
+                ),
+            ),
             patch("requests.post", side_effect=fake_post),
         ):
             results = check_csrf([ep])
@@ -415,12 +458,17 @@ class TestCheckCSRF:
         tier2 = [r for r in results if r.severity_hint == Severity.HIGH]
         assert tier2 == []
 
-    def test_no_high_finding_when_both_non_2xx(self) -> None:
+    def test_no_high_finding_when_both_non_2xx(self, make_response) -> None:
         # Both origins rejected -> no HIGH finding (not exploitable).
         ep = Endpoint(url="https://app.example.com/login", status_code=200)
 
         with (
-            patch("requests.get", return_value=_get_resp(body=_HTML_POST_NO_TOKEN)),
+            patch(
+                "requests.get",
+                return_value=make_response(
+                    body=_HTML_POST_NO_TOKEN, headers={"Content-Type": "text/html; charset=utf-8"}
+                ),
+            ),
             patch("requests.post", return_value=_post_resp(status=403)),
         ):
             results = check_csrf([ep])
@@ -428,13 +476,18 @@ class TestCheckCSRF:
         tier2 = [r for r in results if r.severity_hint == Severity.HIGH]
         assert tier2 == []
 
-    def test_tier2_runs_even_when_form_has_token(self) -> None:
+    def test_tier2_runs_even_when_form_has_token(self, make_response) -> None:
         # A form with a hidden CSRF token passes Tier 1, but Tier 2 still
         # probes for Origin validation - those are independent checks.
         ep = Endpoint(url="https://app.example.com/login", status_code=200)
 
         with (
-            patch("requests.get", return_value=_get_resp(body=_HTML_POST_WITH_TOKEN)),
+            patch(
+                "requests.get",
+                return_value=make_response(
+                    body=_HTML_POST_WITH_TOKEN, headers={"Content-Type": "text/html; charset=utf-8"}
+                ),
+            ),
             patch("requests.post", return_value=_post_resp(status=403)) as mock_post,
         ):
             results = check_csrf([ep])
@@ -442,12 +495,17 @@ class TestCheckCSRF:
         mock_post.assert_called()
         assert not any(r.severity_hint == Severity.MEDIUM for r in results)
 
-    def test_tier2_exception_is_swallowed(self) -> None:
+    def test_tier2_exception_is_swallowed(self, make_response) -> None:
         # GET succeeds and Tier 1 fires, but Tier 2 POST raises.
         ep = Endpoint(url="https://app.example.com/login", status_code=200)
 
         with (
-            patch("requests.get", return_value=_get_resp(body=_HTML_POST_NO_TOKEN)),
+            patch(
+                "requests.get",
+                return_value=make_response(
+                    body=_HTML_POST_NO_TOKEN, headers={"Content-Type": "text/html; charset=utf-8"}
+                ),
+            ),
             patch("requests.post", side_effect=OSError("timeout")),
         ):
             results = check_csrf([ep])
@@ -460,7 +518,7 @@ class TestCheckCSRF:
     # One finding per endpoint per tier
     # ------------------------------------------------------------------
 
-    def test_one_tier1_finding_per_endpoint(self) -> None:
+    def test_one_tier1_finding_per_endpoint(self, make_response) -> None:
         # Page has two unprotected POST forms; still only one Tier-1 finding.
         html = """
         <form method="POST" action="/a"><input type="text" name="u"></form>
@@ -469,7 +527,12 @@ class TestCheckCSRF:
         ep = Endpoint(url="https://app.example.com/multi", status_code=200)
 
         with (
-            patch("requests.get", return_value=_get_resp(body=html)),
+            patch(
+                "requests.get",
+                return_value=make_response(
+                    body=html, headers={"Content-Type": "text/html; charset=utf-8"}
+                ),
+            ),
             patch("requests.post", return_value=_post_resp(status=400)),
         ):
             results = check_csrf([ep])
@@ -477,12 +540,17 @@ class TestCheckCSRF:
         tier1 = [r for r in results if r.severity_hint == Severity.MEDIUM]
         assert len(tier1) == 1
 
-    def test_deduplicates_same_url(self) -> None:
+    def test_deduplicates_same_url(self, make_response) -> None:
         ep1 = Endpoint(url="https://app.example.com/login", status_code=200)
         ep2 = Endpoint(url="https://app.example.com/login", status_code=200)
 
         with (
-            patch("requests.get", return_value=_get_resp(body=_HTML_POST_NO_TOKEN)),
+            patch(
+                "requests.get",
+                return_value=make_response(
+                    body=_HTML_POST_NO_TOKEN, headers={"Content-Type": "text/html; charset=utf-8"}
+                ),
+            ),
             patch("requests.post", return_value=_post_resp(status=400)),
         ):
             results = check_csrf([ep1, ep2])
@@ -490,12 +558,17 @@ class TestCheckCSRF:
         tier1 = [r for r in results if r.severity_hint == Severity.MEDIUM]
         assert len(tier1) == 1
 
-    def test_multiple_distinct_endpoints_each_get_findings(self) -> None:
+    def test_multiple_distinct_endpoints_each_get_findings(self, make_response) -> None:
         ep1 = Endpoint(url="https://app.example.com/login", status_code=200)
         ep2 = Endpoint(url="https://app.example.com/register", status_code=200)
 
         with (
-            patch("requests.get", return_value=_get_resp(body=_HTML_POST_NO_TOKEN)),
+            patch(
+                "requests.get",
+                return_value=make_response(
+                    body=_HTML_POST_NO_TOKEN, headers={"Content-Type": "text/html; charset=utf-8"}
+                ),
+            ),
             patch("requests.post", return_value=_post_resp(status=400)),
         ):
             results = check_csrf([ep1, ep2])
@@ -503,12 +576,17 @@ class TestCheckCSRF:
         tier1 = [r for r in results if r.severity_hint == Severity.MEDIUM]
         assert len(tier1) == 2
 
-    def test_endpoint_without_status_code_is_probed(self) -> None:
+    def test_endpoint_without_status_code_is_probed(self, make_response) -> None:
         # status_code=None means recon did not record it - still probe.
         ep = Endpoint(url="https://app.example.com/login")
 
         with (
-            patch("requests.get", return_value=_get_resp(body=_HTML_POST_NO_TOKEN)),
+            patch(
+                "requests.get",
+                return_value=make_response(
+                    body=_HTML_POST_NO_TOKEN, headers={"Content-Type": "text/html; charset=utf-8"}
+                ),
+            ),
             patch("requests.post", return_value=_post_resp(status=400)),
         ):
             results = check_csrf([ep])

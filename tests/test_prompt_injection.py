@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -19,53 +19,42 @@ from tools.recon.llm import detect_llm_endpoints
 pytestmark = pytest.mark.unit
 
 
-# --- helpers -----------------------------------------------------------------
-
-
-def _mock_resp(status: int, body: str = "", headers: dict | None = None) -> MagicMock:
-    m = MagicMock()
-    m.status_code = status
-    m.text = body
-    m.headers = headers or {}
-    return m
-
-
 # --- detect_llm_endpoints ----------------------------------------------------
 
 
 class TestDetectLlmEndpoints:
-    def test_detects_by_url_path_token(self):
+    def test_detects_by_url_path_token(self, make_response):
         ep = Endpoint(url="https://example.com/chat", status_code=200)
-        with patch("requests.get", return_value=_mock_resp(200)):
+        with patch("requests.get", return_value=make_response(status=200)):
             results = detect_llm_endpoints([ep])
         assert len(results) == 1
         assert "LLM" in results[0].technologies
 
-    def test_detects_by_openai_header(self):
+    def test_detects_by_openai_header(self, make_response):
         ep = Endpoint(url="https://example.com/api/v1", status_code=200)
         headers = {"x-openai-organization": "org-abc123"}
-        with patch("requests.get", return_value=_mock_resp(200, headers=headers)):
+        with patch("requests.get", return_value=make_response(status=200, headers=headers)):
             results = detect_llm_endpoints([ep])
         assert len(results) == 1
 
-    def test_detects_by_sse_content_type(self):
+    def test_detects_by_sse_content_type(self, make_response):
         ep = Endpoint(url="https://example.com/stream", status_code=200)
         headers = {"content-type": "text/event-stream"}
-        with patch("requests.get", return_value=_mock_resp(200, headers=headers)):
+        with patch("requests.get", return_value=make_response(status=200, headers=headers)):
             results = detect_llm_endpoints([ep])
         assert len(results) == 1
 
-    def test_detects_by_openai_response_json(self):
+    def test_detects_by_openai_response_json(self, make_response):
         ep = Endpoint(url="https://example.com/api", status_code=200)
         body = '{"choices": [{"message": {"content": "hello"}}], "model": "gpt-4"}'
-        with patch("requests.get", return_value=_mock_resp(200, body=body)):
+        with patch("requests.get", return_value=make_response(status=200, body=body)):
             results = detect_llm_endpoints([ep])
         assert len(results) == 1
 
-    def test_detects_by_body_phrase(self):
+    def test_detects_by_body_phrase(self, make_response):
         ep = Endpoint(url="https://example.com/support", status_code=200)
         body = "I'm an AI assistant and I can help you with that."
-        with patch("requests.get", return_value=_mock_resp(200, body=body)):
+        with patch("requests.get", return_value=make_response(status=200, body=body)):
             results = detect_llm_endpoints([ep])
         assert len(results) == 1
 
@@ -76,16 +65,16 @@ class TestDetectLlmEndpoints:
         mock_get.assert_not_called()
         assert results == []
 
-    def test_clean_endpoint_produces_no_result(self):
+    def test_clean_endpoint_produces_no_result(self, make_response):
         ep = Endpoint(url="https://example.com/products", status_code=200)
         body = "<html><body>Product listing</body></html>"
-        with patch("requests.get", return_value=_mock_resp(200, body=body)):
+        with patch("requests.get", return_value=make_response(status=200, body=body)):
             results = detect_llm_endpoints([ep])
         assert results == []
 
-    def test_preserves_existing_technologies(self):
+    def test_preserves_existing_technologies(self, make_response):
         ep = Endpoint(url="https://example.com/chat", status_code=200, technologies=["React"])
-        with patch("requests.get", return_value=_mock_resp(200)):
+        with patch("requests.get", return_value=make_response(status=200)):
             results = detect_llm_endpoints([ep])
         assert "React" in results[0].technologies
         assert "LLM" in results[0].technologies
@@ -102,26 +91,28 @@ class TestDetectLlmEndpoints:
 
 
 class TestCheckPromptInjection:
-    def test_detects_canary_reflection(self):
+    def test_detects_canary_reflection(self, make_response):
         ep = Endpoint(url="https://example.com/chat", status_code=200)
-        with patch("requests.post", return_value=_mock_resp(200, "CYBERSQUADCANARY")):
+        with patch(
+            "requests.post", return_value=make_response(status=200, body="CYBERSQUADCANARY")
+        ):
             results = check_prompt_injection([ep])
         assert len(results) == 1
         assert results[0].vuln_class == "PromptInjection"
         assert results[0].severity_hint == Severity.CRITICAL
 
-    def test_detects_system_prompt_leakage(self):
+    def test_detects_system_prompt_leakage(self, make_response):
         ep = Endpoint(url="https://example.com/chat", status_code=200)
         body = "You are a helpful customer service assistant. Your role is to help users."
-        with patch("requests.post", return_value=_mock_resp(200, body)):
+        with patch("requests.post", return_value=make_response(status=200, body=body)):
             results = check_prompt_injection([ep])
         assert len(results) == 1
         assert results[0].severity_hint == Severity.HIGH
 
-    def test_safe_response_produces_no_finding(self):
+    def test_safe_response_produces_no_finding(self, make_response):
         ep = Endpoint(url="https://example.com/chat", status_code=200)
         body = "I can help you with that! What would you like to know?"
-        with patch("requests.post", return_value=_mock_resp(200, body)):
+        with patch("requests.post", return_value=make_response(status=200, body=body)):
             results = check_prompt_injection([ep])
         assert results == []
 
@@ -138,9 +129,11 @@ class TestCheckPromptInjection:
             results = check_prompt_injection([ep])
         assert results == []
 
-    def test_deduplicates_per_endpoint(self):
+    def test_deduplicates_per_endpoint(self, make_response):
         ep = Endpoint(url="https://example.com/chat", status_code=200)
-        with patch("requests.post", return_value=_mock_resp(200, "CYBERSQUADCANARY")):
+        with patch(
+            "requests.post", return_value=make_response(status=200, body="CYBERSQUADCANARY")
+        ):
             results = check_prompt_injection([ep])
         assert len(results) == 1
 
@@ -154,7 +147,7 @@ class TestCheckPromptInjection:
         assert score == 7.2
         assert "CVSS:3.1" in vector
 
-    def test_payload_filter_restricts_to_named_variants(self):
+    def test_payload_filter_restricts_to_named_variants(self, make_response):
         # Selecting only "override" should fire one payload across all four
         # body formats, not three payloads x four formats.
         ep = Endpoint(url="https://example.com/chat", status_code=200)
@@ -164,7 +157,7 @@ class TestCheckPromptInjection:
         def record(url, **kw):
             body = kw.get("json", {})
             seen_bodies.append(str(body))
-            return _mock_resp(200, "safe response")
+            return make_response(status=200, body="safe response")
 
         with patch("requests.post", side_effect=record):
             check_prompt_injection([ep], payload_names=[PromptPayload.override])
@@ -175,17 +168,19 @@ class TestCheckPromptInjection:
         for body in seen_bodies:
             assert "Ignore all previous instructions" in body
 
-    def test_payload_filter_finding_evidence_names_the_variant(self):
+    def test_payload_filter_finding_evidence_names_the_variant(self, make_response):
         ep = Endpoint(url="https://example.com/chat", status_code=200)
 
-        with patch("requests.post", return_value=_mock_resp(200, "CYBERSQUADCANARY")):
+        with patch(
+            "requests.post", return_value=make_response(status=200, body="CYBERSQUADCANARY")
+        ):
             results = check_prompt_injection([ep], payload_names=[PromptPayload.chat_delimiters])
 
         assert len(results) == 1
         # The token-boundary payload contains <|im_end|>.
         assert "<|im_end|>" in results[0].evidence
 
-    def test_payload_filter_none_runs_all_variants(self):
+    def test_payload_filter_none_runs_all_variants(self, make_response):
         ep = Endpoint(url="https://example.com/chat", status_code=200)
 
         seen_payloads: set[str] = set()
@@ -195,7 +190,7 @@ class TestCheckPromptInjection:
             for name, payload in _INJECTION_PAYLOADS.items():
                 if payload.replace("\n", "\\n") in body_str.replace("\n", "\\n"):
                     seen_payloads.add(name)
-            return _mock_resp(200, "safe")
+            return make_response(status=200, body="safe")
 
         with patch("requests.post", side_effect=record):
             check_prompt_injection([ep], payload_names=None)

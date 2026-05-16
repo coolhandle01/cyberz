@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -20,18 +20,11 @@ from tools.pentest.xxe import (
 pytestmark = pytest.mark.unit
 
 
-def _resp(status: int = 200, body: str = "") -> MagicMock:
-    resp = MagicMock()
-    resp.status_code = status
-    resp.text = body
-    return resp
-
-
 class TestCheckXXE:
-    def test_detects_linux_file_read_critical(self) -> None:
+    def test_detects_linux_file_read_critical(self, make_response) -> None:
         ep = Endpoint(url="https://app.example.com/soap", status_code=200)
 
-        with patch("requests.post", return_value=_resp(body=f"data: {_LINUX_MARKER} more")):
+        with patch("requests.post", return_value=make_response(body=f"data: {_LINUX_MARKER} more")):
             results = check_xxe([ep])
 
         assert len(results) == 1
@@ -39,14 +32,14 @@ class TestCheckXXE:
         assert results[0].severity_hint == Severity.CRITICAL
         assert _LINUX_MARKER in results[0].evidence
 
-    def test_detects_windows_file_read_critical(self) -> None:
+    def test_detects_windows_file_read_critical(self, make_response) -> None:
         ep = Endpoint(url="https://app.example.com/xml", status_code=200)
 
-        def fake_post(url: str, **kw: object) -> MagicMock:
+        def fake_post(url: str, **kw: object):
             body = kw.get("data", "")
             if "Windows" in str(body):
-                return _resp(body=f"result {_WIN_MARKER} end")
-            return _resp(body="")
+                return make_response(body=f"result {_WIN_MARKER} end")
+            return make_response(body="")
 
         with patch("requests.post", side_effect=fake_post):
             results = check_xxe([ep])
@@ -55,15 +48,15 @@ class TestCheckXXE:
         assert results[0].severity_hint == Severity.CRITICAL
         assert _WIN_MARKER in results[0].evidence
 
-    def test_detects_xml_parser_error_medium(self) -> None:
+    def test_detects_xml_parser_error_medium(self, make_response) -> None:
         ep = Endpoint(url="https://app.example.com/api", status_code=200)
 
-        def fake_post(url: str, **kw: object) -> MagicMock:
+        def fake_post(url: str, **kw: object):
             body = str(kw.get("data", ""))
             # Only the error probe (undefined entity) triggers a parser error.
             if "cybersquad_xxe_probe" in body:
-                return _resp(body="SAXParseException: undefined entity at line 1")
-            return _resp(body="")
+                return make_response(body="SAXParseException: undefined entity at line 1")
+            return make_response(body="")
 
         with patch("requests.post", side_effect=fake_post):
             results = check_xxe([ep])
@@ -72,22 +65,22 @@ class TestCheckXXE:
         assert results[0].severity_hint == Severity.MEDIUM
         assert "SAXParseException" in results[0].evidence
 
-    def test_file_read_takes_priority_over_error(self) -> None:
+    def test_file_read_takes_priority_over_error(self, make_response) -> None:
         # Both file marker and XML error present - CRITICAL should win because
         # file-read probes are tried first and stop before error probes run.
         ep = Endpoint(url="https://app.example.com/soap", status_code=200)
         body = f"{_LINUX_MARKER}\nSAXParseException: something"
 
-        with patch("requests.post", return_value=_resp(body=body)):
+        with patch("requests.post", return_value=make_response(body=body)):
             results = check_xxe([ep])
 
         assert len(results) == 1
         assert results[0].severity_hint == Severity.CRITICAL
 
-    def test_no_finding_on_clean_response(self) -> None:
+    def test_no_finding_on_clean_response(self, make_response) -> None:
         ep = Endpoint(url="https://app.example.com/api", status_code=200)
 
-        with patch("requests.post", return_value=_resp(body="<response>ok</response>")):
+        with patch("requests.post", return_value=make_response(body="<response>ok</response>")):
             results = check_xxe([ep])
 
         assert results == []
@@ -101,38 +94,38 @@ class TestCheckXXE:
         mock_post.assert_not_called()
         assert results == []
 
-    def test_endpoint_without_status_code_is_probed(self) -> None:
+    def test_endpoint_without_status_code_is_probed(self, make_response) -> None:
         # status_code=None means recon didn't record it - still worth trying.
         ep = Endpoint(url="https://app.example.com/soap")
 
-        with patch("requests.post", return_value=_resp(body=_LINUX_MARKER)):
+        with patch("requests.post", return_value=make_response(body=_LINUX_MARKER)):
             results = check_xxe([ep])
 
         assert len(results) == 1
 
-    def test_one_finding_per_endpoint(self) -> None:
+    def test_one_finding_per_endpoint(self, make_response) -> None:
         # Even though multiple probes would match, we stop at the first.
         ep = Endpoint(url="https://app.example.com/soap", status_code=200)
 
-        with patch("requests.post", return_value=_resp(body=_LINUX_MARKER)):
+        with patch("requests.post", return_value=make_response(body=_LINUX_MARKER)):
             results = check_xxe([ep])
 
         assert len(results) == 1
 
-    def test_deduplicates_same_url(self) -> None:
+    def test_deduplicates_same_url(self, make_response) -> None:
         ep1 = Endpoint(url="https://app.example.com/soap", status_code=200)
         ep2 = Endpoint(url="https://app.example.com/soap", status_code=200)
 
-        with patch("requests.post", return_value=_resp(body=_LINUX_MARKER)):
+        with patch("requests.post", return_value=make_response(body=_LINUX_MARKER)):
             results = check_xxe([ep1, ep2])
 
         assert len(results) == 1
 
-    def test_multiple_distinct_endpoints_each_get_a_finding(self) -> None:
+    def test_multiple_distinct_endpoints_each_get_a_finding(self, make_response) -> None:
         ep1 = Endpoint(url="https://app.example.com/soap", status_code=200)
         ep2 = Endpoint(url="https://app.example.com/xml-api", status_code=200)
 
-        with patch("requests.post", return_value=_resp(body=_LINUX_MARKER)):
+        with patch("requests.post", return_value=make_response(body=_LINUX_MARKER)):
             results = check_xxe([ep1, ep2])
 
         assert len(results) == 2
@@ -172,16 +165,16 @@ class TestCheckXXE:
         assert "undefined entity" in joined
         assert "expat" in joined
 
-    def test_payload_filter_restricts_to_named_probes(self) -> None:
+    def test_payload_filter_restricts_to_named_probes(self, make_response) -> None:
         # Restricting to only linux-* probes must skip every windows-* probe
         # and every error-* probe.
         ep = Endpoint(url="https://app.example.com/api", status_code=200)
 
         seen_bodies: list[str] = []
 
-        def record(url: str, **kw: object) -> MagicMock:
+        def record(url: str, **kw: object):
             seen_bodies.append(str(kw.get("data", "")))
-            return _resp(body="clean")
+            return make_response(body="clean")
 
         with patch("requests.post", side_effect=record):
             check_xxe(
@@ -199,7 +192,7 @@ class TestCheckXXE:
         # No error-only probes (those use a separate body shape).
         assert "cybersquad_xxe_probe" not in joined
 
-    def test_payload_filter_only_error_probes_runs_just_error_tier(self) -> None:
+    def test_payload_filter_only_error_probes_runs_just_error_tier(self, make_response) -> None:
         # The Tier 1 file-read loop only fires if any active file-read probe
         # exists. Restricting to error-* names should skip Tier 1 entirely
         # and go straight to the parser-error probes - exactly what an agent
@@ -208,9 +201,9 @@ class TestCheckXXE:
 
         seen_bodies: list[str] = []
 
-        def record(url: str, **kw: object) -> MagicMock:
+        def record(url: str, **kw: object):
             seen_bodies.append(str(kw.get("data", "")))
-            return _resp(body="SAXParseException: undefined entity")
+            return make_response(body="SAXParseException: undefined entity")
 
         with patch("requests.post", side_effect=record):
             results = check_xxe([ep], payload_names=[XxePayload.error_generic])
@@ -221,10 +214,10 @@ class TestCheckXXE:
         assert len(results) == 1
         assert results[0].severity_hint == Severity.MEDIUM
 
-    def test_payload_filter_finding_evidence_names_the_probe(self) -> None:
+    def test_payload_filter_finding_evidence_names_the_probe(self, make_response) -> None:
         ep = Endpoint(url="https://app.example.com/api", status_code=200)
 
-        with patch("requests.post", return_value=_resp(body=_LINUX_MARKER)):
+        with patch("requests.post", return_value=make_response(body=_LINUX_MARKER)):
             results = check_xxe([ep], payload_names=[XxePayload.linux_soap])
 
         assert len(results) == 1

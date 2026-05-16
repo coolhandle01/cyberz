@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -16,7 +16,7 @@ class TestCheckSSTI:
     def test_detects_jinja_style_evaluation(self, make_response):
         ep = Endpoint(url="https://app.example.com/preview", status_code=200, parameters=["name"])
 
-        def echo(url: str) -> MagicMock:
+        def echo(url: str):
             payload = url.split("=", 1)[1] if "=" in url else ""
             return make_response(body=f"<html>Echo: {payload}</html>")
 
@@ -40,7 +40,7 @@ class TestCheckSSTI:
     def test_detects_dollar_brace_engine(self, make_response):
         ep = Endpoint(url="https://app.example.com/render", status_code=200, parameters=["tpl"])
 
-        def echo(url: str) -> MagicMock:
+        def echo(url: str):
             payload = url.split("=", 1)[1] if "=" in url else ""
             return make_response(body=f"<html>Echo: {payload}</html>")
 
@@ -62,7 +62,7 @@ class TestCheckSSTI:
         # Twig {{x+y}} form which Liquid would render literally).
         ep = Endpoint(url="https://app.example.com/preview", status_code=200, parameters=["name"])
 
-        def echo(url: str) -> MagicMock:
+        def echo(url: str):
             payload = url.split("=", 1)[1] if "=" in url else ""
             return make_response(body=f"<html>Echo: {payload}</html>")
 
@@ -84,7 +84,7 @@ class TestCheckSSTI:
         # addition. Only fire when the Django payload signature shows up.
         ep = Endpoint(url="https://app.example.com/preview", status_code=200, parameters=["name"])
 
-        def echo(url: str) -> MagicMock:
+        def echo(url: str):
             payload = url.split("=", 1)[1] if "=" in url else ""
             return make_response(body=f"<html>Echo: {payload}</html>")
 
@@ -215,7 +215,7 @@ class TestCheckSSTI:
         # carry the verbose engine label so reports name what was probed.
         ep = Endpoint(url="https://app.example.com/preview", status_code=200, parameters=["name"])
 
-        def echo(url: str) -> MagicMock:
+        def echo(url: str):
             payload = url.split("=", 1)[1] if "=" in url else ""
             return make_response(body=f"<html>Echo: {payload}</html>")
 

@@ -18,9 +18,7 @@ from tools.pentest.ldap_injection import (
 pytestmark = pytest.mark.unit
 
 
-def _baseline_or_probe(
-    url: str, baseline_resp: MagicMock, probe_resp: MagicMock, **_: object
-) -> MagicMock:
+def _baseline_or_probe(url: str, baseline_resp: MagicMock, probe_resp: MagicMock, **_: object):
     """Return baseline_resp for the baseline URL, probe_resp for everything else."""
     if _BASELINE_VALUE in url:
         return baseline_resp
@@ -84,7 +82,9 @@ class TestCheckLDAPInjection:
     def test_no_finding_on_clean_response(self, make_response) -> None:
         ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["username"])
 
-        with patch("requests.get", return_value=make_response(status=401, body="Invalid credentials")):
+        with patch(
+            "requests.get", return_value=make_response(status=401, body="Invalid credentials")
+        ):
             results = check_ldap_injection([ep])
 
         assert results == []
@@ -149,7 +149,7 @@ class TestCheckLDAPInjection:
     def test_baseline_exception_skips_param(self, make_response) -> None:
         ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["username"])
 
-        def raise_on_baseline(url: str, **kw: object) -> MagicMock:
+        def raise_on_baseline(url: str, **kw: object):
             if _BASELINE_VALUE in url:
                 raise OSError("connection refused")
             return make_response(status=200, body="Welcome!")
@@ -162,7 +162,7 @@ class TestCheckLDAPInjection:
     def test_probe_exception_is_swallowed(self, make_response) -> None:
         ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["username"])
 
-        def raise_on_probe(url: str, **kw: object) -> MagicMock:
+        def raise_on_probe(url: str, **kw: object):
             if _BASELINE_VALUE in url:
                 return make_response(status=401, body="bad")
             raise OSError("timeout")
@@ -228,7 +228,7 @@ class TestCheckLDAPInjection:
 
         seen_urls: list[str] = []
 
-        def record(url: str, **_: object) -> MagicMock:
+        def record(url: str, **_: object):
             seen_urls.append(url)
             return make_response(status=401, body="Invalid credentials")
 
@@ -259,7 +259,7 @@ class TestCheckLDAPInjection:
 
         seen_urls: list[str] = []
 
-        def record(url: str, **_: object) -> MagicMock:
+        def record(url: str, **_: object):
             seen_urls.append(url)
             return make_response(status=401, body="bad")
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -19,28 +19,25 @@ from tools.pentest.open_redirect import (
 pytestmark = pytest.mark.unit
 
 
-def _resp(status: int = 302, headers: dict[str, str] | None = None, body: str = "") -> MagicMock:
-    resp = MagicMock()
-    resp.status_code = status
-    resp.headers = headers or {}
-    resp.text = body
-    return resp
-
-
 class TestRedirectTarget:
-    def test_picks_up_location_header(self):
-        assert _redirect_target(_resp(headers={"Location": "https://x/"})) == "https://x/"
+    def test_picks_up_location_header(self, make_response):
+        assert (
+            _redirect_target(make_response(status=302, headers={"Location": "https://x/"}))
+            == "https://x/"
+        )
 
-    def test_picks_up_refresh_header(self):
-        target = _redirect_target(_resp(status=200, headers={"Refresh": "0; url=https://x/"}))
+    def test_picks_up_refresh_header(self, make_response):
+        target = _redirect_target(
+            make_response(status=200, headers={"Refresh": "0; url=https://x/"})
+        )
         assert target == "https://x/"
 
-    def test_picks_up_meta_refresh(self):
+    def test_picks_up_meta_refresh(self, make_response):
         body = '<html><head><meta http-equiv="refresh" content="0;url=https://x/"></head></html>'
-        assert _redirect_target(_resp(status=200, body=body)) == "https://x/"
+        assert _redirect_target(make_response(status=200, body=body)) == "https://x/"
 
-    def test_returns_none_when_no_redirect(self):
-        assert _redirect_target(_resp(status=200, body="<html>plain page</html>")) is None
+    def test_returns_none_when_no_redirect(self, make_response):
+        assert _redirect_target(make_response(status=200, body="<html>plain page</html>")) is None
 
 
 class TestRedirectsToCanary:
@@ -63,12 +60,12 @@ class TestRedirectsToCanary:
 
 
 class TestCheckOpenRedirect:
-    def test_detects_30x_to_canary(self):
+    def test_detects_30x_to_canary(self, make_response):
         ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["next"])
 
         def fake_get(url, **kwargs):
             payload = url.split("next=", 1)[1]
-            return _resp(status=302, headers={"Location": payload})
+            return make_response(status=302, headers={"Location": payload})
 
         with patch("requests.get", side_effect=fake_get):
             results = check_open_redirect([ep])
@@ -79,7 +76,7 @@ class TestCheckOpenRedirect:
         assert "next" in results[0].evidence
         assert _PAYLOAD_HOST in results[0].evidence
 
-    def test_detects_meta_refresh_redirect(self):
+    def test_detects_meta_refresh_redirect(self, make_response):
         ep = Endpoint(url="https://app.example.com/go", status_code=200, parameters=["dest"])
 
         def fake_get(url, **kwargs):
@@ -87,7 +84,7 @@ class TestCheckOpenRedirect:
             body = (
                 f'<html><head><meta http-equiv="refresh" content="0;url={payload}"></head></html>'
             )
-            return _resp(status=200, body=body)
+            return make_response(status=200, body=body)
 
         with patch("requests.get", side_effect=fake_get):
             results = check_open_redirect([ep])
@@ -95,23 +92,23 @@ class TestCheckOpenRedirect:
         assert len(results) == 1
         assert "Redirect target" in results[0].evidence
 
-    def test_no_finding_when_redirect_stays_on_origin(self):
+    def test_no_finding_when_redirect_stays_on_origin(self, make_response):
         # Application sanitises by ignoring our payload and redirecting home
         ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["next"])
 
         def fake_get(url, **kwargs):
-            return _resp(status=302, headers={"Location": "/dashboard"})
+            return make_response(status=302, headers={"Location": "/dashboard"})
 
         with patch("requests.get", side_effect=fake_get):
             results = check_open_redirect([ep])
 
         assert results == []
 
-    def test_no_finding_when_no_redirect_at_all(self):
+    def test_no_finding_when_no_redirect_at_all(self, make_response):
         ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["next"])
 
         def fake_get(url, **kwargs):
-            return _resp(status=200, body="<html>login form</html>")
+            return make_response(status=200, body="<html>login form</html>")
 
         with patch("requests.get", side_effect=fake_get):
             results = check_open_redirect([ep])
@@ -132,7 +129,7 @@ class TestCheckOpenRedirect:
         mock_get.assert_not_called()
         assert results == []
 
-    def test_one_finding_per_endpoint_even_with_multiple_vuln_params(self):
+    def test_one_finding_per_endpoint_even_with_multiple_vuln_params(self, make_response):
         ep = Endpoint(
             url="https://app.example.com/login",
             status_code=200,
@@ -144,20 +141,20 @@ class TestCheckOpenRedirect:
             for key in ("next=", "return_to="):
                 if key in url:
                     payload = url.split(key, 1)[1]
-                    return _resp(status=302, headers={"Location": payload})
-            return _resp(status=200)
+                    return make_response(status=302, headers={"Location": payload})
+            return make_response(status=200)
 
         with patch("requests.get", side_effect=fake_get):
             results = check_open_redirect([ep])
 
         assert len(results) == 1
 
-    def test_protocol_relative_payload_in_location(self):
+    def test_protocol_relative_payload_in_location(self, make_response):
         # Server normalises a backslash payload to protocol-relative
         ep = Endpoint(url="https://app.example.com/r", status_code=200, parameters=["u"])
 
         def fake_get(url, **kwargs):
-            return _resp(status=302, headers={"Location": f"//{_PAYLOAD_HOST}/"})
+            return make_response(status=302, headers={"Location": f"//{_PAYLOAD_HOST}/"})
 
         with patch("requests.get", side_effect=fake_get):
             results = check_open_redirect([ep])
@@ -175,7 +172,7 @@ class TestCheckOpenRedirect:
         # if a victim browser followed the redirect, no live service receives it.
         assert _PAYLOAD_HOST.endswith(".invalid")
 
-    def test_payload_filter_restricts_to_named_variants(self):
+    def test_payload_filter_restricts_to_named_variants(self, make_response):
         # Selecting only "https" should fire one request per parameter,
         # not four.
         ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["next"])
@@ -184,33 +181,35 @@ class TestCheckOpenRedirect:
 
         def record(url, **_):
             seen_urls.append(url)
-            return _resp(status=200)
+            return make_response(status=200)
 
         with patch("requests.get", side_effect=record):
             check_open_redirect([ep], payload_names=[OpenRedirectPayload.https])
 
         assert len(seen_urls) == 1
 
-    def test_payload_filter_finding_evidence_names_the_variant(self):
+    def test_payload_filter_finding_evidence_names_the_variant(self, make_response):
         ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["next"])
 
         with patch(
             "requests.get",
-            return_value=_resp(status=302, headers={"Location": f"https://{_PAYLOAD_HOST}/"}),
+            return_value=make_response(
+                status=302, headers={"Location": f"https://{_PAYLOAD_HOST}/"}
+            ),
         ):
             results = check_open_redirect([ep], payload_names=[OpenRedirectPayload.https])
 
         assert len(results) == 1
         assert "https" in results[0].evidence
 
-    def test_payload_filter_none_runs_all_variants(self):
+    def test_payload_filter_none_runs_all_variants(self, make_response):
         ep = Endpoint(url="https://app.example.com/login", status_code=200, parameters=["next"])
 
         seen_urls: list[str] = []
 
         def record(url, **_):
             seen_urls.append(url)
-            return _resp(status=200)
+            return make_response(status=200)
 
         with patch("requests.get", side_effect=record):
             check_open_redirect([ep], payload_names=None)

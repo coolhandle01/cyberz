@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -43,10 +43,10 @@ class TestCheckPrototypePollution:
         clean_get = make_response(body="")
         canary_post = make_response(body=f"echo: {_CANARY}")
 
-        def fake_get(url: str, **kw: object) -> MagicMock:
+        def fake_get(url: str, **kw: object):
             return clean_get
 
-        def fake_post(url: str, **kw: object) -> MagicMock:
+        def fake_post(url: str, **kw: object):
             return canary_post
 
         with (
@@ -183,11 +183,11 @@ class TestCheckPrototypePollution:
         get_calls: list[str] = []
         post_calls: list[dict] = []
 
-        def record_get(url: str, **_: object) -> MagicMock:
+        def record_get(url: str, **_: object):
             get_calls.append(url)
             return make_response(body="baseline")
 
-        def record_post(url: str, **kw: object) -> MagicMock:
+        def record_post(url: str, **kw: object):
             post_calls.append(kw)
             return make_response(body="no canary")
 
@@ -215,11 +215,11 @@ class TestCheckPrototypePollution:
         get_calls: list[str] = []
         post_calls: list[dict] = []
 
-        def record_get(url: str, **_: object) -> MagicMock:
+        def record_get(url: str, **_: object):
             get_calls.append(url)
             return make_response(body="no canary")
 
-        def record_post(url: str, **kw: object) -> MagicMock:
+        def record_post(url: str, **kw: object):
             post_calls.append(kw)
             return make_response(body="no canary")
 

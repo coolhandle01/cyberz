@@ -82,7 +82,9 @@ class TestCheckErrorDisclosure:
 
     def test_no_finding_for_clean_response(self, make_response):
         ep = Endpoint(url="https://app.example.com/", status_code=200)
-        with patch("requests.get", return_value=make_response(body="<html><body>Not Found</body></html>")):
+        with patch(
+            "requests.get", return_value=make_response(body="<html><body>Not Found</body></html>")
+        ):
             results = check_error_disclosure([ep])
         assert results == []
 

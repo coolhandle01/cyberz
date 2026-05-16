@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -16,7 +16,9 @@ class TestCheckCmdInjection:
     def test_detects_canary_in_response(self, make_response) -> None:
         ep = Endpoint(url="https://app.example.com/ping", status_code=200, parameters=["host"])
 
-        with patch("requests.get", return_value=make_response(body=f"PING output\n{_CANARY}\ndone")):
+        with patch(
+            "requests.get", return_value=make_response(body=f"PING output\n{_CANARY}\ndone")
+        ):
             results = check_cmd_injection([ep])
 
         assert len(results) == 1
@@ -36,7 +38,9 @@ class TestCheckCmdInjection:
     def test_no_finding_when_canary_absent(self, make_response) -> None:
         ep = Endpoint(url="https://app.example.com/ping", status_code=200, parameters=["host"])
 
-        with patch("requests.get", return_value=make_response(body="PING 127.0.0.1: 56 data bytes")):
+        with patch(
+            "requests.get", return_value=make_response(body="PING 127.0.0.1: 56 data bytes")
+        ):
             results = check_cmd_injection([ep])
 
         assert results == []
@@ -130,7 +134,7 @@ class TestCheckCmdInjection:
 
         seen_urls: list[str] = []
 
-        def record(url: str, **_: object) -> MagicMock:
+        def record(url: str, **_: object):
             seen_urls.append(url)
             return make_response(body="no canary here")
 
@@ -173,7 +177,7 @@ class TestCheckCmdInjection:
 
         seen_urls: list[str] = []
 
-        def record(url: str, **_: object) -> MagicMock:
+        def record(url: str, **_: object):
             seen_urls.append(url)
             return make_response(body="no canary here")
 
