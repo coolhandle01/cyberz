@@ -47,8 +47,8 @@ class TestCheckTls:
     def _testssl_item(self, test_id: str, severity: str, finding: str, cve: str = "") -> dict:
         return {"id": test_id, "severity": severity, "finding": finding, "cve": cve}
 
-    def test_returns_empty_when_testssl_missing(self):
-        ep = Endpoint(url="https://app.example.com/", status_code=200)
+    def test_returns_empty_when_testssl_missing(self, victim_url: str):
+        ep = Endpoint(url=f"{victim_url}/", status_code=200)
         with patch("shutil.which", return_value=None):
             results = check_tls([ep])
         assert results == []
@@ -59,8 +59,8 @@ class TestCheckTls:
             results = check_tls([ep])
         assert results == []
 
-    def test_parses_testssl_findings(self):
-        ep = Endpoint(url="https://app.example.com/", status_code=200)
+    def test_parses_testssl_findings(self, victim_url: str):
+        ep = Endpoint(url=f"{victim_url}/", status_code=200)
         report = [
             self._testssl_item("heartbleed", "CRITICAL", "VULNERABLE", "CVE-2014-0160"),
             self._testssl_item("SSLv2", "HIGH", "offered (deprecated)"),
@@ -86,8 +86,8 @@ class TestCheckTls:
         assert crit.severity_hint == Severity.CRITICAL
         assert "CVE-2014-0160" in crit.evidence
 
-    def test_skips_ok_and_info_severity(self):
-        ep = Endpoint(url="https://app.example.com/", status_code=200)
+    def test_skips_ok_and_info_severity(self, victim_url: str):
+        ep = Endpoint(url=f"{victim_url}/", status_code=200)
         report = [
             self._testssl_item("TLS1_3", "OK", "offered"),
             self._testssl_item("cert_chain_of_trust", "INFO", "chain ok"),
@@ -105,10 +105,10 @@ class TestCheckTls:
 
         assert results == []
 
-    def test_deduplicates_same_host(self):
+    def test_deduplicates_same_host(self, victim_url: str):
         endpoints = [
-            Endpoint(url="https://app.example.com/page1", status_code=200),
-            Endpoint(url="https://app.example.com/page2", status_code=200),
+            Endpoint(url=f"{victim_url}/page1", status_code=200),
+            Endpoint(url=f"{victim_url}/page2", status_code=200),
         ]
         call_count = 0
 
@@ -126,23 +126,23 @@ class TestCheckTls:
 
         assert call_count == 1
 
-    def test_skips_non_200_endpoints(self):
-        ep = Endpoint(url="https://app.example.com/", status_code=500)
+    def test_skips_non_200_endpoints(self, victim_url: str):
+        ep = Endpoint(url=f"{victim_url}/", status_code=500)
         with patch("shutil.which", return_value="/usr/bin/testssl.sh"):
             with patch("tools.recon.tls._run") as mock_run:
                 results = check_tls([ep])
         mock_run.assert_not_called()
         assert results == []
 
-    def test_handles_run_exception(self):
-        ep = Endpoint(url="https://app.example.com/", status_code=200)
+    def test_handles_run_exception(self, victim_url: str):
+        ep = Endpoint(url=f"{victim_url}/", status_code=200)
         with patch("shutil.which", return_value="/usr/bin/testssl.sh"):
             with patch("tools.recon.tls._run", side_effect=Exception("timeout")):
                 results = check_tls([ep])
         assert results == []
 
-    def test_handles_missing_output_file(self):
-        ep = Endpoint(url="https://app.example.com/", status_code=200)
+    def test_handles_missing_output_file(self, victim_url: str):
+        ep = Endpoint(url=f"{victim_url}/", status_code=200)
 
         def fake_run(cmd, timeout: int = 120, input: str | None = None) -> CompletedProcess:
             # Do not write the JSON file

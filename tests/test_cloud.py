@@ -368,10 +368,10 @@ class TestCheckSensitiveFiles:
         env = [r for r in results if ".env File" in r.title]
         assert len(env) == 1
 
-    def test_deduplicates_by_origin(self):
+    def test_deduplicates_by_origin(self, victim_url: str):
         endpoints = [
-            Endpoint(url="https://app.example.com/page1", status_code=200),
-            Endpoint(url="https://app.example.com/page2", status_code=200),
+            Endpoint(url=f"{victim_url}/page1", status_code=200),
+            Endpoint(url=f"{victim_url}/page2", status_code=200),
         ]
         call_count = 0
 

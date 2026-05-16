@@ -31,7 +31,7 @@ from tools.pentest.jwt import (
 
 pytestmark = pytest.mark.unit
 
-_ENDPOINT = "https://app.example.com/api/profile"
+_ENDPOINT = "https://victim.example.com/api/profile"
 
 
 def _dict_to_base64url(d: dict) -> str:

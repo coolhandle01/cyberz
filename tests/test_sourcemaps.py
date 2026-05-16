@@ -15,7 +15,7 @@ from tools.pentest.sourcemaps import _scan_with_gitleaks, check_js_source_maps
 pytestmark = pytest.mark.unit
 
 
-def _html_with_script(js_url: str = "https://app.example.com/app.js") -> str:
+def _html_with_script(js_url: str = "https://victim.example.com/app.js") -> str:
     return f'<html><head><script src="{js_url}"></script></head></html>'
 
 
@@ -124,8 +124,8 @@ class TestCheckJsSourceMaps:
             patch("subprocess.run", side_effect=fake_run),
         )
 
-    def test_detects_exposed_map_with_internal_paths(self):
-        ep = Endpoint(url="https://app.example.com/", status_code=200)
+    def test_detects_exposed_map_with_internal_paths(self, victim_url: str):
+        ep = Endpoint(url=f"{victim_url}/", status_code=200)
 
         map_data = _map_payload(
             sources=["/src/server/auth.ts", "/src/app/config.ts"],
@@ -154,8 +154,8 @@ class TestCheckJsSourceMaps:
         assert results[0].severity_hint == Severity.MEDIUM
         assert "/src/server/auth.ts" in results[0].evidence
 
-    def test_detects_critical_finding_when_gitleaks_finds_secrets(self):
-        ep = Endpoint(url="https://app.example.com/", status_code=200)
+    def test_detects_critical_finding_when_gitleaks_finds_secrets(self, victim_url: str):
+        ep = Endpoint(url=f"{victim_url}/", status_code=200)
 
         map_data = _map_payload(
             sources=["/src/app.ts"],
@@ -185,8 +185,8 @@ class TestCheckJsSourceMaps:
         assert results[0].severity_hint == Severity.CRITICAL
         assert "generic-api-key" in results[0].evidence
 
-    def test_detects_aws_access_key_via_gitleaks(self):
-        ep = Endpoint(url="https://app.example.com/", status_code=200)
+    def test_detects_aws_access_key_via_gitleaks(self, victim_url: str):
+        ep = Endpoint(url=f"{victim_url}/", status_code=200)
 
         map_data = _map_payload(
             sources=["/src/config.ts"],
@@ -215,15 +215,15 @@ class TestCheckJsSourceMaps:
         assert len(results) == 1
         assert results[0].severity_hint == Severity.CRITICAL
 
-    def test_skips_non_200_endpoints(self):
-        ep = Endpoint(url="https://app.example.com/", status_code=404)
+    def test_skips_non_200_endpoints(self, victim_url: str):
+        ep = Endpoint(url=f"{victim_url}/", status_code=404)
         with patch("requests.get") as mock_get:
             results = check_js_source_maps([ep])
         mock_get.assert_not_called()
         assert results == []
 
-    def test_skips_non_html_content_type(self):
-        ep = Endpoint(url="https://app.example.com/api/data", status_code=200)
+    def test_skips_non_html_content_type(self, victim_url: str):
+        ep = Endpoint(url=f"{victim_url}/api/data", status_code=200)
 
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -235,8 +235,8 @@ class TestCheckJsSourceMaps:
 
         assert results == []
 
-    def test_ignores_map_returning_non_200(self):
-        ep = Endpoint(url="https://app.example.com/", status_code=200)
+    def test_ignores_map_returning_non_200(self, victim_url: str):
+        ep = Endpoint(url=f"{victim_url}/", status_code=200)
 
         def fake_get(url, **kwargs):
             resp = MagicMock()
@@ -257,16 +257,16 @@ class TestCheckJsSourceMaps:
 
         assert results == []
 
-    def test_request_exception_is_swallowed(self):
-        ep = Endpoint(url="https://app.example.com/", status_code=200)
+    def test_request_exception_is_swallowed(self, victim_url: str):
+        ep = Endpoint(url=f"{victim_url}/", status_code=200)
         with patch("requests.get", side_effect=Exception("network error")):
             results = check_js_source_maps([ep])
         assert results == []
 
-    def test_deduplicates_same_map_url(self):
+    def test_deduplicates_same_map_url(self, victim_url: str):
         endpoints = [
-            Endpoint(url="https://app.example.com/page1", status_code=200),
-            Endpoint(url="https://app.example.com/page2", status_code=200),
+            Endpoint(url=f"{victim_url}/page1", status_code=200),
+            Endpoint(url=f"{victim_url}/page2", status_code=200),
         ]
         map_data = _map_payload(
             sources=["/src/app.ts"],
@@ -296,8 +296,8 @@ class TestCheckJsSourceMaps:
 
         assert map_fetch_count == 1
 
-    def test_skips_map_when_gitleaks_missing_and_no_internal_paths(self):
-        ep = Endpoint(url="https://app.example.com/", status_code=200)
+    def test_skips_map_when_gitleaks_missing_and_no_internal_paths(self, victim_url: str):
+        ep = Endpoint(url=f"{victim_url}/", status_code=200)
 
         # sources has only 1 entry and no internal path markers -> would be
         # filtered out anyway; this just confirms nothing crashes without gitleaks

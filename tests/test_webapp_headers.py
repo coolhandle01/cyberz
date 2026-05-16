@@ -18,8 +18,8 @@ pytestmark = pytest.mark.unit
 
 # check_host_headers - reflection
 class TestCheckHostHeadersReflection:
-    def test_detects_canary_host_in_response_body(self):
-        endpoint = Endpoint(url="https://app.example.com/", status_code=200)
+    def test_detects_canary_host_in_response_body(self, victim_url: str):
+        endpoint = Endpoint(url=f"{victim_url}/", status_code=200)
         mock_resp = MagicMock()
         mock_resp.text = "href=https://bountysquad-canary.invalid/reset"
         mock_resp.headers = {}
@@ -31,8 +31,8 @@ class TestCheckHostHeadersReflection:
         assert len(host_findings) >= 1
         assert host_findings[0].severity_hint == Severity.MEDIUM
 
-    def test_detects_canary_host_in_location_header(self):
-        endpoint = Endpoint(url="https://app.example.com/", status_code=200)
+    def test_detects_canary_host_in_location_header(self, victim_url: str):
+        endpoint = Endpoint(url=f"{victim_url}/", status_code=200)
         mock_resp = MagicMock()
         mock_resp.text = "redirecting..."
         mock_resp.headers = {"Location": "https://bountysquad-canary.invalid/login"}
@@ -43,8 +43,8 @@ class TestCheckHostHeadersReflection:
         host_findings = [r for r in results if r.vuln_class == "HostHeaderInjection"]
         assert len(host_findings) >= 1
 
-    def test_clean_response_produces_no_reflection_finding(self):
-        endpoint = Endpoint(url="https://app.example.com/", status_code=200)
+    def test_clean_response_produces_no_reflection_finding(self, victim_url: str):
+        endpoint = Endpoint(url=f"{victim_url}/", status_code=200)
         mock_resp = MagicMock()
         mock_resp.text = "<html>Normal page</html>"
         mock_resp.headers = {"Content-Type": "text/html"}
@@ -55,16 +55,16 @@ class TestCheckHostHeadersReflection:
         reflection = [r for r in results if r.vuln_class == "HostHeaderInjection"]
         assert reflection == []
 
-    def test_request_exception_is_swallowed(self):
-        endpoint = Endpoint(url="https://app.example.com/", status_code=200)
+    def test_request_exception_is_swallowed(self, victim_url: str):
+        endpoint = Endpoint(url=f"{victim_url}/", status_code=200)
         with patch("requests.get", side_effect=Exception("timeout")):
             results = check_host_headers([endpoint])
         assert results == []
 
-    def test_deduplicates_by_origin(self):
+    def test_deduplicates_by_origin(self, victim_url: str):
         endpoints = [
-            Endpoint(url="https://app.example.com/page1", status_code=200),
-            Endpoint(url="https://app.example.com/page2", status_code=200),
+            Endpoint(url=f"{victim_url}/page1", status_code=200),
+            Endpoint(url=f"{victim_url}/page2", status_code=200),
         ]
         mock_resp = MagicMock()
         mock_resp.text = "bountysquad-canary.invalid in body"
@@ -86,8 +86,8 @@ class TestCheckHostHeadersReflection:
 
 # check_host_headers - URL override bypass
 class TestCheckHostHeadersPathOverride:
-    def test_detects_bypass_when_direct_is_403_and_override_is_200(self):
-        endpoint = Endpoint(url="https://app.example.com/", status_code=200)
+    def test_detects_bypass_when_direct_is_403_and_override_is_200(self, victim_url: str):
+        endpoint = Endpoint(url=f"{victim_url}/", status_code=200)
 
         def mock_get(url, **kwargs):
             resp = MagicMock()
@@ -110,8 +110,8 @@ class TestCheckHostHeadersPathOverride:
         assert len(bypass) >= 1
         assert bypass[0].severity_hint == Severity.HIGH
 
-    def test_no_bypass_when_direct_returns_200(self):
-        endpoint = Endpoint(url="https://app.example.com/", status_code=200)
+    def test_no_bypass_when_direct_returns_200(self, victim_url: str):
+        endpoint = Endpoint(url=f"{victim_url}/", status_code=200)
 
         mock_resp = MagicMock()
         mock_resp.status_code = 200
