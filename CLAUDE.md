@@ -54,3 +54,4 @@ Skills under `.claude/skills/` fire automatically when relevant files are edited
 - `cybersquad-conventions` - ASCII-only, `StrEnum`, `X | None`, `model_copy`, five-file prompt layout. Trigger: `.py` / `.md` edits.
 - `cybersquad-agent-llm` - `crewai.LLM(...)` construction + `anthropic/` model prefix. Trigger: `crew.py` / `Agent` construction.
 - `cybersquad-test-fixtures` - the `conftest.py` fixture catalogue. Trigger: edits under `tests/`.
+- `cybersquad-change-discipline` - minimal-diff philosophy, intentional renames, linter-as-signal, FIXME/TODO grammar, Chesterton's Fence. Trigger: editing existing code, suppressing a linter finding, or considering an out-of-scope rename/refactor.
