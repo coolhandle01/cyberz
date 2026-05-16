@@ -7,8 +7,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+import tools.pentest.canary as canary
 from models import Endpoint, Severity
-from tools.pentest.header_xss import _CANARY_PREFIX, XSSHeader, check_header_xss
+from tools.pentest.header_xss import XSSHeader, check_header_xss
+
+_CANARY_PREFIX = canary.HXSS_PREFIX
 
 pytestmark = pytest.mark.unit
 
@@ -77,7 +80,7 @@ class TestCheckHeaderXss:
 
         with patch(
             "requests.get",
-            return_value=make_response(body="<html>&lt;bountysquad-hxss-test&gt;</html>"),
+            return_value=make_response(body="<html>&lt;cybersquad-hxss-test&gt;</html>"),
         ):
             results = check_header_xss([ep])
 

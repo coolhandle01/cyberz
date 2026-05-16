@@ -289,7 +289,7 @@ class TestCheckHeaderInjection:
 
         endpoint = Endpoint(url="https://api.example.com/", status_code=200)
         mock_resp = MagicMock()
-        mock_resp.headers = {"BountySquadCanary": "yes"}
+        mock_resp.headers = {"CybersquadCanary": "yes"}
         mock_resp.text = ""
 
         with patch("requests.get", return_value=mock_resp):
@@ -304,7 +304,7 @@ class TestCheckHeaderInjection:
         endpoint = Endpoint(url="https://api.example.com/", status_code=200)
         mock_resp = MagicMock()
         mock_resp.headers = {}
-        mock_resp.text = "bountysquadcanary injected"
+        mock_resp.text = "cybersquadcanary injected"
 
         with patch("requests.get", return_value=mock_resp):
             results = check_header_injection([endpoint])
