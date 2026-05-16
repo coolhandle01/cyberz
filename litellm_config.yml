@@ -1,0 +1,27 @@
+# litellm_config.yml - LiteLLM proxy configuration for local dev/debug.
+#
+# This exposes a single virtual model alias that routes to Claude via Anthropic.
+# Add more model_list entries to A/B test different models without code changes.
+#
+# See: https://docs.litellm.ai/docs/proxy/configs
+
+model_list:
+  - model_name: claude-sonnet
+    litellm_params:
+      model: anthropic/claude-sonnet-4-20250514
+      api_key: "os.environ/ANTHROPIC_API_KEY"
+
+  - model_name: claude-haiku
+    litellm_params:
+      model: anthropic/claude-haiku-4-5-20251001
+      api_key: "os.environ/ANTHROPIC_API_KEY"
+
+# Log every request and response for debugging.
+litellm_settings:
+  success_callback: []
+  failure_callback: []
+  request_timeout: 600
+
+general_settings:
+  # Store a usage log in the container; mount a volume if you want to keep it.
+  database_url: null

@@ -1,0 +1,72 @@
+# docker-compose.yml - Local debug environment for cybersquad.
+#
+# Usage:
+#   cp .env .env.docker   # copy and adjust as needed (set LITELLM_* vars)
+#   docker compose up
+#
+# Then in VS Code: Run > Start Debugging (Remote Attach) using .vscode/launch.json.
+# The pipeline will not start until the debugger attaches.
+#
+# For an unattended run without debugpy:
+#   docker compose run --rm cybersquad python main.py
+
+services:
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    ports:
+      - "4000:4000"
+    environment:
+      # Drop your Anthropic key here or set it in the shell before running.
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}"
+      # Optional: Langfuse / OpenTelemetry observability (see litellm docs).
+      # LANGFUSE_PUBLIC_KEY: "${LANGFUSE_PUBLIC_KEY:-}"
+      # LANGFUSE_SECRET_KEY: "${LANGFUSE_SECRET_KEY:-}"
+    volumes:
+      - ./litellm_config.yml:/app/config.yaml:ro
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  cybersquad:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5678:5678"   # debugpy attach port
+    env_file:
+      - .env
+    environment:
+      # Route LLM calls through the local litellm proxy so you get request
+      # logs, cost tracking, and can swap models without code changes.
+      # Overrides CREWAI_MODEL from .env when the proxy is running.
+      OPENAI_API_BASE: "http://litellm:4000"
+      # Use the proxy's virtual model alias (defined in litellm_config.yml).
+      # Comment out to use the model from .env directly via Anthropic API.
+      # CREWAI_MODEL: "litellm/claude-sonnet"
+    volumes:
+      # Mount source so code edits are reflected without rebuilding.
+      - .:/app
+      # Persist reports and nuclei templates between runs.
+      - cybersquad-reports:/app/reports
+      - nuclei-templates:/root/.local/nuclei-templates
+    depends_on:
+      litellm:
+        condition: service_healthy
+    # Wait for debugger before starting; override for unattended:
+    #   docker compose run --rm cybersquad python main.py
+    command:
+      - python
+      - -m
+      - debugpy
+      - --listen
+      - "0.0.0.0:5678"
+      - --wait-for-client
+      - -m
+      - main
+
+volumes:
+  cybersquad-reports:
+  nuclei-templates:
