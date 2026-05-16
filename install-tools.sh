@@ -13,7 +13,7 @@
 set -euo pipefail
 
 GO_MIN_VERSION="1.22"
-GO_INSTALL_VERSION="1.23.4"  # fallback tarball version if apt is too old
+GO_INSTALL_VERSION="1.23.4"
 BIN_DIR="${HOME}/.local/bin"
 GOPATH="${GOPATH:-${HOME}/go}"
 GOBIN="${GOPATH}/bin"
