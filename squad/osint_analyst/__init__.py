@@ -83,5 +83,5 @@ MEMBER = SquadMember(
     slug="osint_analyst",
     dir=Path(__file__).parent,
     tools=[recon_tool, cert_transparency_tool, historical_urls_tool, llm_detection_tool],
-    phase="Reconnaissance",
+    task="Reconnaissance",
 )

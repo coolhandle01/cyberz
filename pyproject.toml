@@ -42,7 +42,7 @@ dev = [
 bounty-squad = "main:main"
 
 [tool.setuptools]
-packages = ["tools"]
+packages = ["tools", "tools.tui"]
 py-modules = ["config", "models", "tasks", "crew", "main", "runtime", "tui"]
 
 # -- pytest --------------------------------------------------------------------
@@ -63,7 +63,7 @@ markers = [
 
 [tool.coverage.run]
 source = ["."]
-omit = ["tests/*", ".venv/*"]
+omit = ["tests/*", ".venv/*", "tui.py", "tools/tui/*"]
 
 [tool.coverage.report]
 fail_under = 90
