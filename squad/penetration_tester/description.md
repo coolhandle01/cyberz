@@ -1,59 +1,56 @@
-The previous task hands you the absolute path to recon.json in your context.
-Tools that need the recon surface accept a `recon_path` argument - pass the
-path string through unchanged. The file contains:
-- Live endpoints and their HTTP status codes
-- Detected technologies (check the `technologies` field)
-- Open ports (check the `open_ports` field)
-- Endpoints with URL parameters (check `parameters` on each Endpoint)
-- Passive findings already collected during recon: TLS issues, DNS misconfigs
-  (check the `passive_findings` field - do not repeat these checks)
+The Vulnerability Researcher has handed you an attack plan: named
+probe-target pairings with expected severity ceilings. Treat that
+plan as the primary guide for what to run. The OSINT briefing
+(further upstream in your context) gives you the wider surface for
+when the plan is exhausted or the recon needs cross-referencing.
 
-recon.json is typically large; do not read it whole. Use the recon query
-tools to fetch focused slices and stay within scope:
+The full inventory lives in `recon.json` in the run directory; the
+filename arrived in your context. recon.json is typically large -
+read focused slices through the recon query tools rather than
+loading the whole thing:
 
-- Recon Subdomains -> the in-scope hostname list (optional substring filter)
-- Recon Endpoints -> endpoints filtered by status/tech/host, paginated
-- Recon Open Ports -> the open-port map, per host or all hosts
+  - Recon Subdomains -> the in-scope hostname list (optional substring
+    filter)
+  - Recon Endpoints -> endpoints filtered by status / tech / host,
+    paginated
+  - Recon Open Ports -> the open-port map, per host or all hosts
 
-For tools that take `endpoints_json` (probe tools that operate on a filtered
-subset), call Recon Endpoints with the right filters, then serialise the
-returned `endpoints` list to JSON and pass it through. If you need ad-hoc
-inspection beyond what the slicers expose, use Read Run File on recon.json
-with a small `limit_bytes` and paginate via `offset` - do not slurp it whole,
-that risks truncating a URL mid-string and attacking out of scope.
+These slicers exist to protect your context window from being smashed
+by a multi-megabyte ReconResult. Use them. If you need ad-hoc
+inspection beyond what the slicers expose, Read Run File lets you
+sample `recon.json` in small chunks and paginate, but the slicers
+should be your default - they return structured data instead of raw
+bytes.
 
-Use this context to select tools strategically. Do not run everything at
-everything. Think like a human penetration tester.
+For probe tools that take `endpoints_json`, call Recon Endpoints with
+the right filters, serialise the returned `endpoints` list to JSON,
+and pass it through. Often the right call is to test the one or two
+targets the attack plan names, not every endpoint on the surface.
 
-Decision guidance:
+Decision guidance to supplement the plan:
 
-- Technologies detected (WordPress, Drupal, Joomla, Apache, Spring, Django, etc.)
-  -> Run the Nuclei Scan; nuclei has templates tuned to these stacks.
-
+- Technologies detected (WordPress, Drupal, Joomla, Apache, Spring,
+  Django, etc.) -> Nuclei Scan; nuclei has templates tuned to these
+  stacks.
 - Parameterised endpoints (endpoints with non-empty `parameters`)
-  -> SQLMap Injection Scan, SSRF Probe, Reflected XSS Probe, Error Disclosure Check.
-  -> If error disclosure already shows SQL errors in passive_findings, escalate SQLMap.
+  -> SQLMap Injection Scan, SSRF Probe, Reflected XSS Probe, Error
+  Disclosure Check. If error disclosure already shows SQL errors in
+  passive_findings, escalate SQLMap.
+- Open ports 6379 (Redis), 9200 (Elasticsearch), 5984 (CouchDB),
+  27017 (MongoDB), 3306/5432 (DB), 8080/8443 (admin) -> Cloud
+  Misconfiguration Check covers these via check_exposed_services.
+- Any HTML-serving endpoint -> JS Source Map Scan, Subresource
+  Integrity Check, Host Header Attack Check.
+- Any API or authenticated endpoint -> CORS Misconfiguration Check.
+- Subdomains matching *.s3.amazonaws.com, *.blob.core.windows.net,
+  or technologies mentioning AWS / Azure / GCP -> Cloud Misconfig-
+  uration Check.
+- All endpoints, always -> Header Injection Check, Error Disclosure
+  Check.
 
-- Open ports 6379 (Redis), 9200 (Elasticsearch), 5984 (CouchDB), 27017 (MongoDB),
-  3306/5432 (DB), 8080/8443 (admin)
-  -> Cloud Misconfiguration Check covers these via check_exposed_services.
+Return everything you find - the Technical Author writes the report
+from your output. Capture tool output as evidence.
 
-- Any HTML-serving endpoint
-  -> JS Source Map Scan, Subresource Integrity Check, Host Header Attack Check.
-
-- Any API or authenticated endpoint
-  -> CORS Misconfiguration Check.
-
-- Subdomains matching *.s3.amazonaws.com, *.blob.core.windows.net, or technologies
-  mentioning AWS/Azure/GCP
-  -> Cloud Misconfiguration Check.
-
-- All endpoints, always
-  -> Header Injection Check, Error Disclosure Check.
-
-Return all findings regardless of confidence - triage is the Vulnerability
-Researcher's job. Capture the tool output as evidence.
-
-When every probe you intend to run has completed, collect all returned
-findings into a single JSON array and call save_findings_tool with that
-array. Return the path it gives you as your final output.
+When every probe you intend to run has completed, collect the findings
+into a single JSON array and call Save Findings with that array.
+Return the filename it gives you as your task output.

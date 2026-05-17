@@ -1,6 +1,19 @@
-The absolute path to the recon results file written to the run directory,
-e.g. `/home/user/.cybersquad/programs/cloudflare/20260516-143022-a1b2c3/recon.json`.
+A short Markdown briefing (roughly 8-15 lines) for the Vulnerability
+Researcher, followed by the relative filename of the recon artefact
+written to the run directory (e.g. `recon.json`).
 
-The file contains a serialised ReconResult with subdomains, live endpoints
-(status codes and technologies), open ports per host, passive findings,
-and notes. Return the path string only - downstream agents read the file.
+The briefing should call out:
+  - Top detected technologies with the hostnames they appear on
+  - Subdomains worth a closer look (admin/api/internal/staging/dev,
+    cloud-storage hostnames)
+  - Open ports that hint at running services
+  - High-signal passive findings already collected
+  - Anything else unusual or high-value
+
+The full inventory lives in recon.json - the Vulnerability Researcher
+uses the recon query tools (Recon Subdomains, Recon Endpoints, Recon
+Open Ports) and Read Run File to drill into it on demand. The briefing
+is what tells them where to look first.
+
+Return the briefing followed on a separate line by the filename string
+(no prefix, no surrounding path - just `recon.json`).

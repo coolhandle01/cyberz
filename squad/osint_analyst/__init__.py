@@ -19,7 +19,7 @@ def recon_tool(programme_handle: str) -> str:
     Run full OSINT recon (subdomain enumeration, HTTP probing, port scanning)
     against the in-scope assets of the given programme handle. Writes the
     serialised ReconResult to recon.json in the run directory and returns
-    the absolute path.
+    the relative filename for downstream agents to read.
     """
     import runtime
 
@@ -31,7 +31,7 @@ def recon_tool(programme_handle: str) -> str:
     out_path = runtime.run_dir() / "recon.json"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(result.model_dump_json(), encoding="utf-8")
-    return str(out_path)
+    return "recon.json"
 
 
 @tool("Certificate Transparency Lookup")

@@ -86,7 +86,7 @@ class TestOsintAnalystTools:
         ):
             result = recon_tool.func("acme")
 
-        assert result == str(tmp_path / "recon.json")
+        assert result == "recon.json"
         assert (tmp_path / "recon.json").exists()
         mhttp.assert_called_once_with("acme")
         mrun.assert_called_once_with(programme)
@@ -203,12 +203,12 @@ class TestTechnicalAuthorTools:
     ) -> None:
         from squad.technical_author import create_report_tool
 
-        findings_path = tmp_path / "findings.json"
-        findings_path.write_text(
+        (tmp_path / "findings.json").write_text(
             json.dumps([raw_finding_high.model_dump(mode="json")]),
             encoding="utf-8",
         )
         with (
+            patch("tools.workspace.runtime.run_dir", return_value=tmp_path),
             patch("squad.technical_author.http.set_programme") as mhttp,
             patch(
                 "squad.technical_author.h1.get_programme_policy",
@@ -233,7 +233,7 @@ class TestTechnicalAuthorTools:
             patch("squad.technical_author.save_report") as msave,
             patch("runtime.run_dir", return_value=tmp_path),
         ):
-            result = create_report_tool.func(str(findings_path), "acme", "summary line")
+            result = create_report_tool.func("findings.json", "acme", "summary line")
 
         assert result == disclosure_report.model_dump()
         assert (tmp_path / "report.json").exists()
@@ -245,12 +245,12 @@ class TestTechnicalAuthorTools:
     ) -> None:
         from squad.technical_author import create_report_tool
 
-        findings_path = tmp_path / "findings.json"
-        findings_path.write_text(
+        (tmp_path / "findings.json").write_text(
             json.dumps([raw_finding_high.model_dump(mode="json")]),
             encoding="utf-8",
         )
         with (
+            patch("tools.workspace.runtime.run_dir", return_value=tmp_path),
             patch("squad.technical_author.http.set_programme"),
             patch(
                 "squad.technical_author.h1.get_programme_policy",
@@ -261,7 +261,7 @@ class TestTechnicalAuthorTools:
             patch("squad.technical_author.triage_findings", return_value=[]),
         ):
             with pytest.raises(ValueError, match="passed scope \\+ severity-floor triage"):
-                create_report_tool.func(str(findings_path), "acme", "summary line")
+                create_report_tool.func("findings.json", "acme", "summary line")
 
     def test_calculate_cvss_tool(self) -> None:
         from squad.technical_author import calculate_cvss_tool
@@ -364,16 +364,16 @@ class TestPenetrationTesterTools:
     def test_cookie_check_tool(self, recon_result, raw_finding_low, tmp_path) -> None:
         from squad.penetration_tester import cookie_check_tool
 
-        recon_path = tmp_path / "recon.json"
-        recon_path.write_text(recon_result.model_dump_json(), encoding="utf-8")
+        (tmp_path / "recon.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
         with (
+            patch("tools.workspace.runtime.run_dir", return_value=tmp_path),
             patch("squad.penetration_tester.http.set_programme") as mhttp,
             patch(
                 "squad.penetration_tester.check_cookies",
                 return_value=[raw_finding_low],
             ),
         ):
-            result = cookie_check_tool.func(str(recon_path))
+            result = cookie_check_tool.func("recon.json")
 
         assert result == [raw_finding_low.model_dump()]
         mhttp.assert_called_once_with(recon_result.programme.handle)
@@ -381,32 +381,32 @@ class TestPenetrationTesterTools:
     def test_cors_check_tool(self, recon_result, raw_finding_low, tmp_path) -> None:
         from squad.penetration_tester import cors_check_tool
 
-        recon_path = tmp_path / "recon.json"
-        recon_path.write_text(recon_result.model_dump_json(), encoding="utf-8")
+        (tmp_path / "recon.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
         with (
+            patch("tools.workspace.runtime.run_dir", return_value=tmp_path),
             patch("squad.penetration_tester.http.set_programme"),
             patch(
                 "squad.penetration_tester.check_cors_misconfiguration",
                 return_value=[raw_finding_low],
             ),
         ):
-            result = cors_check_tool.func(str(recon_path))
+            result = cors_check_tool.func("recon.json")
 
         assert result == [raw_finding_low.model_dump()]
 
     def test_csrf_check_tool(self, recon_result, raw_finding_low, tmp_path) -> None:
         from squad.penetration_tester import csrf_check_tool
 
-        recon_path = tmp_path / "recon.json"
-        recon_path.write_text(recon_result.model_dump_json(), encoding="utf-8")
+        (tmp_path / "recon.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
         with (
+            patch("tools.workspace.runtime.run_dir", return_value=tmp_path),
             patch("squad.penetration_tester.http.set_programme"),
             patch(
                 "squad.penetration_tester.check_csrf",
                 return_value=[raw_finding_low],
             ),
         ):
-            result = csrf_check_tool.func(str(recon_path))
+            result = csrf_check_tool.func("recon.json")
 
         assert result == [raw_finding_low.model_dump()]
 
@@ -425,32 +425,32 @@ class TestPenetrationTesterTools:
     def test_header_injection_tool(self, recon_result, raw_finding_low, tmp_path) -> None:
         from squad.penetration_tester import header_injection_tool
 
-        recon_path = tmp_path / "recon.json"
-        recon_path.write_text(recon_result.model_dump_json(), encoding="utf-8")
+        (tmp_path / "recon.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
         with (
+            patch("tools.workspace.runtime.run_dir", return_value=tmp_path),
             patch("squad.penetration_tester.http.set_programme"),
             patch(
                 "squad.penetration_tester.check_header_injection",
                 return_value=[raw_finding_low],
             ),
         ):
-            result = header_injection_tool.func(str(recon_path))
+            result = header_injection_tool.func("recon.json")
 
         assert result == [raw_finding_low.model_dump()]
 
     def test_host_header_tool(self, recon_result, raw_finding_low, tmp_path) -> None:
         from squad.penetration_tester import host_header_tool
 
-        recon_path = tmp_path / "recon.json"
-        recon_path.write_text(recon_result.model_dump_json(), encoding="utf-8")
+        (tmp_path / "recon.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
         with (
+            patch("tools.workspace.runtime.run_dir", return_value=tmp_path),
             patch("squad.penetration_tester.http.set_programme"),
             patch(
                 "squad.penetration_tester.check_host_headers",
                 return_value=[raw_finding_low],
             ),
         ):
-            result = host_header_tool.func(str(recon_path))
+            result = host_header_tool.func("recon.json")
 
         assert result == [raw_finding_low.model_dump()]
 
@@ -461,23 +461,23 @@ class TestPenetrationTesterTools:
         with patch("runtime.run_dir", return_value=tmp_path):
             result = save_findings_tool.func(findings_json)
 
-        assert result == str(tmp_path / "findings.json")
+        assert result == "findings.json"
         assert (tmp_path / "findings.json").read_text(encoding="utf-8") == findings_json
 
     def test_recon_subdomains_tool(self, recon_result, tmp_path) -> None:
         from squad.penetration_tester import recon_subdomains_tool
 
-        recon_path = tmp_path / "recon.json"
-        recon_path.write_text(recon_result.model_dump_json(), encoding="utf-8")
-        result = recon_subdomains_tool.func(str(recon_path))
+        (tmp_path / "recon.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
+        with patch("tools.workspace.runtime.run_dir", return_value=tmp_path):
+            result = recon_subdomains_tool.func("recon.json")
         assert result == recon_result.subdomains
 
     def test_recon_endpoints_tool(self, recon_result, tmp_path) -> None:
         from squad.penetration_tester import recon_endpoints_tool
 
-        recon_path = tmp_path / "recon.json"
-        recon_path.write_text(recon_result.model_dump_json(), encoding="utf-8")
-        result = recon_endpoints_tool.func(str(recon_path), status=200)
+        (tmp_path / "recon.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
+        with patch("tools.workspace.runtime.run_dir", return_value=tmp_path):
+            result = recon_endpoints_tool.func("recon.json", status=200)
         assert isinstance(result, dict)
         assert result["total"] == 1
         assert result["endpoints"][0]["url"] == recon_result.endpoints[0].url
@@ -485,9 +485,10 @@ class TestPenetrationTesterTools:
     def test_recon_open_ports_tool(self, recon_result, tmp_path) -> None:
         from squad.penetration_tester import recon_open_ports_tool
 
-        recon_path = tmp_path / "recon.json"
-        recon_path.write_text(recon_result.model_dump_json(), encoding="utf-8")
-        assert recon_open_ports_tool.func(str(recon_path)) == recon_result.open_ports
+        (tmp_path / "recon.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
+        with patch("tools.workspace.runtime.run_dir", return_value=tmp_path):
+            result = recon_open_ports_tool.func("recon.json")
+        assert result == recon_result.open_ports
 
 
 # ----------------------------------------------------------------------------

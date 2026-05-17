@@ -68,11 +68,14 @@ def _recon_from_path(recon_path: str) -> ReconResult:
 
     Centralised here so any wrapper that loads a ReconResult propagates the
     programme handle into outbound User-Agent headers without each call site
-    having to remember the http.set_programme(...) call.
+    having to remember the http.set_programme(...) call. ``recon_path`` is a
+    relative path under the run directory.
     """
-    from pathlib import Path
+    from tools.workspace import resolve_run_path
 
-    recon = ReconResult.model_validate_json(Path(recon_path).read_text(encoding="utf-8"))
+    recon = ReconResult.model_validate_json(
+        resolve_run_path(recon_path).read_text(encoding="utf-8")
+    )
     http.set_programme(recon.programme.handle)
     return recon
 
@@ -1025,7 +1028,7 @@ def save_findings_tool(findings_json: str) -> str:
     """
     Write the collected raw findings to findings.json in the run directory.
     Call this once after all probe tools have run, passing a JSON array of
-    finding dicts. Returns the absolute path to findings.json.
+    finding dicts. Returns the relative filename for downstream agents.
     """
     import runtime
 
@@ -1034,7 +1037,7 @@ def save_findings_tool(findings_json: str) -> str:
     # Validate the payload parses as JSON before writing.
     json.loads(findings_json)
     out_path.write_text(findings_json, encoding="utf-8")
-    return str(out_path)
+    return "findings.json"
 
 
 MEMBER = SquadMember(

@@ -12,13 +12,12 @@ so the agent can issue a typed query rather than a brute-force read.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from models import ReconResult
+from tools.workspace import resolve_run_path
 
 
 def _load(recon_path: str) -> ReconResult:
-    return ReconResult.model_validate_json(Path(recon_path).read_text(encoding="utf-8"))
+    return ReconResult.model_validate_json(resolve_run_path(recon_path).read_text(encoding="utf-8"))
 
 
 def recon_subdomains(recon_path: str, host_filter: str | None = None) -> list[str]:

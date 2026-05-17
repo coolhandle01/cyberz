@@ -18,7 +18,7 @@ recon.json in one call.
 
 from __future__ import annotations
 
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
 import runtime
 
@@ -48,6 +48,19 @@ def _validate_relative_path(relative_path: str) -> PurePosixPath:
     if ".." in parsed.parts:
         raise ValueError(f"relative_path must not contain '..': {relative_path!r}")
     return parsed
+
+
+def resolve_run_path(relative_path: str) -> Path:
+    """Resolve ``relative_path`` under runtime.run_dir() with the same contract
+    read_run_file enforces: relative-only, no parent traversal, no symlink
+    escape. Use this in every tool that reads an inter-agent artefact - it
+    keeps the "agents pass relative paths" invariant true end-to-end."""
+    _validate_relative_path(relative_path)
+    run_root = runtime.run_dir().resolve()
+    path = (run_root / relative_path).resolve()
+    if not path.is_relative_to(run_root):
+        raise ValueError(f"relative_path resolves outside the run directory: {relative_path!r}")
+    return path
 
 
 def list_run_files() -> list[dict]:
@@ -93,13 +106,7 @@ def read_run_file(
         raise ValueError("offset must be non-negative")
     if limit_bytes < 1 or limit_bytes > MAX_READ_BYTES:
         raise ValueError(f"limit_bytes must be between 1 and {MAX_READ_BYTES} (got {limit_bytes})")
-    _validate_relative_path(relative_path)
-    run_root = runtime.run_dir().resolve()
-    path = (run_root / relative_path).resolve()
-    # Defence-in-depth: even after shape validation, a symlink inside
-    # run_dir could still point outside. Resolve and verify containment.
-    if not path.is_relative_to(run_root):
-        raise ValueError(f"relative_path resolves outside the run directory: {relative_path!r}")
+    path = resolve_run_path(relative_path)
     if not path.is_file():
         raise FileNotFoundError(f"{relative_path!r} not found in run directory")
     total_size = path.stat().st_size

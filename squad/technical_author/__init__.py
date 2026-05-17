@@ -27,13 +27,13 @@ def create_report_tool(findings_path: str, programme_handle: str, summary: str) 
     Returns the serialised report ready for submission.
     """
     import json
-    from pathlib import Path
 
     import runtime
     from models import RawFinding
+    from tools.workspace import resolve_run_path
 
     http.set_programme(programme_handle)
-    raw_data = json.loads(Path(findings_path).read_text(encoding="utf-8"))
+    raw_data = json.loads(resolve_run_path(findings_path).read_text(encoding="utf-8"))
     if not raw_data:
         raise ValueError(f"No findings found in {findings_path}")
     raw = [RawFinding.model_validate(f) for f in raw_data]
