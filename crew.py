@@ -28,9 +28,9 @@ _SQUAD: list[SquadMember] = [
 ]
 
 
-def squad_phases() -> dict[str, str]:
-    """Return a role -> phase mapping built from the squad member metadata."""
-    return {m.read("role"): m.phase for m in _SQUAD if m.phase}
+def crew_tasks() -> dict[str, str]:
+    """Return a role -> task mapping built from the squad member metadata."""
+    return {m.read("role"): m.task for m in _SQUAD if m.task}
 
 
 def build_crew(verbose: bool | None = None) -> Crew:

@@ -26,7 +26,7 @@ class SquadMember:
     slug: str
     dir: Path
     tools: list[Any] = field(default_factory=list)
-    phase: str = ""
+    task: str = ""
 
     def read(self, name: str) -> str:
         """Read ``<dir>/<name>.md`` and return its stripped contents."""
