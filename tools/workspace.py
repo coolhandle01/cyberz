@@ -1,5 +1,5 @@
 """
-tools/workspace/ - read-only access to the per-run shared workspace.
+tools/workspace.py - read-only access to the per-run shared workspace.
 
 Agents pass artefact basenames through their task context (recon.json,
 findings.json, verified.json, ...). These helpers let any agent list and
