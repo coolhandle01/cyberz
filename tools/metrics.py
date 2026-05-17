@@ -37,7 +37,7 @@ def parse_llm(llm: str) -> tuple[str, str]:
 
 def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
     """Return estimated USD cost for the given token counts and model."""
-    _, model_key = parse_llm(model)
+    provider, model_key = parse_llm(model)
     for prefix, (in_price, out_price) in _PRICING.items():
         if model_key.startswith(prefix):
             return (input_tokens * in_price + output_tokens * out_price) / 1_000_000
