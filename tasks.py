@@ -31,23 +31,26 @@ def build_tasks(agents: dict) -> list[Task]:
 
     recon = build_task(OSINT_ANALYST, agents["osint_analyst"], context=[select], human_input=hi)
 
-    pentest = build_task(
-        PENETRATION_TESTER, agents["penetration_tester"], context=[recon], human_input=hi
-    )
-
-    triage = build_task(
+    research = build_task(
         VULNERABILITY_RESEARCHER,
         agents["vulnerability_researcher"],
-        context=[pentest, select],
+        context=[recon, select],
+        human_input=hi,
+    )
+
+    pentest = build_task(
+        PENETRATION_TESTER,
+        agents["penetration_tester"],
+        context=[research, recon, select],
         human_input=hi,
     )
 
     write = build_task(
-        TECHNICAL_AUTHOR, agents["technical_author"], context=[triage, select], human_input=hi
+        TECHNICAL_AUTHOR, agents["technical_author"], context=[pentest, select], human_input=hi
     )
 
     submit = build_task(
         DISCLOSURE_COORDINATOR, agents["disclosure_coordinator"], context=[write], human_input=hi
     )
 
-    return [select, recon, pentest, triage, write, submit]
+    return [select, recon, research, pentest, write, submit]

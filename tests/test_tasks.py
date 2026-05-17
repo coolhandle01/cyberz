@@ -89,11 +89,11 @@ class TestBuildTasks:
     def test_context_chaining_wired(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(squad, "Task", _FakeTask)
         tasks = build_tasks(self._agents())
-        select, recon, pentest, triage, write, submit = tasks
+        select, recon, research, pentest, write, submit = tasks
         assert recon.context == [select]
-        assert pentest.context == [recon]
-        assert triage.context == [pentest, select]
-        assert write.context == [triage, select]
+        assert research.context == [recon, select]
+        assert pentest.context == [research, recon, select]
+        assert write.context == [pentest, select]
         assert submit.context == [write]
 
     def test_human_input_enabled(self, monkeypatch: pytest.MonkeyPatch) -> None:

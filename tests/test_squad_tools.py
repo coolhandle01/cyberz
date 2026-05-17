@@ -137,40 +137,6 @@ class TestOsintAnalystTools:
 
 
 class TestVulnerabilityResearcherTools:
-    def test_triage_tool(self, raw_finding_high, programme, verified_vuln, tmp_path) -> None:
-        from squad.vulnerability_researcher import triage_tool
-
-        findings_path = tmp_path / "findings.json"
-        findings_path.write_text(
-            json.dumps([raw_finding_high.model_dump(mode="json")]),
-            encoding="utf-8",
-        )
-        with (
-            patch("squad.vulnerability_researcher.http.set_programme") as mhttp,
-            patch(
-                "squad.vulnerability_researcher.h1.get_programme_policy",
-                return_value={"data": {}},
-            ),
-            patch(
-                "squad.vulnerability_researcher.h1.get_structured_scope",
-                return_value={},
-            ),
-            patch(
-                "squad.vulnerability_researcher.h1.parse_programme",
-                return_value=programme,
-            ),
-            patch(
-                "squad.vulnerability_researcher.triage_findings",
-                return_value=[verified_vuln],
-            ),
-            patch("runtime.run_dir", return_value=tmp_path),
-        ):
-            result = triage_tool.func(str(findings_path), "acme")
-
-        assert result == str(tmp_path / "verified.json")
-        assert (tmp_path / "verified.json").exists()
-        mhttp.assert_called_once_with("acme")
-
     def test_lookup_cve_tool(self) -> None:
         from squad.vulnerability_researcher import lookup_cve_tool
 
@@ -232,16 +198,34 @@ class TestVulnerabilityResearcherTools:
 
 
 class TestTechnicalAuthorTools:
-    def test_create_report_tool(self, verified_vuln, disclosure_report, tmp_path) -> None:
+    def test_create_report_tool(
+        self, raw_finding_high, programme, verified_vuln, disclosure_report, tmp_path
+    ) -> None:
         from squad.technical_author import create_report_tool
 
-        verified_path = tmp_path / "verified.json"
-        verified_path.write_text(
-            json.dumps([verified_vuln.model_dump(mode="json")]),
+        findings_path = tmp_path / "findings.json"
+        findings_path.write_text(
+            json.dumps([raw_finding_high.model_dump(mode="json")]),
             encoding="utf-8",
         )
         with (
             patch("squad.technical_author.http.set_programme") as mhttp,
+            patch(
+                "squad.technical_author.h1.get_programme_policy",
+                return_value={"data": {}},
+            ),
+            patch(
+                "squad.technical_author.h1.get_structured_scope",
+                return_value={},
+            ),
+            patch(
+                "squad.technical_author.h1.parse_programme",
+                return_value=programme,
+            ),
+            patch(
+                "squad.technical_author.triage_findings",
+                return_value=[verified_vuln],
+            ),
             patch(
                 "squad.technical_author.create_disclosure_report",
                 return_value=disclosure_report,
@@ -249,12 +233,35 @@ class TestTechnicalAuthorTools:
             patch("squad.technical_author.save_report") as msave,
             patch("runtime.run_dir", return_value=tmp_path),
         ):
-            result = create_report_tool.func(str(verified_path), "acme", "summary line")
+            result = create_report_tool.func(str(findings_path), "acme", "summary line")
 
         assert result == disclosure_report.model_dump()
         assert (tmp_path / "report.json").exists()
         mhttp.assert_called_once_with("acme")
         msave.assert_called_once_with(disclosure_report)
+
+    def test_create_report_tool_raises_when_no_findings_pass_triage(
+        self, raw_finding_high, programme, tmp_path
+    ) -> None:
+        from squad.technical_author import create_report_tool
+
+        findings_path = tmp_path / "findings.json"
+        findings_path.write_text(
+            json.dumps([raw_finding_high.model_dump(mode="json")]),
+            encoding="utf-8",
+        )
+        with (
+            patch("squad.technical_author.http.set_programme"),
+            patch(
+                "squad.technical_author.h1.get_programme_policy",
+                return_value={"data": {}},
+            ),
+            patch("squad.technical_author.h1.get_structured_scope", return_value={}),
+            patch("squad.technical_author.h1.parse_programme", return_value=programme),
+            patch("squad.technical_author.triage_findings", return_value=[]),
+        ):
+            with pytest.raises(ValueError, match="passed scope \\+ severity-floor triage"):
+                create_report_tool.func(str(findings_path), "acme", "summary line")
 
     def test_calculate_cvss_tool(self) -> None:
         from squad.technical_author import calculate_cvss_tool
