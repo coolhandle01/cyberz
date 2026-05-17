@@ -21,7 +21,7 @@ reports/
 # Tool artefacts
 /tmp/sqlmap-output/
 
-# Test artefacts
+# CI / test artefacts
 junit.xml
 htmlcov/
 coverage.xml

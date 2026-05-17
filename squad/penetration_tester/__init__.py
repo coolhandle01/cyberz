@@ -35,6 +35,7 @@ from tools.pentest.csrf import check_csrf
 from tools.pentest.errors import check_error_disclosure
 from tools.pentest.header_xss import XSSHeader, check_header_xss
 from tools.pentest.hpp import check_hpp
+from tools.pentest.idor import IDORAttack, check_idor
 from tools.pentest.jwt import JwtAttack, check_jwt
 from tools.pentest.ldap_injection import LdapPayload, check_ldap_injection
 from tools.pentest.nosqli import run_nosqli
@@ -884,6 +885,48 @@ def prototype_pollution_tool(
     ]
 
 
+@tool("IDOR Probe")
+def idor_probe_tool(
+    endpoints_json: str,
+    attacks: list[IDORAttack] | None = None,
+) -> list[dict]:
+    """
+    Probe ID-shaped URL path segments and parameters for Insecure Direct
+    Object Reference (IDOR) - the most-rewarded class on HackerOne (OWASP A01).
+
+    Numeric path segments (e.g. /users/12345) and ID-shaped parameters (id,
+    user_id, account_id, order_id, ...) are probed using the selected attack
+    strategies (omit or pass null to run all three):
+
+      sequential    - neighbour IDs: value-1, value+1, value-100 (numeric path
+                      segments where the current value is visible in the URL).
+                      For query parameters where no current value is known,
+                      probes 1 and 2 instead.
+      boundary      - 0 and -1; catches missing lower-bound checks.
+      type-juggling - 1.0, 1e1, 01; targets backends that accept loose numeric
+                      input and may bypass strict access-control comparisons.
+
+    Detection signals:
+      HIGH   - status changes from 401/403 to 200 (access-control bypass)
+      HIGH   - 200 response body contains a PII pattern (email, sensitive key)
+      MEDIUM - unexpected 200 for boundary ID (id=0 or id=-1)
+
+    endpoints_json: JSON array of endpoint objects. Prioritise endpoints where:
+      - The URL path includes numeric segments (/api/users/42, /orders/9)
+      - Parameters include id, user_id, account_id, order_id, or similar
+      - The endpoint handles authenticated or per-user data
+      Example: '[{"url": "https://example.com/api/users/42", "status_code": 200}]'
+
+    Use attacks=["boundary"] for a quiet reconnaissance pass (2 requests per
+    candidate). Use attacks=["sequential"] when you already know an ID and want
+    to probe adjacent objects. Use all three (default) for maximum coverage.
+
+    One finding per endpoint; stops after the first confirming probe. Does not
+    brute-force ID ranges. Returns raw findings as dicts.
+    """
+    return [f.model_dump() for f in check_idor(_parse_endpoints(endpoints_json), attacks)]
+
+
 @tool("JWT Vulnerability Check")
 def jwt_check_tool(
     token: str,
@@ -967,6 +1010,7 @@ MEMBER = SquadMember(
         xxe_probe_tool,
         prototype_pollution_tool,
         jwt_check_tool,
+        idor_probe_tool,
     ],
     phase="Penetration Testing",
 )

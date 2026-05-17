@@ -14,8 +14,10 @@ pytestmark = pytest.mark.unit
 
 
 class TestCheckSSTI:
-    def test_detects_jinja_style_evaluation(self, make_response: Callable[..., MagicMock]) -> None:
-        ep = Endpoint(url="https://app.example.com/preview", status_code=200, parameters=["name"])
+    def test_detects_jinja_style_evaluation(
+        self, make_response: Callable[..., MagicMock], victim_url: str
+    ) -> None:
+        ep = Endpoint(url=f"{victim_url}/preview", status_code=200, parameters=["name"])
 
         def echo(url: str) -> MagicMock:
             payload = url.split("=", 1)[1] if "=" in url else ""
@@ -38,8 +40,10 @@ class TestCheckSSTI:
         assert _EXPECTED in results[0].evidence
         assert "Jinja2" in results[0].evidence
 
-    def test_detects_dollar_brace_engine(self, make_response: Callable[..., MagicMock]) -> None:
-        ep = Endpoint(url="https://app.example.com/render", status_code=200, parameters=["tpl"])
+    def test_detects_dollar_brace_engine(
+        self, make_response: Callable[..., MagicMock], victim_url: str
+    ) -> None:
+        ep = Endpoint(url=f"{victim_url}/render", status_code=200, parameters=["tpl"])
 
         def echo(url: str) -> MagicMock:
             payload = url.split("=", 1)[1] if "=" in url else ""
@@ -57,11 +61,13 @@ class TestCheckSSTI:
         assert len(results) == 1
         assert "Mako" in results[0].evidence or "FreeMarker" in results[0].evidence
 
-    def test_detects_liquid_plus_filter(self, make_response: Callable[..., MagicMock]) -> None:
+    def test_detects_liquid_plus_filter(
+        self, make_response: Callable[..., MagicMock], victim_url: str
+    ) -> None:
         # Liquid has no infix arithmetic - it can only do `{{ x | plus: y }}`.
         # The probe must fire on that signature specifically (not the Jinja2/
         # Twig {{x+y}} form which Liquid would render literally).
-        ep = Endpoint(url="https://app.example.com/preview", status_code=200, parameters=["name"])
+        ep = Endpoint(url=f"{victim_url}/preview", status_code=200, parameters=["name"])
 
         def echo(url: str) -> MagicMock:
             payload = url.split("=", 1)[1] if "=" in url else ""
@@ -79,11 +85,13 @@ class TestCheckSSTI:
         assert "Liquid" in results[0].evidence
         assert _EXPECTED in results[0].evidence
 
-    def test_detects_django_add_filter(self, make_response: Callable[..., MagicMock]) -> None:
+    def test_detects_django_add_filter(
+        self, make_response: Callable[..., MagicMock], victim_url: str
+    ) -> None:
         # Django does not evaluate raw arithmetic in {{ }} but it does
         # evaluate its built-in filter chain - the |add: filter does integer
         # addition. Only fire when the Django payload signature shows up.
-        ep = Endpoint(url="https://app.example.com/preview", status_code=200, parameters=["name"])
+        ep = Endpoint(url=f"{victim_url}/preview", status_code=200, parameters=["name"])
 
         def echo(url: str) -> MagicMock:
             payload = url.split("=", 1)[1] if "=" in url else ""
@@ -102,12 +110,12 @@ class TestCheckSSTI:
         assert _EXPECTED in results[0].evidence
 
     def test_no_finding_when_input_is_echoed_literally(
-        self, make_response: Callable[..., MagicMock]
+        self, make_response: Callable[..., MagicMock], victim_url: str
     ) -> None:
         # Page reflects the raw payload (input echo) but does not evaluate it.
         # The literal-absence guard must suppress detection even when the
         # expected sum happens to appear somewhere unrelated on the page.
-        ep = Endpoint(url="https://app.example.com/preview", status_code=200, parameters=["name"])
+        ep = Endpoint(url=f"{victim_url}/preview", status_code=200, parameters=["name"])
 
         def fake_get(url, **kwargs) -> MagicMock:
             payload = url.split("name=", 1)[1]
@@ -118,8 +126,10 @@ class TestCheckSSTI:
 
         assert results == []
 
-    def test_no_finding_when_expected_absent(self, make_response: Callable[..., MagicMock]) -> None:
-        ep = Endpoint(url="https://app.example.com/preview", status_code=200, parameters=["name"])
+    def test_no_finding_when_expected_absent(
+        self, make_response: Callable[..., MagicMock], victim_url: str
+    ) -> None:
+        ep = Endpoint(url=f"{victim_url}/preview", status_code=200, parameters=["name"])
 
         def fake_get(url, **kwargs) -> MagicMock:
             return make_response(body="<html>Hello world</html>")
@@ -129,23 +139,25 @@ class TestCheckSSTI:
 
         assert results == []
 
-    def test_skips_endpoints_without_parameters(self):
-        ep = Endpoint(url="https://app.example.com/about", status_code=200)
+    def test_skips_endpoints_without_parameters(self, victim_url: str):
+        ep = Endpoint(url=f"{victim_url}/about", status_code=200)
         with patch("requests.get") as mock_get:
             results = check_ssti([ep])
         mock_get.assert_not_called()
         assert results == []
 
-    def test_skips_server_error_endpoints(self):
-        ep = Endpoint(url="https://app.example.com/", status_code=500, parameters=["q"])
+    def test_skips_server_error_endpoints(self, victim_url: str):
+        ep = Endpoint(url=f"{victim_url}/", status_code=500, parameters=["q"])
         with patch("requests.get") as mock_get:
             results = check_ssti([ep])
         mock_get.assert_not_called()
         assert results == []
 
-    def test_one_finding_per_endpoint(self, make_response: Callable[..., MagicMock]) -> None:
+    def test_one_finding_per_endpoint(
+        self, make_response: Callable[..., MagicMock], victim_url: str
+    ) -> None:
         ep = Endpoint(
-            url="https://app.example.com/preview",
+            url=f"{victim_url}/preview",
             status_code=200,
             parameters=["name", "title"],
         )
@@ -160,8 +172,8 @@ class TestCheckSSTI:
         # First param, first payload should trigger - only one request fired
         assert mock_get.call_count == 1
 
-    def test_network_exception_is_swallowed(self):
-        ep = Endpoint(url="https://app.example.com/preview", status_code=200, parameters=["name"])
+    def test_network_exception_is_swallowed(self, victim_url: str):
+        ep = Endpoint(url=f"{victim_url}/preview", status_code=200, parameters=["name"])
         with patch("requests.get", side_effect=Exception("network error")):
             results = check_ssti([ep])
         assert results == []
@@ -195,11 +207,11 @@ class TestCheckSSTI:
         assert any("|add:" in p for p in payloads)
 
     def test_payload_filter_restricts_to_named_engines(
-        self, make_response: Callable[..., MagicMock]
+        self, make_response: Callable[..., MagicMock], victim_url: str
     ) -> None:
         # When the agent knows the stack is Jinja2 it should only fire that
         # one probe - five other engine probes must be skipped.
-        ep = Endpoint(url="https://app.example.com/preview", status_code=200, parameters=["name"])
+        ep = Endpoint(url=f"{victim_url}/preview", status_code=200, parameters=["name"])
 
         seen_urls: list[str] = []
 
@@ -216,11 +228,11 @@ class TestCheckSSTI:
         assert "%7B%7B" in joined or "{{" in joined
 
     def test_payload_filter_finding_uses_engine_label_in_evidence(
-        self, make_response: Callable[..., MagicMock]
+        self, make_response: Callable[..., MagicMock], victim_url: str
     ) -> None:
         # The agent picked "django" by name; the finding evidence must still
         # carry the verbose engine label so reports name what was probed.
-        ep = Endpoint(url="https://app.example.com/preview", status_code=200, parameters=["name"])
+        ep = Endpoint(url=f"{victim_url}/preview", status_code=200, parameters=["name"])
 
         def echo(url: str) -> MagicMock:
             payload = url.split("=", 1)[1] if "=" in url else ""
@@ -237,8 +249,8 @@ class TestCheckSSTI:
         assert len(results) == 1
         assert "Django" in results[0].evidence
 
-    def test_payload_filter_empty_list_is_a_noop(self):
-        ep = Endpoint(url="https://app.example.com/preview", status_code=200, parameters=["name"])
+    def test_payload_filter_empty_list_is_a_noop(self, victim_url: str):
+        ep = Endpoint(url=f"{victim_url}/preview", status_code=200, parameters=["name"])
 
         with patch("requests.get") as mock_get:
             results = check_ssti([ep], payload_names=[])
