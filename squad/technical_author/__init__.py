@@ -43,5 +43,5 @@ MEMBER = SquadMember(
     slug="technical_author",
     dir=Path(__file__).parent,
     tools=[create_report_tool, calculate_cvss_tool],
-    phase="Reporting",
+    task="Reporting",
 )

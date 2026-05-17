@@ -54,5 +54,5 @@ MEMBER = SquadMember(
     slug="programme_manager",
     dir=Path(__file__).parent,
     tools=[find_programmes_tool, save_programme_tool],
-    phase="Select Program",
+    task="Select Program",
 )
