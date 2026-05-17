@@ -106,10 +106,10 @@ def main() -> None:
     args = parse_args()
     check_env()
 
-    if not args.headless and not args.dry_run:
+    if not args.headless:
         from tui import CybersquadTUI
 
-        CybersquadTUI(verbose=args.verbose).run()
+        CybersquadTUI(verbose=args.verbose, dry_run=args.dry_run).run()
         return
 
     # Import crew after env check
