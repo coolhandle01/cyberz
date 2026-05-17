@@ -1,35 +1,23 @@
 """
-tools/workspace.py - read-only access to the per-run shared workspace.
+tools/workspace/ - read-only access to the per-run shared workspace.
 
 Agents pass artefact basenames through their task context (recon.json,
 findings.json, verified.json, ...). These helpers let any agent list and
-sample those files on demand without pulling the whole payload into
-context - which is what motivated writing files in the first place.
+read those files on demand.
 
 The API is deliberately narrow: inputs are paths *relative to* the run
 directory, full stop. No absolute paths, no parent traversal. The shape
 itself communicates the contract; we are not in the business of providing
 arbitrary-read primitives to LLM-driven agents.
-
-Size cap: read_run_file enforces a default byte limit plus a hard ceiling,
-so an agent cannot undo the file-path optimisation by slurping a 4MB
-recon.json in one call.
 """
 
 from __future__ import annotations
 
 from pathlib import Path, PurePosixPath
 
+from crewai.tools import tool
+
 import runtime
-
-# Default returned slice when the caller does not specify limit_bytes.
-# Sized to fit a useful slice of typical artefacts (JSON object preview,
-# first page of endpoints) without flooding the agent's context window.
-DEFAULT_READ_BYTES = 8 * 1024
-
-# Hard ceiling per call. Callers asking for more should paginate via offset
-# instead of disabling the cap.
-MAX_READ_BYTES = 256 * 1024
 
 
 def _validate_relative_path(relative_path: str) -> PurePosixPath:
@@ -86,39 +74,37 @@ def list_run_files() -> list[dict]:
     return out
 
 
-def read_run_file(
-    relative_path: str,
-    offset: int = 0,
-    limit_bytes: int = DEFAULT_READ_BYTES,
-) -> dict:
-    """Read a byte slice of a file in the run directory.
+def read_run_file(relative_path: str) -> dict:
+    """Read a file from the run directory and return its full contents.
 
     ``relative_path`` is a path *relative to* runtime.run_dir() (e.g.
     "recon.json"). Absolute paths and parent traversal are not accepted.
-
-    Reads up to ``limit_bytes`` starting at ``offset``. Returns a dict
-    containing the decoded slice (utf-8, errors=replace), the byte range
-    read, the file's total size, and whether the read was truncated -
-    so the caller knows whether to paginate. ``limit_bytes`` above
-    MAX_READ_BYTES is refused; paginate via ``offset`` instead.
+    Returns {"name": relative_path, "size_bytes": int, "content": str}.
     """
-    if offset < 0:
-        raise ValueError("offset must be non-negative")
-    if limit_bytes < 1 or limit_bytes > MAX_READ_BYTES:
-        raise ValueError(f"limit_bytes must be between 1 and {MAX_READ_BYTES} (got {limit_bytes})")
     path = resolve_run_path(relative_path)
     if not path.is_file():
         raise FileNotFoundError(f"{relative_path!r} not found in run directory")
-    total_size = path.stat().st_size
-    with path.open("rb") as fh:
-        fh.seek(offset)
-        raw = fh.read(limit_bytes)
-    end = offset + len(raw)
+    content = path.read_text(encoding="utf-8", errors="replace")
     return {
         "name": relative_path,
-        "offset": offset,
-        "end": end,
-        "size_bytes": total_size,
-        "truncated": end < total_size,
-        "content": raw.decode("utf-8", errors="replace"),
+        "size_bytes": path.stat().st_size,
+        "content": content,
     }
+
+
+@tool("List Run Files")
+def read_run_filelist_tool() -> list[dict]:
+    """List the artefacts written to the current run directory by the squad
+    so far, each with its name and byte size. Use this to discover what an
+    upstream teammate has produced before deciding which file to sample with
+    Read Run File."""
+    return list_run_files()
+
+
+@tool("Read Run File")
+def read_run_file_tool(relative_path: str) -> dict:
+    """Read a file from the current run directory and return its full contents.
+    ``relative_path`` is a path relative to the run directory (e.g.
+    "recon.json") - the only kind of path this tool accepts. Returns
+    {name, size_bytes, content}."""
+    return read_run_file(relative_path)

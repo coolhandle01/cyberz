@@ -536,7 +536,6 @@ class TestSharedWorkspaceTools:
         assert isinstance(result, dict)
         assert result["content"] == "hello"
         assert result["size_bytes"] == 5
-        assert result["truncated"] is False
 
     def test_read_run_file_tool_refuses_escape(self, tmp_path) -> None:
         from squad import read_run_file_tool

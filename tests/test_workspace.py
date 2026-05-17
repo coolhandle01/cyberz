@@ -1,8 +1,8 @@
 """
-tests/test_workspace.py - tools/workspace.py helpers.
+tests/test_workspace.py - tools/workspace/ helpers.
 
 Covers the two safety invariants: path containment (no escape from
-runtime.run_dir()) and size cap (no slurping past MAX_READ_BYTES).
+runtime.run_dir()) and correct file reads.
 """
 
 from __future__ import annotations
@@ -47,33 +47,14 @@ class TestListRunFiles:
 
 
 class TestReadRunFile:
-    def test_reads_full_small_file(self, tmp_path: Path) -> None:
-        (tmp_path / "recon.json").write_text("hello world", encoding="utf-8")
+    def test_reads_full_file(self, tmp_path: Path) -> None:
+        recon_path = tmp_path / "recon.json"
+        recon_path.write_text("hello world", encoding="utf-8")
         with patch("tools.workspace.runtime.run_dir", return_value=tmp_path):
             result = workspace.read_run_file("recon.json")
         assert result["content"] == "hello world"
         assert result["size_bytes"] == 11
-        assert result["offset"] == 0
-        assert result["end"] == 11
-        assert result["truncated"] is False
-
-    def test_respects_limit_and_signals_truncation(self, tmp_path: Path) -> None:
-        (tmp_path / "big.json").write_text("x" * 100, encoding="utf-8")
-        with patch("tools.workspace.runtime.run_dir", return_value=tmp_path):
-            result = workspace.read_run_file("big.json", limit_bytes=10)
-        assert len(result["content"]) == 10
-        assert result["end"] == 10
-        assert result["size_bytes"] == 100
-        assert result["truncated"] is True
-
-    def test_offset_paginates(self, tmp_path: Path) -> None:
-        (tmp_path / "data").write_text("abcdefghij", encoding="utf-8")
-        with patch("tools.workspace.runtime.run_dir", return_value=tmp_path):
-            result = workspace.read_run_file("data", offset=4, limit_bytes=3)
-        assert result["content"] == "efg"
-        assert result["offset"] == 4
-        assert result["end"] == 7
-        assert result["truncated"] is True
+        assert result["name"] == "recon.json"
 
     def test_rejects_parent_traversal(self, tmp_path: Path) -> None:
         with patch("tools.workspace.runtime.run_dir", return_value=tmp_path):
@@ -108,21 +89,3 @@ class TestReadRunFile:
         with patch("tools.workspace.runtime.run_dir", return_value=tmp_path):
             with pytest.raises(FileNotFoundError):
                 workspace.read_run_file("nope.json")
-
-    def test_rejects_limit_above_ceiling(self, tmp_path: Path) -> None:
-        (tmp_path / "f").write_text("x", encoding="utf-8")
-        with patch("tools.workspace.runtime.run_dir", return_value=tmp_path):
-            with pytest.raises(ValueError, match="limit_bytes must be between"):
-                workspace.read_run_file("f", limit_bytes=workspace.MAX_READ_BYTES + 1)
-
-    def test_rejects_zero_limit(self, tmp_path: Path) -> None:
-        (tmp_path / "f").write_text("x", encoding="utf-8")
-        with patch("tools.workspace.runtime.run_dir", return_value=tmp_path):
-            with pytest.raises(ValueError, match="limit_bytes must be between"):
-                workspace.read_run_file("f", limit_bytes=0)
-
-    def test_rejects_negative_offset(self, tmp_path: Path) -> None:
-        (tmp_path / "f").write_text("x", encoding="utf-8")
-        with patch("tools.workspace.runtime.run_dir", return_value=tmp_path):
-            with pytest.raises(ValueError, match="offset must be non-negative"):
-                workspace.read_run_file("f", offset=-1)
