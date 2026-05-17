@@ -13,12 +13,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 # ----------------------------------------------------------------------------
 # Programme Manager
 # ----------------------------------------------------------------------------
 
 
-@pytest.mark.unit
 class TestProgrammeManagerTools:
     def test_list_programmes_tool(self) -> None:
         from squad.programme_manager import list_programmes_tool
@@ -68,7 +69,6 @@ class TestProgrammeManagerTools:
 # ----------------------------------------------------------------------------
 
 
-@pytest.mark.unit
 class TestOsintAnalystTools:
     def test_recon_tool(self, programme, recon_result, tmp_path) -> None:
         from squad.osint_analyst import recon_tool
@@ -136,7 +136,6 @@ class TestOsintAnalystTools:
 # ----------------------------------------------------------------------------
 
 
-@pytest.mark.unit
 class TestVulnerabilityResearcherTools:
     def test_triage_tool(self, raw_finding_high, programme, verified_vuln, tmp_path) -> None:
         from squad.vulnerability_researcher import triage_tool
@@ -232,7 +231,6 @@ class TestVulnerabilityResearcherTools:
 # ----------------------------------------------------------------------------
 
 
-@pytest.mark.unit
 class TestTechnicalAuthorTools:
     def test_create_report_tool(self, verified_vuln, disclosure_report, tmp_path) -> None:
         from squad.technical_author import create_report_tool
@@ -276,7 +274,6 @@ class TestTechnicalAuthorTools:
 # ----------------------------------------------------------------------------
 
 
-@pytest.mark.unit
 class TestDisclosureCoordinatorTools:
     def test_submit_report_tool(self, disclosure_report) -> None:
         from squad.disclosure_coordinator import submit_report_tool
@@ -332,7 +329,6 @@ class TestDisclosureCoordinatorTools:
 # ----------------------------------------------------------------------------
 
 
-@pytest.mark.unit
 class TestPenetrationTesterTools:
     def test_nuclei_scan_tool(self, endpoint, raw_finding_low) -> None:
         from squad.penetration_tester import nuclei_scan_tool
