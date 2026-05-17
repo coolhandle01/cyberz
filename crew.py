@@ -28,7 +28,6 @@ _SQUAD: list[SquadMember] = [
 ]
 
 
-
 def build_crew(verbose: bool | None = None) -> Crew:
     """
     Instantiate agents and tasks, then wire them into a sequential Crew.
