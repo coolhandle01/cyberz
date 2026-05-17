@@ -1,10 +1,16 @@
-You have access to the full ReconResult from the previous task, which includes:
+The previous task hands you the absolute path to recon.json in your context.
+Tools that need the recon surface accept a `recon_path` argument - pass the
+path string through unchanged. The file contains:
 - Live endpoints and their HTTP status codes
 - Detected technologies (check the `technologies` field)
 - Open ports (check the `open_ports` field)
 - Endpoints with URL parameters (check `parameters` on each Endpoint)
 - Passive findings already collected during recon: TLS issues, DNS misconfigs
   (check the `passive_findings` field - do not repeat these checks)
+
+For tools that take `endpoints_json` (probe tools that operate on a filtered
+subset), read recon.json once, select the relevant endpoints, and serialise
+just that subset to JSON.
 
 Use this context to select tools strategically. Do not run everything at
 everything. Think like a human penetration tester.
@@ -35,6 +41,9 @@ Decision guidance:
 - All endpoints, always
   -> Header Injection Check, Error Disclosure Check.
 
-Serialise the ReconResult to JSON and pass it to each tool you decide to invoke.
 Return all findings regardless of confidence - triage is the Vulnerability
 Researcher's job. Capture the tool output as evidence.
+
+When every probe you intend to run has completed, collect all returned
+findings into a single JSON array and call save_findings_tool with that
+array. Return the path it gives you as your final output.

@@ -17,15 +17,28 @@ from tools.report_tools import (
 
 
 @tool("Create Disclosure Report")
-def create_report_tool(programme_handle: str, vulnerability_json: str, summary: str) -> dict:
+def create_report_tool(verified_path: str, programme_handle: str, summary: str) -> dict:
     """
-    Create and save a structured DisclosureReport from a verified vulnerability.
-    Returns the serialised report ready for submission.
+    Create and save a structured DisclosureReport from the highest-severity
+    verified vulnerability. Reads the verified vulnerabilities list from
+    verified_path. Writes report.json into the run directory and returns the
+    serialised report ready for submission.
     """
+    import json
+    from pathlib import Path
+
+    import runtime
+
     http.set_programme(programme_handle)
-    vuln = VerifiedVulnerability.model_validate_json(vulnerability_json)
+    verified_data = json.loads(Path(verified_path).read_text(encoding="utf-8"))
+    if not verified_data:
+        raise ValueError(f"No verified vulnerabilities found in {verified_path}")
+    vuln = VerifiedVulnerability.model_validate(verified_data[0])
     report = create_disclosure_report(programme_handle, vuln, summary)
     save_report(report)
+    out_path = runtime.run_dir() / "report.json"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(report.model_dump_json(), encoding="utf-8")
     return report.model_dump()
 
 

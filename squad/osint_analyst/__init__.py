@@ -14,18 +14,25 @@ from tools.recon import cert_transparency, detect_llm_endpoints, historical_urls
 
 
 @tool("Run Recon")
-def recon_tool(programme_handle: str) -> dict:
+def recon_tool(programme_handle: str) -> str:
     """
     Run full OSINT recon (subdomain enumeration, HTTP probing, port scanning)
-    against the in-scope assets of the given programme handle.
-    Returns a serialised ReconResult.
+    against the in-scope assets of the given programme handle. Writes the
+    serialised ReconResult to recon.json in the run directory and returns
+    the absolute path.
     """
+    import runtime
+
+    runtime.programme_handle = programme_handle
     http.set_programme(programme_handle)
     policy = h1.get_programme_policy(programme_handle)
     scope = h1.get_structured_scope(programme_handle)
     programme = h1.parse_programme(policy["data"], scope)
     result = run_recon(programme)
-    return result.model_dump()
+    out_path = runtime.run_dir() / "recon.json"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(result.model_dump_json(), encoding="utf-8")
+    return str(out_path)
 
 
 @tool("Certificate Transparency Lookup")
