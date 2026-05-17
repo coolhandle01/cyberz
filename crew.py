@@ -28,10 +28,6 @@ _SQUAD: list[SquadMember] = [
 ]
 
 
-def crew_tasks() -> dict[str, str]:
-    """Return a role -> task mapping built from the squad member metadata."""
-    return {m.read("role"): m.task for m in _SQUAD if m.task}
-
 
 def build_crew(verbose: bool | None = None) -> Crew:
     """

@@ -49,5 +49,4 @@ MEMBER = SquadMember(
     slug="disclosure_coordinator",
     dir=Path(__file__).parent,
     tools=[submit_report_tool, check_duplicate_tool],
-    task="Disclosure",
 )

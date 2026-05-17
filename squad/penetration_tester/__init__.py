@@ -986,7 +986,6 @@ def save_findings_tool(findings_json: str) -> str:
 MEMBER = SquadMember(
     slug="penetration_tester",
     dir=Path(__file__).parent,
-    task="Penetration Testing",
     tools=[
         nuclei_scan_tool,
         sqlmap_tool,

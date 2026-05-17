@@ -26,9 +26,6 @@ junit.xml
 htmlcov/
 coverage.xml
 
-# Claude Code agent worktrees
-.claude/worktrees/
-
 # IDE
 .idea/
 .vscode/
