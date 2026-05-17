@@ -12,8 +12,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from models import Endpoint, Programme
+from models import Endpoint, Programme, ScopeType
 from tools.recon import (
+    _ACTIVE_RECON_TYPES,
+    _CODE_HOSTS,
     cert_transparency,
     discover_paths,
     enumerate_subdomains,
@@ -43,6 +45,29 @@ class TestExtractDomain:
 
     def test_url_with_port(self):
         assert extract_domain("https://example.com:8443") == "example.com"
+
+
+class TestSeedingConstants:
+    """
+    Regression: URL-type scope items pointing into third-party code hosting infra
+    (e.g. github.com/cloudflare) must not be used as subfinder seeds.
+    H1 returns URL for both bare domains and wildcard patterns; OTHER for products.
+    """
+
+    def test_url_type_is_active_recon(self):
+        assert ScopeType.URL in _ACTIVE_RECON_TYPES
+
+    def test_wildcard_type_is_active_recon(self):
+        assert ScopeType.WILDCARD in _ACTIVE_RECON_TYPES
+
+    def test_other_type_is_not_active_recon(self):
+        assert ScopeType.OTHER not in _ACTIVE_RECON_TYPES
+
+    def test_code_hosts_blocks_github(self):
+        assert "github.com" in _CODE_HOSTS
+
+    def test_code_hosts_blocks_gitlab(self):
+        assert "gitlab.com" in _CODE_HOSTS
 
 
 # filter_in_scope

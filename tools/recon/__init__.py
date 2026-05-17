@@ -58,7 +58,22 @@ def _dirfuzz_targets(endpoints: list[Endpoint], seed_domains: list[str]) -> list
     return sorted(endpoints, key=_priority)
 
 
+# Third-party code hosting platforms that appear in H1 scope lists as URL-type
+# assets pointing to repos/orgs, but whose infrastructure must never be enumerated.
+_CODE_HOSTS: frozenset[str] = frozenset(
+    {"github.com", "gitlab.com", "bitbucket.org", "sourceforge.net"}
+)
+
+# Asset types that represent live web targets worth enumerating with subfinder.
+# H1 returns URL for bare domains (dash.cloudflare.com) and wildcards (*.teams.cloudflare.com).
+_ACTIVE_RECON_TYPES: frozenset[ScopeType] = frozenset(
+    {ScopeType.URL, ScopeType.WILDCARD, ScopeType.IP_ADDRESS}
+)
+
+
 __all__ = [
+    "_ACTIVE_RECON_TYPES",
+    "_CODE_HOSTS",
     "cert_transparency",
     "check_dns_email_security",
     "check_tls",
@@ -77,11 +92,19 @@ __all__ = [
 
 def run_recon(programme: Programme) -> ReconResult:
     """Full recon pipeline for a single programme."""
-    seed_domains: list[str] = [
-        extract_domain(item.asset_identifier)
-        for item in programme.in_scope
-        if item.asset_type in (ScopeType.URL, ScopeType.WILDCARD)
-    ]
+    seed_domains: list[str] = []
+    for item in programme.in_scope:
+        if item.asset_type not in _ACTIVE_RECON_TYPES:
+            continue
+        parsed = urlparse(
+            item.asset_identifier
+            if "://" in item.asset_identifier
+            else f"http://{item.asset_identifier}"
+        )
+        hostname = (parsed.hostname or "").lstrip("*.")
+        if not hostname or (parsed.path or "").strip("/") or hostname in _CODE_HOSTS:
+            continue
+        seed_domains.append(hostname)
     seed_domains = list(dict.fromkeys(seed_domains))
 
     all_subdomains: list[str] = []
