@@ -8,14 +8,16 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from models import Endpoint, Severity
+from tools.pentest import canary
 from tools.pentest.open_redirect import (
-    _PAYLOAD_HOST,
     _PAYLOADS,
     OpenRedirectPayload,
     _redirect_target,
     _redirects_to_canary,
     check_open_redirect,
 )
+
+_PAYLOAD_HOST = canary.REDIRECT_HOST
 
 pytestmark = pytest.mark.unit
 
