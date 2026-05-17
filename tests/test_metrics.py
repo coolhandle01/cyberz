@@ -8,9 +8,20 @@ from pathlib import Path
 
 import pytest
 
-from tools.metrics import build_run_metrics, estimate_cost, print_metrics, save_metrics
+from tools.metrics import build_run_metrics, estimate_cost, parse_llm, print_metrics, save_metrics
 
 pytestmark = pytest.mark.unit
+
+
+class TestParseLlm:
+    def test_with_provider(self) -> None:
+        assert parse_llm("anthropic/claude-sonnet-4") == ("anthropic", "claude-sonnet-4")
+
+    def test_without_provider(self) -> None:
+        assert parse_llm("claude-sonnet-4") == ("", "claude-sonnet-4")
+
+    def test_multiple_slashes_uses_last(self) -> None:
+        assert parse_llm("org/team/claude-sonnet-4") == ("org/team", "claude-sonnet-4")
 
 
 class TestEstimateCost:
@@ -28,6 +39,12 @@ class TestEstimateCost:
 
     def test_zero_tokens(self) -> None:
         assert estimate_cost("claude-sonnet-4-20250514", 0, 0) == 0.0
+
+    def test_provider_prefix_stripped(self) -> None:
+        cost_bare = estimate_cost("claude-sonnet-4-6", 1_000_000, 1_000_000)
+        cost_prefixed = estimate_cost("anthropic/claude-sonnet-4-6", 1_000_000, 1_000_000)
+        assert cost_prefixed == pytest.approx(cost_bare)
+        assert cost_prefixed > 0
 
     def test_unknown_model_returns_zero(self) -> None:
         assert estimate_cost("gpt-4o", 1_000_000, 1_000_000) == 0.0

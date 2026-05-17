@@ -25,10 +25,21 @@ _PRICING: dict[str, tuple[float, float]] = {
 }
 
 
+def parse_llm(llm: str) -> tuple[str, str]:
+    """Split a litellm-format model string into (provider, model).
+
+    "anthropic/claude-sonnet-4" -> ("anthropic", "claude-sonnet-4")
+    "claude-sonnet-4"           -> ("", "claude-sonnet-4")
+    """
+    provider, _, model = llm.rpartition("/")
+    return provider, model
+
+
 def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
     """Return estimated USD cost for the given token counts and model."""
+    _, model_key = parse_llm(model)
     for prefix, (in_price, out_price) in _PRICING.items():
-        if model.startswith(prefix):
+        if model_key.startswith(prefix):
             return (input_tokens * in_price + output_tokens * out_price) / 1_000_000
     logger.warning("No pricing entry for model %r - cost will show as $0.00", model)
     return 0.0
