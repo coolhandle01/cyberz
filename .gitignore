@@ -21,6 +21,11 @@ reports/
 # Tool artefacts
 /tmp/sqlmap-output/
 
+# CI / test artefacts
+junit.xml
+htmlcov/
+coverage.xml
+
 # Claude Code agent worktrees
 .claude/worktrees/
 
