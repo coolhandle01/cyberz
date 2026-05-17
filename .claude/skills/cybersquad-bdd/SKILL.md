@@ -1,11 +1,13 @@
 ---
 name: cybersquad-bdd
-description: Gherkin conventions, step definition patterns, fixture injection, and running BDD tests in isolation. Use when creating or editing files under tests/features/ or tests/bdd/.
+description: Gherkin conventions, step definition patterns, fixture injection, running BDD tests in isolation. Trigger: creating or editing files under tests/features/ or tests/bdd/.
 ---
 
 # cybersquad BDD tests
 
-BDD tests exercise agent *reasoning* — prompts, skills, and how an agent uses its tools given a context. They are not for testing tool logic (that is unit tests). They hit a real LLM, are slow, and cost tokens. Run them intentionally, not as part of every commit.
+BDD tests exercise agent *reasoning* — prompts, skills, and how an agent uses its tools given a context. They are not for testing tool logic (that is unit tests). They call a real LLM, are slow, and cost tokens.
+
+**BDD tests require a real `ANTHROPIC_API_KEY` in your local environment.** They cannot be run by Claude in a remote execution environment (no access to your key), and they are not run in CI until an API key is wired up via Secrets. Run them locally when working on prompts or skills.
 
 ## When to write a BDD test
 
@@ -28,17 +30,53 @@ tests/
 ## Running
 
 ```bash
-# BDD tests only
+# BDD tests only (requires ANTHROPIC_API_KEY)
 pytest -m bdd
 
-# Unit tests only (default CI run - does not include BDD)
+# Unit tests only (default CI run - no LLM key needed)
 pytest -m unit
 
-# Both
-pytest -m "unit or bdd"
+# Everything
+pytest
 ```
 
-BDD tests are excluded from CI by default. They are run locally when working on prompts or skills.
+## Token cost tracking
+
+CrewAI returns token usage on `CrewOutput.token_usage`. Use `estimate_cost()` from `tools/metrics.py` to convert counts to USD and log the cost at the end of each BDD scenario. This gives a running record of what each agent costs per test run and lets you spot prompt regressions that cause runaway token usage.
+
+Add this to `tests/bdd/conftest.py` when writing the first BDD test:
+
+```python
+import pytest
+from tools.metrics import estimate_cost
+
+@pytest.fixture()
+def log_token_cost(request):
+    """Fixture that logs LLM token cost after a BDD scenario completes."""
+    costs: list[float] = []
+
+    def _record(crew_output, model: str) -> float:
+        usage = crew_output.token_usage
+        cost = estimate_cost(model, usage.prompt_tokens, usage.completion_tokens)
+        costs.append(cost)
+        return cost
+
+    yield _record
+
+    total = sum(costs)
+    print(f"\n[token cost] {request.node.name}: ${total:.4f}")
+```
+
+Call `log_token_cost(crew_output, model)` inside your `@when` step after the crew runs. A significant cost increase between runs is a prompt regression signal — if a change makes an agent 3x more expensive, something went wrong in the reasoning.
+
+Token cost assertions are optional but useful for spike detection:
+
+```python
+@then("the agent completes within a reasonable token budget")
+def check_token_budget(pm_output, log_token_cost):
+    cost = log_token_cost(pm_output, "anthropic/claude-sonnet-4")
+    assert cost < 0.10, f"Agent cost ${cost:.4f} — possible prompt regression"
+```
 
 ## Writing a .feature file
 
@@ -118,4 +156,4 @@ with patch("crewai.Agent.execute_task", return_value="fake output"):
 
 ## Marker
 
-All BDD test files must carry `pytestmark = pytest.mark.bdd` at module level. This keeps them out of `pytest -m unit` runs.
+All BDD test files must carry `pytestmark = pytest.mark.bdd` at module level. This keeps them out of `pytest -m unit` runs and out of CI until the LLM key is available.
