@@ -18,7 +18,7 @@ from typing import Any
 
 from crewai import Agent, Task
 
-from tools.workspace import read_run_file_tool, read_run_filelist_tool
+from squad.workspace_tools import read_run_file_tool, read_run_filelist_tool
 
 
 @dataclass(frozen=True)

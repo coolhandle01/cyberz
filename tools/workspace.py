@@ -15,8 +15,6 @@ from __future__ import annotations
 
 from pathlib import Path, PurePosixPath
 
-from crewai.tools import tool
-
 import runtime
 
 
@@ -90,21 +88,3 @@ def read_run_file(relative_path: str) -> dict:
         "size_bytes": path.stat().st_size,
         "content": content,
     }
-
-
-@tool("List Run Files")
-def read_run_filelist_tool() -> list[dict]:
-    """List the artefacts written to the current run directory by the squad
-    so far, each with its name and byte size. Use this to discover what an
-    upstream teammate has produced before deciding which file to sample with
-    Read Run File."""
-    return list_run_files()
-
-
-@tool("Read Run File")
-def read_run_file_tool(relative_path: str) -> dict:
-    """Read a file from the current run directory and return its full contents.
-    ``relative_path`` is a path relative to the run directory (e.g.
-    "recon.json") - the only kind of path this tool accepts. Returns
-    {name, size_bytes, content}."""
-    return read_run_file(relative_path)
