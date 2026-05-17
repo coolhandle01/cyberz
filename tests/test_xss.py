@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -13,14 +13,12 @@ pytestmark = pytest.mark.unit
 
 
 class TestCheckReflectedXss:
-    def test_detects_unescaped_reflection(self, victim_url: str):
+    def test_detects_unescaped_reflection(self, victim_url: str, make_response):
         ep = Endpoint(url=f"{victim_url}/search", status_code=200, parameters=["q"])
 
         def fake_get(url, **kwargs):
             canary = url.split("q=")[1]
-            resp = MagicMock()
-            resp.text = f"<html><body>Results for {canary}</body></html>"
-            return resp
+            return make_response(body=f"<html><body>Results for {canary}</body></html>")
 
         with patch("requests.get", side_effect=fake_get):
             results = check_reflected_xss([ep])
@@ -30,27 +28,24 @@ class TestCheckReflectedXss:
         assert results[0].severity_hint == Severity.HIGH
         assert "q" in results[0].evidence
 
-    def test_no_finding_when_canary_is_html_encoded(self, victim_url: str):
+    def test_no_finding_when_canary_is_html_encoded(self, victim_url: str, make_response):
         ep = Endpoint(url=f"{victim_url}/search", status_code=200, parameters=["q"])
 
         def fake_get(url, **kwargs):
-            resp = MagicMock()
             # Application HTML-encodes < and >
-            resp.text = "<html><body>Results for &lt;cybersquad-xss-test&gt;</body></html>"
-            return resp
+            encoded = "&lt;cybersquad-xss-test&gt;"
+            return make_response(body=f"<html><body>Results for {encoded}</body></html>")
 
         with patch("requests.get", side_effect=fake_get):
             results = check_reflected_xss([ep])
 
         assert results == []
 
-    def test_no_finding_when_canary_absent_from_response(self, victim_url: str):
+    def test_no_finding_when_canary_absent_from_response(self, victim_url: str, make_response):
         ep = Endpoint(url=f"{victim_url}/search", status_code=200, parameters=["q"])
 
         def fake_get(url, **kwargs):
-            resp = MagicMock()
-            resp.text = "<html><body>No results found</body></html>"
-            return resp
+            return make_response(body="<html><body>No results found</body></html>")
 
         with patch("requests.get", side_effect=fake_get):
             results = check_reflected_xss([ep])
@@ -71,7 +66,7 @@ class TestCheckReflectedXss:
         mock_get.assert_not_called()
         assert results == []
 
-    def test_deduplicates_multiple_reflecting_params(self, victim_url: str):
+    def test_deduplicates_multiple_reflecting_params(self, victim_url: str, make_response):
         ep = Endpoint(
             url=f"{victim_url}/search",
             status_code=200,
@@ -83,12 +78,8 @@ class TestCheckReflectedXss:
             for key in ("q=", "category="):
                 if key in url:
                     canary = url.split(key)[1]
-                    resp = MagicMock()
-                    resp.text = f"<html>{canary}</html>"
-                    return resp
-            resp = MagicMock()
-            resp.text = "<html></html>"
-            return resp
+                    return make_response(body=f"<html>{canary}</html>")
+            return make_response(body="<html></html>")
 
         with patch("requests.get", side_effect=fake_get):
             results = check_reflected_xss([ep])
@@ -102,7 +93,7 @@ class TestCheckReflectedXss:
             results = check_reflected_xss([ep])
         assert results == []
 
-    def test_canary_includes_angle_brackets(self, victim_url: str):
+    def test_canary_includes_angle_brackets(self, victim_url: str, make_response):
         """The canary must be a real tag to test for XSS, not just text."""
         ep = Endpoint(url=f"{victim_url}/", status_code=200, parameters=["x"])
 
@@ -110,9 +101,7 @@ class TestCheckReflectedXss:
 
         def fake_get(url, **kwargs):
             seen_urls.append(url)
-            resp = MagicMock()
-            resp.text = ""
-            return resp
+            return make_response(body="")
 
         with patch("requests.get", side_effect=fake_get):
             check_reflected_xss([ep])
