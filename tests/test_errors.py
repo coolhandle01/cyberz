@@ -142,4 +142,4 @@ class TestCheckErrorDisclosure:
         with patch("requests.get", side_effect=recording_get):
             check_error_disclosure([ep])
 
-        assert any("bountysquad-404probe" in u for u in seen_urls)
+        assert any("cybersquad-404probe" in u for u in seen_urls)
