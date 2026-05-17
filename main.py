@@ -106,6 +106,7 @@ def main() -> None:
     check_env()
 
     # Import crew after env check
+    import runtime
     from config import config
     from crew import build_crew
     from tools.metrics import build_run_metrics, print_metrics, save_metrics
@@ -116,13 +117,13 @@ def main() -> None:
         dry_run_summary(crew)
         return
 
-    run_id = datetime.now(UTC).strftime("%Y%m%d-%H%M%S") + "-" + uuid4().hex[:6]
+    runtime.run_id = datetime.now(UTC).strftime("%Y%m%d-%H%M%S") + "-" + uuid4().hex[:6]
     started_at = datetime.now(UTC)
 
     console.rule("[bold]Bounty Squad[/bold]")
     logger.info(
         "run=%s  model=%s  min_bounty=$%s  min_severity=%s",
-        run_id,
+        runtime.run_id,
         config.llm.model,
         config.h1.min_bounty_threshold,
         config.scan.min_severity,
@@ -144,7 +145,7 @@ def main() -> None:
         usage = getattr(result, "token_usage", None)
         if usage is not None:
             metrics = build_run_metrics(
-                run_id=run_id,
+                run_id=runtime.run_id,
                 started_at=started_at,
                 llm_model=config.llm.model,
                 input_tokens=getattr(usage, "prompt_tokens", 0),
