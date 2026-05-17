@@ -62,7 +62,7 @@ markers = [
 
 [tool.coverage.run]
 source = ["."]
-omit = ["tests/*", ".venv/*", "tui.py", "tools/tui/*"]
+omit = ["tests/*", ".venv/*"]
 
 [tool.coverage.report]
 fail_under = 90
