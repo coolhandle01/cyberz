@@ -15,3 +15,8 @@ disclosure report in Markdown:
 The quality bar is a report that HackerOne triages on first read without
 requesting clarification. If there are multiple findings, prioritise the
 highest-severity one for submission in this run.
+
+The previous task hands you the absolute path to verified.json in your
+context. Pass it to create_report_tool along with the programme handle
+and your executive summary; the tool reads the highest-severity entry
+and produces the final report.
