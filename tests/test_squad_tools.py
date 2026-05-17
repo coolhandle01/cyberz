@@ -9,6 +9,7 @@ underlying helpers are exercised in their own dedicated test files.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -23,7 +24,7 @@ class TestProgrammeManagerTools:
     def test_find_programmes_tool_caches_each(self, programme, tmp_path) -> None:
         from squad.programme_manager import find_programmes_tool
 
-        cache_paths: dict[str, object] = {}
+        cache_paths: dict[str, Path] = {}
 
         def cache_path_for(handle):
             p = tmp_path / handle / "programme.json"
