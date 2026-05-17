@@ -512,5 +512,5 @@ class TestSharedWorkspaceTools:
         from squad import read_run_file_tool
 
         with patch("tools.workspace.runtime.run_dir", return_value=tmp_path):
-            with pytest.raises(ValueError, match="escapes the run directory"):
+            with pytest.raises(ValueError, match="must not contain '..'"):
                 read_run_file_tool.func("../etc/passwd")

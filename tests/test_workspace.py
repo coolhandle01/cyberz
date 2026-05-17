@@ -75,28 +75,31 @@ class TestReadRunFile:
         assert result["end"] == 7
         assert result["truncated"] is True
 
-    def test_rejects_path_escape_via_dotdot(self, tmp_path: Path) -> None:
-        secret = tmp_path.parent / "secret.txt"
-        secret.write_text("not for the agent", encoding="utf-8")
-        try:
-            with patch("tools.workspace.runtime.run_dir", return_value=tmp_path):
-                with pytest.raises(ValueError, match="escapes the run directory"):
-                    workspace.read_run_file("../secret.txt")
-        finally:
-            secret.unlink()
-
-    def test_rejects_absolute_path_escape(self, tmp_path: Path) -> None:
+    def test_rejects_parent_traversal(self, tmp_path: Path) -> None:
         with patch("tools.workspace.runtime.run_dir", return_value=tmp_path):
-            with pytest.raises(ValueError, match="escapes the run directory"):
+            with pytest.raises(ValueError, match="must not contain '..'"):
+                workspace.read_run_file("../secret.txt")
+
+    def test_rejects_absolute_path(self, tmp_path: Path) -> None:
+        with patch("tools.workspace.runtime.run_dir", return_value=tmp_path):
+            with pytest.raises(ValueError, match="must be relative, not absolute"):
                 workspace.read_run_file("/etc/passwd")
 
+    def test_rejects_empty_path(self, tmp_path: Path) -> None:
+        with patch("tools.workspace.runtime.run_dir", return_value=tmp_path):
+            with pytest.raises(ValueError, match="must not be empty"):
+                workspace.read_run_file("")
+
     def test_rejects_symlink_escape(self, tmp_path: Path) -> None:
+        # Belt-and-braces: the shape check above only inspects the input.
+        # A symlink inside run_dir pointing outside passes the shape check,
+        # so the resolve-and-verify step has to catch it.
         outside = tmp_path.parent / "outside.txt"
         outside.write_text("secret", encoding="utf-8")
         try:
             (tmp_path / "link").symlink_to(outside)
             with patch("tools.workspace.runtime.run_dir", return_value=tmp_path):
-                with pytest.raises(ValueError, match="escapes the run directory"):
+                with pytest.raises(ValueError, match="resolves outside the run directory"):
                     workspace.read_run_file("link")
         finally:
             outside.unlink()

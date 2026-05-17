@@ -81,13 +81,14 @@ def read_run_filelist_tool() -> list[dict]:
 
 @tool("Read Run File")
 def read_run_file_tool(
-    name: str,
+    relative_path: str,
     offset: int = 0,
     limit_bytes: int = workspace.DEFAULT_READ_BYTES,
 ) -> dict:
-    """Read a byte slice of a file in the current run directory. ``name`` is
-    a relative path (e.g. "recon.json"); paths outside the run directory are
-    refused. Returns {name, offset, end, size_bytes, truncated, content}.
-    Default limit_bytes is small (8 KiB) so you can sample large files
-    cheaply - re-call with a larger offset to paginate."""
-    return workspace.read_run_file(name, offset=offset, limit_bytes=limit_bytes)
+    """Read a byte slice of a file in the current run directory.
+    ``relative_path`` is a path relative to the run directory (e.g.
+    "recon.json") - the only kind of path this tool accepts. Returns
+    {name, offset, end, size_bytes, truncated, content}. Default
+    limit_bytes is small (8 KiB) so you can sample large files cheaply;
+    re-call with a larger offset to paginate."""
+    return workspace.read_run_file(relative_path, offset=offset, limit_bytes=limit_bytes)
