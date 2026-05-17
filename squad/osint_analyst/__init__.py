@@ -23,7 +23,6 @@ def recon_tool(programme_handle: str) -> str:
     """
     import runtime
 
-    runtime.programme_handle = programme_handle
     http.set_programme(programme_handle)
     policy = h1.get_programme_policy(programme_handle)
     scope = h1.get_structured_scope(programme_handle)
