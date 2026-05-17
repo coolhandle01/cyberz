@@ -29,7 +29,7 @@ This file carries only the rules that must hold on every turn. Anything situatio
 ## Safety invariants - do not weaken
 
 - **Scope enforcement** in `tools/recon/scope.py`: `if host == pattern or host.endswith("." + pattern)`. A bare `host.endswith(pattern)` would let `evil.notexample.com` match `example.com`.
-- **Automated-scanning gate** in `tools/h1_api.py:parse_programme()`: sets `allows_automated_scanning=False` on policy text like "no automated" / "automated scanning prohibited". The PM discards such programmes.
+- **Automated-scanning gate**: the Programme Manager reads `policy_text` in full and discards any programme whose policy forbids automated tools, scanners, fuzzing, brute force, or rate testing. The discard rule lives in `squad/programme_manager/description.md`; `policy_text` is the source of truth and there is intentionally no boolean shortcut on the `Programme` model.
 - **Import order in `main.py`**: `check_env()` must run before `build_crew()` is imported. The crew import chain reads env vars; `check_env()` must exit cleanly first.
 - **No module-level side effects in `crew.py`**. The old `crew = build_crew()` at module level was deliberately removed.
 
