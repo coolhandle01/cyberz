@@ -21,6 +21,9 @@ reports/
 # Tool artefacts
 /tmp/sqlmap-output/
 
+# Claude Code agent worktrees
+.claude/worktrees/
+
 # IDE
 .idea/
 .vscode/
