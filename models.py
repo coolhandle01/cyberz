@@ -27,8 +27,15 @@ class ScopeType(StrEnum):
     WILDCARD = "wildcard"
     IP_ADDRESS = "ip_address"
     CIDR = "cidr"
-    ANDROID = "android"
-    IOS = "ios"
+    SOURCE_CODE = "source_code"
+    HARDWARE = "hardware"
+    DOWNLOADABLE_EXECUTABLES = "downloadable_executables"
+    GOOGLE_PLAY_APP_ID = "google_play_app_id"
+    APPLE_STORE_APP_ID = "apple_store_app_id"
+    WINDOWS_APP_STORE_APP_ID = "windows_app_store_app_id"
+    OTHER_APK = "other_apk"
+    OTHER_IPA = "other_ipa"
+    TESTFLIGHT = "testflight"
     OTHER = "other"
 
 
@@ -64,12 +71,14 @@ class Programme(BaseModel):
     bounty_table: dict[Severity, int]
     in_scope: list[ScopeItem]
     out_of_scope: list[ScopeItem]
-    allows_automated_scanning: bool
     offers_bounties: bool = True
     accepts_new_reports: bool = True
     response_efficiency_pct: float | None = None
     avg_time_to_bounty_days: float | None = None
+    avg_time_to_first_response_days: float | None = None
     total_bounties_paid_usd: int | None = None
+    triage_active: bool | None = None
+    last_updated_at: datetime | None = None
     policy_text: str = ""
     priority_score: float = 0.0
     selected_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

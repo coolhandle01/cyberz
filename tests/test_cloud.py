@@ -109,7 +109,6 @@ class TestCheckS3Buckets:
             bounty_table={},
             in_scope=[],
             out_of_scope=[],
-            allows_automated_scanning=True,
         )
         recon = ReconResult(
             programme=prog,
@@ -163,7 +162,6 @@ class TestCheckAzureStorage:
             bounty_table={},
             in_scope=[],
             out_of_scope=[],
-            allows_automated_scanning=True,
         )
         sas_url = (
             "https://corpassets.blob.core.windows.net/files/doc.pdf"
@@ -196,7 +194,6 @@ class TestCheckAzureStorage:
             bounty_table={},
             in_scope=[],
             out_of_scope=[],
-            allows_automated_scanning=True,
         )
         recon = ReconResult(
             programme=prog,

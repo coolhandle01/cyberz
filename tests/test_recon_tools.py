@@ -96,7 +96,6 @@ class TestFilterInScope:
             bounty_table={},
             in_scope=[],
             out_of_scope=[],
-            allows_automated_scanning=True,
         )
         assert filter_in_scope(["example.com"], bare_programme) == []
 

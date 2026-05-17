@@ -53,8 +53,18 @@ _H1_SCOPE_TYPE_MAP: dict[str, ScopeType] = {
     "WILDCARD": ScopeType.WILDCARD,
     "IP_ADDRESS": ScopeType.IP_ADDRESS,
     "CIDR": ScopeType.CIDR,
-    "ANDROID": ScopeType.ANDROID,
-    "IOS": ScopeType.IOS,
+    "SOURCE_CODE": ScopeType.SOURCE_CODE,
+    "HARDWARE": ScopeType.HARDWARE,
+    "DOWNLOADABLE_EXECUTABLES": ScopeType.DOWNLOADABLE_EXECUTABLES,
+    "GOOGLE_PLAY_APP_ID": ScopeType.GOOGLE_PLAY_APP_ID,
+    "APPLE_STORE_APP_ID": ScopeType.APPLE_STORE_APP_ID,
+    "WINDOWS_APP_STORE_APP_ID": ScopeType.WINDOWS_APP_STORE_APP_ID,
+    "OTHER_APK": ScopeType.OTHER_APK,
+    "OTHER_IPA": ScopeType.OTHER_IPA,
+    "TESTFLIGHT": ScopeType.TESTFLIGHT,
+    # Legacy aliases - older H1 responses used these for the now-deprecated app categories.
+    "ANDROID": ScopeType.OTHER,
+    "IOS": ScopeType.OTHER,
     "OTHER": ScopeType.OTHER,
 }
 
@@ -127,6 +137,41 @@ class H1Client:
         """Fetch the structured scope (in/out) for a programme."""
         return self._get(f"/hackers/programs/{handle}/structured_scopes")
 
+    def get_programme_detail(self, handle: str) -> dict:
+        """Fetch programme detail with bounty_table and structured_scopes inline.
+
+        Halves the round-trips per programme compared to calling
+        get_programme_policy + get_structured_scope separately.
+        """
+        return self._get(
+            f"/hackers/programs/{handle}",
+            params={"include": "bounty_table,structured_scopes"},
+        )
+
+    def find_programmes(self, open_only: bool = True, bounty_only: bool = True) -> list[Programme]:
+        """List accessible programmes and hydrate each with the detail endpoint.
+
+        Two GETs per surviving programme: the paginated list call (batched),
+        then the per-programme detail call with bounty_table + structured_scopes.
+        Programmes are pre-filtered on the list-level attributes before the
+        detail fetch so we do not pay for programmes we will discard anyway.
+        """
+        raw_list = self.list_programmes(page_size=25)
+        programmes: list[Programme] = []
+        for raw in raw_list:
+            attrs = raw.get("attributes", {})
+            if bounty_only and not attrs.get("offers_bounties", True):
+                continue
+            if open_only and (attrs.get("submission_state", "open") or "open") != "open":
+                continue
+            handle = attrs.get("handle") or raw.get("id", "unknown")
+            detail = self.get_programme_detail(handle)
+            detail_data = detail.get("data", {})
+            included = detail.get("included", [])
+            scope_data = {"data": [i for i in included if i.get("type") == "structured-scope"]}
+            programmes.append(self.parse_programme(detail_data, scope_data))
+        return programmes
+
     # Data parsers
 
     def parse_programme(self, raw: dict, scope_data: dict) -> Programme:
@@ -162,11 +207,6 @@ class H1Client:
                 out_of_scope.append(scope_item)
 
         policy_text: str = attrs.get("policy", "") or ""
-        policy_lower = policy_text.lower()
-        allows_auto = not any(
-            kw in policy_lower
-            for kw in ["no automated", "automated scanning prohibited", "no scanners"]
-        )
 
         offers_bounties: bool = bool(attrs.get("offers_bounties", True))
         submission_state: str = attrs.get("submission_state", "open") or "open"
@@ -177,8 +217,21 @@ class H1Client:
         avg_time_to_bounty_days: float | None = (
             round(avg_bounty_minutes / (60 * 24), 1) if avg_bounty_minutes else None
         )
+        avg_first_resp_minutes: float | None = attrs.get(
+            "average_time_to_first_programme_response_in_minutes"
+        )
+        avg_time_to_first_response_days: float | None = (
+            round(avg_first_resp_minutes / (60 * 24), 1) if avg_first_resp_minutes else None
+        )
         total_cents: int | None = attrs.get("total_bounties_paid_in_cents")
         total_bounties_paid_usd: int | None = total_cents // 100 if total_cents else None
+        triage_active: bool | None = attrs.get("triage_active")
+        last_updated_str: str | None = attrs.get("updated_at")
+        last_updated_at: datetime | None = (
+            datetime.fromisoformat(last_updated_str.replace("Z", "+00:00"))
+            if last_updated_str
+            else None
+        )
 
         return Programme(
             handle=handle,
@@ -187,12 +240,14 @@ class H1Client:
             bounty_table=bounty_table,
             in_scope=in_scope,
             out_of_scope=out_of_scope,
-            allows_automated_scanning=allows_auto,
             offers_bounties=offers_bounties,
             accepts_new_reports=accepts_new_reports,
             response_efficiency_pct=response_efficiency_pct,
             avg_time_to_bounty_days=avg_time_to_bounty_days,
+            avg_time_to_first_response_days=avg_time_to_first_response_days,
             total_bounties_paid_usd=total_bounties_paid_usd,
+            triage_active=triage_active,
+            last_updated_at=last_updated_at,
             policy_text=policy_text,
         )
 

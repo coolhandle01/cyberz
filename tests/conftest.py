@@ -93,7 +93,6 @@ def programme(scope_item_url, scope_item_wildcard) -> Programme:
         },
         in_scope=[scope_item_url, scope_item_wildcard],
         out_of_scope=[],
-        allows_automated_scanning=True,
     )
 
 
