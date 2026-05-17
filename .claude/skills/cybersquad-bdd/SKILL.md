@@ -42,7 +42,7 @@ pytest
 
 ## Token cost tracking
 
-CrewAI returns token usage on `CrewOutput.token_usage`. Use `estimate_cost()` from `tools/metrics.py` to convert counts to USD and log the cost at the end of each BDD scenario. This gives a running record of what each agent costs per test run and lets you spot prompt regressions that cause runaway token usage.
+CrewAI returns token usage on `CrewOutput.token_usage`. Use `estimate_cost()` from `tools/metrics.py` to convert counts to USD and log the cost at the end of each BDD scenario. This gives a running record of what each agent costs per test run and surfaces prompt regressions that cause runaway token usage.
 
 Add this to `tests/bdd/conftest.py` when writing the first BDD test:
 
