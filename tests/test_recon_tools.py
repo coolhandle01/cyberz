@@ -282,10 +282,8 @@ class TestCertTransparency:
             {"name_value": "other.notexample.com"},
         ]
 
-    def test_returns_subdomains_ending_in_domain(self):
-        mock_resp = MagicMock()
-        mock_resp.raise_for_status = MagicMock()
-        mock_resp.json.return_value = self._crtsh_response()
+    def test_returns_subdomains_ending_in_domain(self, make_response):
+        mock_resp = make_response(json=self._crtsh_response())
 
         with patch("requests.get", return_value=mock_resp):
             result = cert_transparency("example.com")
@@ -293,33 +291,29 @@ class TestCertTransparency:
         assert "api.example.com" in result
         assert "stage.example.com" in result
 
-    def test_strips_wildcard_prefix(self):
-        mock_resp = MagicMock()
-        mock_resp.raise_for_status = MagicMock()
-        mock_resp.json.return_value = [{"name_value": "*.example.com"}]
+    def test_strips_wildcard_prefix(self, make_response):
+        mock_resp = make_response(json=[{"name_value": "*.example.com"}])
 
         with patch("requests.get", return_value=mock_resp):
             result = cert_transparency("example.com")
 
         assert all(not n.startswith("*.") for n in result)
 
-    def test_filters_off_domain_names(self):
-        mock_resp = MagicMock()
-        mock_resp.raise_for_status = MagicMock()
-        mock_resp.json.return_value = [{"name_value": "other.notexample.com"}]
+    def test_filters_off_domain_names(self, make_response):
+        mock_resp = make_response(json=[{"name_value": "other.notexample.com"}])
 
         with patch("requests.get", return_value=mock_resp):
             result = cert_transparency("example.com")
 
         assert result == []
 
-    def test_deduplicates_results(self):
-        mock_resp = MagicMock()
-        mock_resp.raise_for_status = MagicMock()
-        mock_resp.json.return_value = [
-            {"name_value": "api.example.com"},
-            {"name_value": "api.example.com"},
-        ]
+    def test_deduplicates_results(self, make_response):
+        mock_resp = make_response(
+            json=[
+                {"name_value": "api.example.com"},
+                {"name_value": "api.example.com"},
+            ]
+        )
 
         with patch("requests.get", return_value=mock_resp):
             result = cert_transparency("example.com")

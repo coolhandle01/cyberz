@@ -243,6 +243,17 @@ def clean_response_body() -> str:
     return body
 
 
+@pytest.fixture()
+def reload_module():
+    """Reload a module so that monkeypatched env vars take effect on module-level singletons.
+
+    Usage: reload_module(my_module)
+    """
+    import importlib
+
+    return importlib.reload
+
+
 @pytest.fixture
 def make_response():
     """Factory for building MagicMock objects shaped like requests.Response.

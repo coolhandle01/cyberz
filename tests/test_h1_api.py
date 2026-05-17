@@ -88,6 +88,18 @@ class TestParseProgramme:
         prog = h1_client.parse_programme(self._raw_programme(), self._raw_scope())
         assert not hasattr(prog, "allows_automated_scanning")
 
+    def test_allows_automated_scanning_false_when_scanning_prohibited_phrase(self, h1_client):
+        raw = self._raw_programme()
+        raw["attributes"]["policy"] = "Automated scanning prohibited on all assets."
+        prog = h1_client.parse_programme(raw, self._raw_scope())
+        assert prog.allows_automated_scanning is False
+
+    def test_allows_automated_scanning_false_when_no_scanners_phrase(self, h1_client):
+        raw = self._raw_programme()
+        raw["attributes"]["policy"] = "No scanners or automated tools may be used."
+        prog = h1_client.parse_programme(raw, self._raw_scope())
+        assert prog.allows_automated_scanning is False
+
     def test_in_scope_items_parsed(self, h1_client):
         prog = h1_client.parse_programme(self._raw_programme(), self._raw_scope(eligible=True))
         assert len(prog.in_scope) == 1
