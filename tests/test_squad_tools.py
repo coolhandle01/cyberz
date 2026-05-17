@@ -150,17 +150,25 @@ class TestVulnerabilityResearcherTools:
         assert result == sentinel
         m.assert_called_once_with("sql injection")
 
-    def test_check_duplicate_tool_matches(self) -> None:
-        from squad.vulnerability_researcher import check_duplicate_tool
+    def test_list_programme_reports_tool_returns_all(self) -> None:
+        from squad.vulnerability_researcher import list_programme_reports_tool
 
         reports = [
             {
                 "id": "1",
-                "attributes": {"title": "SQL Injection in search", "state": "open"},
+                "attributes": {
+                    "title": "SQL Injection in search",
+                    "severity_rating": "high",
+                    "state": "open",
+                },
             },
             {
                 "id": "2",
-                "attributes": {"title": "XSS in admin panel", "state": "triaged"},
+                "attributes": {
+                    "title": "XSS in admin panel",
+                    "severity_rating": "medium",
+                    "state": "triaged",
+                },
             },
         ]
         with (
@@ -170,14 +178,15 @@ class TestVulnerabilityResearcherTools:
                 return_value=reports,
             ),
         ):
-            result = check_duplicate_tool.func("acme", "SQL Injection in search")
+            result = list_programme_reports_tool.func("acme")
 
         assert isinstance(result, list)
-        assert len(result) == 1
+        assert len(result) == 2
         assert result[0]["report_id"] == "1"
+        assert result[1]["severity"] == "medium"
 
-    def test_check_duplicate_tool_handles_missing_title(self) -> None:
-        from squad.vulnerability_researcher import check_duplicate_tool
+    def test_list_programme_reports_tool_handles_missing_fields(self) -> None:
+        from squad.vulnerability_researcher import list_programme_reports_tool
 
         reports = [{"id": "3", "attributes": {"state": "closed"}}]
         with (
@@ -187,9 +196,12 @@ class TestVulnerabilityResearcherTools:
                 return_value=reports,
             ),
         ):
-            result = check_duplicate_tool.func("acme", "Anything")
+            result = list_programme_reports_tool.func("acme")
 
-        assert result == []
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert result[0]["title"] is None
+        assert result[0]["severity"] is None
 
 
 # ----------------------------------------------------------------------------
@@ -203,7 +215,8 @@ class TestTechnicalAuthorTools:
     ) -> None:
         from squad.technical_author import create_report_tool
 
-        (tmp_path / "findings.json").write_text(
+        findings_path = tmp_path / "findings.json"
+        findings_path.write_text(
             json.dumps([raw_finding_high.model_dump(mode="json")]),
             encoding="utf-8",
         )
@@ -245,7 +258,8 @@ class TestTechnicalAuthorTools:
     ) -> None:
         from squad.technical_author import create_report_tool
 
-        (tmp_path / "findings.json").write_text(
+        findings_path = tmp_path / "findings.json"
+        findings_path.write_text(
             json.dumps([raw_finding_high.model_dump(mode="json")]),
             encoding="utf-8",
         )
@@ -364,7 +378,8 @@ class TestPenetrationTesterTools:
     def test_cookie_check_tool(self, recon_result, raw_finding_low, tmp_path) -> None:
         from squad.penetration_tester import cookie_check_tool
 
-        (tmp_path / "recon.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
+        recon_path = tmp_path / "recon.json"
+        recon_path.write_text(recon_result.model_dump_json(), encoding="utf-8")
         with (
             patch("tools.workspace.runtime.run_dir", return_value=tmp_path),
             patch("squad.penetration_tester.http.set_programme") as mhttp,
@@ -381,7 +396,8 @@ class TestPenetrationTesterTools:
     def test_cors_check_tool(self, recon_result, raw_finding_low, tmp_path) -> None:
         from squad.penetration_tester import cors_check_tool
 
-        (tmp_path / "recon.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
+        recon_path = tmp_path / "recon.json"
+        recon_path.write_text(recon_result.model_dump_json(), encoding="utf-8")
         with (
             patch("tools.workspace.runtime.run_dir", return_value=tmp_path),
             patch("squad.penetration_tester.http.set_programme"),
@@ -397,7 +413,8 @@ class TestPenetrationTesterTools:
     def test_csrf_check_tool(self, recon_result, raw_finding_low, tmp_path) -> None:
         from squad.penetration_tester import csrf_check_tool
 
-        (tmp_path / "recon.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
+        recon_path = tmp_path / "recon.json"
+        recon_path.write_text(recon_result.model_dump_json(), encoding="utf-8")
         with (
             patch("tools.workspace.runtime.run_dir", return_value=tmp_path),
             patch("squad.penetration_tester.http.set_programme"),
@@ -425,7 +442,8 @@ class TestPenetrationTesterTools:
     def test_header_injection_tool(self, recon_result, raw_finding_low, tmp_path) -> None:
         from squad.penetration_tester import header_injection_tool
 
-        (tmp_path / "recon.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
+        recon_path = tmp_path / "recon.json"
+        recon_path.write_text(recon_result.model_dump_json(), encoding="utf-8")
         with (
             patch("tools.workspace.runtime.run_dir", return_value=tmp_path),
             patch("squad.penetration_tester.http.set_programme"),
@@ -441,7 +459,8 @@ class TestPenetrationTesterTools:
     def test_host_header_tool(self, recon_result, raw_finding_low, tmp_path) -> None:
         from squad.penetration_tester import host_header_tool
 
-        (tmp_path / "recon.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
+        recon_path = tmp_path / "recon.json"
+        recon_path.write_text(recon_result.model_dump_json(), encoding="utf-8")
         with (
             patch("tools.workspace.runtime.run_dir", return_value=tmp_path),
             patch("squad.penetration_tester.http.set_programme"),
@@ -467,7 +486,8 @@ class TestPenetrationTesterTools:
     def test_recon_subdomains_tool(self, recon_result, tmp_path) -> None:
         from squad.penetration_tester import recon_subdomains_tool
 
-        (tmp_path / "recon.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
+        recon_path = tmp_path / "recon.json"
+        recon_path.write_text(recon_result.model_dump_json(), encoding="utf-8")
         with patch("tools.workspace.runtime.run_dir", return_value=tmp_path):
             result = recon_subdomains_tool.func("recon.json")
         assert result == recon_result.subdomains
@@ -475,7 +495,8 @@ class TestPenetrationTesterTools:
     def test_recon_endpoints_tool(self, recon_result, tmp_path) -> None:
         from squad.penetration_tester import recon_endpoints_tool
 
-        (tmp_path / "recon.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
+        recon_path = tmp_path / "recon.json"
+        recon_path.write_text(recon_result.model_dump_json(), encoding="utf-8")
         with patch("tools.workspace.runtime.run_dir", return_value=tmp_path):
             result = recon_endpoints_tool.func("recon.json", status=200)
         assert isinstance(result, dict)
@@ -485,7 +506,8 @@ class TestPenetrationTesterTools:
     def test_recon_open_ports_tool(self, recon_result, tmp_path) -> None:
         from squad.penetration_tester import recon_open_ports_tool
 
-        (tmp_path / "recon.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
+        recon_path = tmp_path / "recon.json"
+        recon_path.write_text(recon_result.model_dump_json(), encoding="utf-8")
         with patch("tools.workspace.runtime.run_dir", return_value=tmp_path):
             result = recon_open_ports_tool.func("recon.json")
         assert result == recon_result.open_ports

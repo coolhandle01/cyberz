@@ -46,7 +46,8 @@ def recon_file(tmp_path: Path, recon_result) -> Iterator[str]:
             },
         }
     )
-    (tmp_path / "recon.json").write_text(recon.model_dump_json(), encoding="utf-8")
+    recon_path = tmp_path / "recon.json"
+    recon_path.write_text(recon.model_dump_json(), encoding="utf-8")
     with patch("tools.workspace.runtime.run_dir", return_value=tmp_path):
         yield "recon.json"
 
