@@ -56,3 +56,4 @@ Skills under `.claude/skills/` fire automatically when relevant files are edited
 - `cybersquad-test-fixtures` - the `conftest.py` fixture catalogue. Trigger: edits under `tests/`.
 - `cybersquad-change-discipline` - minimal-diff philosophy, intentional renames, linter-as-signal, FIXME/TODO grammar, Chesterton's Fence. Trigger: editing existing code, suppressing a linter finding, or considering an out-of-scope rename/refactor.
 - `cybersquad-pentest-tool` - attack-classification StrEnum, check function filter parameter, squad @tool wiring. Trigger: creating or editing files under `tools/pentest/` or `squad/penetration_tester/__init__.py`.
+- `cybersquad-bdd` - Gherkin conventions, step definition patterns, fixture injection, running BDD tests in isolation. Trigger: creating or editing files under `tests/features/` or `tests/bdd/`.
