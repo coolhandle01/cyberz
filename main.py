@@ -106,6 +106,7 @@ def main() -> None:
     check_env()
 
     # Import crew after env check
+    import runtime
     from config import config
     from crew import build_crew
     from tools.metrics import build_run_metrics, print_metrics, save_metrics
@@ -117,6 +118,7 @@ def main() -> None:
         return
 
     run_id = datetime.now(UTC).strftime("%Y%m%d-%H%M%S") + "-" + uuid4().hex[:6]
+    runtime.run_id = run_id
     started_at = datetime.now(UTC)
 
     console.rule("[bold]Bounty Squad[/bold]")
