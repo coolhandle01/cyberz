@@ -7,7 +7,7 @@ description: Gherkin conventions, step definition patterns, fixture injection, r
 
 BDD tests exercise agent *reasoning* — prompts, skills, and how an agent uses its tools given a context. They are not for testing tool logic (that is unit tests). They call a real LLM, are slow, and cost tokens.
 
-**BDD tests require a real `ANTHROPIC_API_KEY` in your local environment.** They cannot be run by Claude in a remote execution environment (no access to your key), and they are not run in CI until an API key is wired up via Secrets. Run them locally when working on prompts or skills.
+**BDD tests require a real `ANTHROPIC_API_KEY` in the developer's local environment.** Do not attempt to run them in a remote execution environment or in CI — neither has the LLM key available. These are developer-run tests, executed locally when working on prompts or skills.
 
 ## When to write a BDD test
 
