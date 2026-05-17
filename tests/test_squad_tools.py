@@ -21,9 +21,11 @@ import pytest
 @pytest.mark.unit
 class TestProgrammeManagerTools:
     def test_find_programmes_tool_caches_each(self, programme, tmp_path) -> None:
+        from pathlib import Path
+
         from squad.programme_manager import find_programmes_tool
 
-        cache_paths: dict[str, object] = {}
+        cache_paths: dict[str, Path] = {}
 
         def cache_path_for(handle):
             p = tmp_path / handle / "programme.json"
