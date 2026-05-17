@@ -6,7 +6,7 @@ from pathlib import Path
 from crewai.tools import tool
 
 from models import Endpoint, ReconResult
-from squad import SquadMember
+from squad import SquadMember, read_run_file_tool, read_run_filelist_tool
 from tools import http
 from tools.cloud import (
     check_admin_panels,
@@ -55,6 +55,7 @@ from tools.pentest.ssti import SstiPayload, check_ssti
 from tools.pentest.webapp_headers import check_header_injection, check_host_headers
 from tools.pentest.xss import check_reflected_xss
 from tools.pentest.xxe import XxePayload, check_xxe
+from tools.recon.query import recon_endpoints, recon_open_ports, recon_subdomains
 
 
 def _parse_endpoints(endpoints_json: str) -> list[Endpoint]:
@@ -966,6 +967,59 @@ def jwt_check_tool(
     return [f.model_dump() for f in check_jwt(token, endpoint, attacks)]
 
 
+@tool("Recon Subdomains")
+def recon_subdomains_tool(recon_path: str, host_filter: str | None = None) -> list[str]:
+    """
+    Return the in-scope subdomains discovered during recon. Pass the recon.json
+    path you received from the OSINT Analyst. ``host_filter`` is a
+    case-insensitive substring (e.g. "api" returns every subdomain containing
+    "api"). Use this instead of reading recon.json directly when you only need
+    the subdomain list.
+    """
+    return recon_subdomains(recon_path, host_filter=host_filter)
+
+
+@tool("Recon Endpoints")
+def recon_endpoints_tool(
+    recon_path: str,
+    status: int | None = None,
+    tech: str | None = None,
+    host_contains: str | None = None,
+    offset: int = 0,
+    limit: int = 50,
+) -> dict:
+    """
+    Query the endpoints discovered during recon without loading the whole
+    ReconResult. Filters are conjunctive: ``status=200`` and ``tech="wordpress"``
+    returns endpoints satisfying both. ``host_contains`` matches the URL
+    case-insensitively. Returns a paginated slice with total, offset, returned,
+    and the endpoint dicts - paginate by re-calling with a larger offset.
+
+    Use this to build the endpoints_json argument for the narrow probe tools
+    (sqlmap_tool, nuclei_scan_tool, etc.): serialise the returned "endpoints"
+    list to JSON and pass it through.
+    """
+    return recon_endpoints(
+        recon_path,
+        status=status,
+        tech=tech,
+        host_contains=host_contains,
+        offset=offset,
+        limit=limit,
+    )
+
+
+@tool("Recon Open Ports")
+def recon_open_ports_tool(recon_path: str, host: str | None = None) -> dict:
+    """
+    Return the open-port map per host from recon.json. Passing a ``host``
+    restricts the result to that single host. Use this to decide which of the
+    port-specific probes to run (Elasticsearch on 9200, Redis on 6379, etc.)
+    without loading the whole ReconResult.
+    """
+    return recon_open_ports(recon_path, host=host)
+
+
 @tool("Save Findings")
 def save_findings_tool(findings_json: str) -> str:
     """
@@ -1030,6 +1084,11 @@ MEMBER = SquadMember(
         prototype_pollution_tool,
         jwt_check_tool,
         idor_probe_tool,
+        recon_subdomains_tool,
+        recon_endpoints_tool,
+        recon_open_ports_tool,
         save_findings_tool,
+        read_run_filelist_tool,
+        read_run_file_tool,
     ],
 )

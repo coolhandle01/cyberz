@@ -456,3 +456,61 @@ class TestPenetrationTesterTools:
 
         assert result == str(tmp_path / "findings.json")
         assert (tmp_path / "findings.json").read_text(encoding="utf-8") == findings_json
+
+    def test_recon_subdomains_tool(self, recon_result, tmp_path) -> None:
+        from squad.penetration_tester import recon_subdomains_tool
+
+        recon_path = tmp_path / "recon.json"
+        recon_path.write_text(recon_result.model_dump_json(), encoding="utf-8")
+        result = recon_subdomains_tool.func(str(recon_path))
+        assert result == recon_result.subdomains
+
+    def test_recon_endpoints_tool(self, recon_result, tmp_path) -> None:
+        from squad.penetration_tester import recon_endpoints_tool
+
+        recon_path = tmp_path / "recon.json"
+        recon_path.write_text(recon_result.model_dump_json(), encoding="utf-8")
+        result = recon_endpoints_tool.func(str(recon_path), status=200)
+        assert isinstance(result, dict)
+        assert result["total"] == 1
+        assert result["endpoints"][0]["url"] == recon_result.endpoints[0].url
+
+    def test_recon_open_ports_tool(self, recon_result, tmp_path) -> None:
+        from squad.penetration_tester import recon_open_ports_tool
+
+        recon_path = tmp_path / "recon.json"
+        recon_path.write_text(recon_result.model_dump_json(), encoding="utf-8")
+        assert recon_open_ports_tool.func(str(recon_path)) == recon_result.open_ports
+
+
+# ----------------------------------------------------------------------------
+# Shared workspace tools
+# ----------------------------------------------------------------------------
+
+
+class TestSharedWorkspaceTools:
+    def test_read_run_filelist_tool(self, tmp_path) -> None:
+        from squad import read_run_filelist_tool
+
+        (tmp_path / "recon.json").write_text("{}", encoding="utf-8")
+        with patch("tools.workspace.runtime.run_dir", return_value=tmp_path):
+            result = read_run_filelist_tool.func()
+        assert result == [{"name": "recon.json", "size_bytes": 2}]
+
+    def test_read_run_file_tool(self, tmp_path) -> None:
+        from squad import read_run_file_tool
+
+        (tmp_path / "recon.json").write_text("hello", encoding="utf-8")
+        with patch("tools.workspace.runtime.run_dir", return_value=tmp_path):
+            result = read_run_file_tool.func("recon.json")
+        assert isinstance(result, dict)
+        assert result["content"] == "hello"
+        assert result["size_bytes"] == 5
+        assert result["truncated"] is False
+
+    def test_read_run_file_tool_refuses_escape(self, tmp_path) -> None:
+        from squad import read_run_file_tool
+
+        with patch("tools.workspace.runtime.run_dir", return_value=tmp_path):
+            with pytest.raises(ValueError, match="escapes the run directory"):
+                read_run_file_tool.func("../etc/passwd")

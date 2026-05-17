@@ -7,7 +7,7 @@ from pathlib import Path
 from crewai.tools import tool
 
 from models import VerifiedVulnerability
-from squad import SquadMember
+from squad import SquadMember, read_run_file_tool, read_run_filelist_tool
 from tools import http
 from tools.report_tools import (
     calculate_cvss_score,
@@ -55,5 +55,10 @@ def calculate_cvss_tool(vector: str) -> float:
 MEMBER = SquadMember(
     slug="technical_author",
     dir=Path(__file__).parent,
-    tools=[create_report_tool, calculate_cvss_tool],
+    tools=[
+        create_report_tool,
+        calculate_cvss_tool,
+        read_run_filelist_tool,
+        read_run_file_tool,
+    ],
 )

@@ -1,0 +1,126 @@
+"""
+tests/test_recon_query.py - tools/recon/query.py slicers.
+
+These let an agent ask "which endpoints serve WordPress and returned 200?"
+without loading the full ReconResult into context.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from models import Endpoint
+from tools.recon import query
+
+pytestmark = pytest.mark.unit
+
+
+@pytest.fixture()
+def recon_file(tmp_path: Path, recon_result) -> Path:
+    """A populated recon.json variant with a few endpoints for filter tests."""
+    endpoints = [
+        Endpoint(url="https://api.example.com/v1", status_code=200, technologies=["nginx"]),
+        Endpoint(url="https://blog.example.com/", status_code=200, technologies=["WordPress"]),
+        Endpoint(
+            url="https://admin.example.com/login",
+            status_code=401,
+            technologies=["WordPress"],
+        ),
+        Endpoint(url="https://old.example.com/", status_code=404, technologies=[]),
+    ]
+    recon = recon_result.model_copy(
+        update={
+            "subdomains": ["api.example.com", "blog.example.com", "admin.example.com"],
+            "endpoints": endpoints,
+            "open_ports": {
+                "api.example.com": [80, 443],
+                "redis.example.com": [6379],
+            },
+        }
+    )
+    path = tmp_path / "recon.json"
+    path.write_text(recon.model_dump_json(), encoding="utf-8")
+    return path
+
+
+class TestReconSubdomains:
+    def test_returns_all_subdomains(self, recon_file: Path) -> None:
+        result = query.recon_subdomains(str(recon_file))
+        assert result == ["api.example.com", "blog.example.com", "admin.example.com"]
+
+    def test_filters_case_insensitively(self, recon_file: Path) -> None:
+        assert query.recon_subdomains(str(recon_file), host_filter="API") == ["api.example.com"]
+
+    def test_filter_no_match_returns_empty(self, recon_file: Path) -> None:
+        assert query.recon_subdomains(str(recon_file), host_filter="nope") == []
+
+
+class TestReconEndpoints:
+    def test_no_filters_returns_all(self, recon_file: Path) -> None:
+        result = query.recon_endpoints(str(recon_file))
+        assert result["total"] == 4
+        assert result["returned"] == 4
+        assert {e["url"] for e in result["endpoints"]} == {
+            "https://api.example.com/v1",
+            "https://blog.example.com/",
+            "https://admin.example.com/login",
+            "https://old.example.com/",
+        }
+
+    def test_filter_by_status(self, recon_file: Path) -> None:
+        result = query.recon_endpoints(str(recon_file), status=200)
+        assert result["total"] == 2
+        urls = {e["url"] for e in result["endpoints"]}
+        assert urls == {"https://api.example.com/v1", "https://blog.example.com/"}
+
+    def test_filter_by_tech_case_insensitive(self, recon_file: Path) -> None:
+        result = query.recon_endpoints(str(recon_file), tech="wordpress")
+        assert result["total"] == 2
+
+    def test_conjunctive_filters(self, recon_file: Path) -> None:
+        result = query.recon_endpoints(str(recon_file), status=200, tech="wordpress")
+        assert result["total"] == 1
+        assert result["endpoints"][0]["url"] == "https://blog.example.com/"
+
+    def test_filter_by_host_contains(self, recon_file: Path) -> None:
+        result = query.recon_endpoints(str(recon_file), host_contains="admin")
+        assert result["total"] == 1
+
+    def test_pagination(self, recon_file: Path) -> None:
+        first = query.recon_endpoints(str(recon_file), limit=2)
+        assert first["total"] == 4
+        assert first["returned"] == 2
+        assert first["offset"] == 0
+        second = query.recon_endpoints(str(recon_file), offset=2, limit=2)
+        assert second["returned"] == 2
+        assert second["offset"] == 2
+        first_urls = [e["url"] for e in first["endpoints"]]
+        second_urls = [e["url"] for e in second["endpoints"]]
+        assert set(first_urls).isdisjoint(second_urls)
+
+    def test_rejects_bad_offset(self, recon_file: Path) -> None:
+        with pytest.raises(ValueError, match="offset must be non-negative"):
+            query.recon_endpoints(str(recon_file), offset=-1)
+
+    def test_rejects_bad_limit(self, recon_file: Path) -> None:
+        with pytest.raises(ValueError, match="limit must be at least 1"):
+            query.recon_endpoints(str(recon_file), limit=0)
+
+
+class TestReconOpenPorts:
+    def test_returns_all_hosts(self, recon_file: Path) -> None:
+        result = query.recon_open_ports(str(recon_file))
+        assert result == {
+            "api.example.com": [80, 443],
+            "redis.example.com": [6379],
+        }
+
+    def test_returns_single_host(self, recon_file: Path) -> None:
+        assert query.recon_open_ports(str(recon_file), host="redis.example.com") == {
+            "redis.example.com": [6379]
+        }
+
+    def test_unknown_host_returns_empty(self, recon_file: Path) -> None:
+        assert query.recon_open_ports(str(recon_file), host="ghost.example.com") == {}

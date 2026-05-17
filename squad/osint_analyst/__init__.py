@@ -7,7 +7,7 @@ from pathlib import Path
 from crewai.tools import tool
 
 from models import Endpoint
-from squad import SquadMember
+from squad import SquadMember, read_run_file_tool, read_run_filelist_tool
 from tools import http
 from tools.h1_api import h1
 from tools.recon import cert_transparency, detect_llm_endpoints, historical_urls, run_recon
@@ -81,5 +81,12 @@ def llm_detection_tool(endpoints_json: str) -> list[dict]:
 MEMBER = SquadMember(
     slug="osint_analyst",
     dir=Path(__file__).parent,
-    tools=[recon_tool, cert_transparency_tool, historical_urls_tool, llm_detection_tool],
+    tools=[
+        recon_tool,
+        cert_transparency_tool,
+        historical_urls_tool,
+        llm_detection_tool,
+        read_run_filelist_tool,
+        read_run_file_tool,
+    ],
 )

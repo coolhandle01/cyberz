@@ -8,9 +8,19 @@ path string through unchanged. The file contains:
 - Passive findings already collected during recon: TLS issues, DNS misconfigs
   (check the `passive_findings` field - do not repeat these checks)
 
+recon.json is typically large; do not read it whole. Use the recon query
+tools to fetch focused slices and stay within scope:
+
+- Recon Subdomains -> the in-scope hostname list (optional substring filter)
+- Recon Endpoints -> endpoints filtered by status/tech/host, paginated
+- Recon Open Ports -> the open-port map, per host or all hosts
+
 For tools that take `endpoints_json` (probe tools that operate on a filtered
-subset), read recon.json once, select the relevant endpoints, and serialise
-just that subset to JSON.
+subset), call Recon Endpoints with the right filters, then serialise the
+returned `endpoints` list to JSON and pass it through. If you need ad-hoc
+inspection beyond what the slicers expose, use Read Run File on recon.json
+with a small `limit_bytes` and paginate via `offset` - do not slurp it whole,
+that risks truncating a URL mid-string and attacking out of scope.
 
 Use this context to select tools strategically. Do not run everything at
 everything. Think like a human penetration tester.
