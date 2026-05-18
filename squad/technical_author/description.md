@@ -1,3 +1,6 @@
+The Vulnerability Researcher has triaged and scored the findings; they
+live in verified.json in the run directory.
+
 For each verified vulnerability, produce a complete HackerOne-format
 disclosure report in Markdown:
   - A punchy, accurate title
@@ -13,10 +16,9 @@ disclosure report in Markdown:
     guidance (https://owasp.org) or CWE entry (https://cwe.mitre.org)
 
 The quality bar is a report that HackerOne triages on first read without
-requesting clarification. If there are multiple findings, prioritise the
-highest-severity one for submission in this run.
+requesting clarification. Cover ALL verified findings - the Disclosure
+Coordinator will check for duplicates before submitting each one.
 
-The previous task hands you the absolute path to verified.json in your
-context. Pass it to create_report_tool along with the programme handle
-and your executive summary; the tool reads the highest-severity entry
-and produces the final report.
+Call create_reports_tool with the verified.json path, the programme
+handle, and a 2-3 sentence executive summary of the overall session.
+The tool produces one report per finding and writes reports.json.

@@ -210,35 +210,18 @@ class TestVulnerabilityResearcherTools:
 
 
 class TestTechnicalAuthorTools:
-    def test_create_report_tool(
-        self, raw_finding_high, programme, verified_vuln, disclosure_report, tmp_path
+    def test_create_reports_tool(
+        self, verified_vuln, disclosure_report, tmp_path
     ) -> None:
-        from squad.technical_author import create_report_tool
+        from squad.technical_author import create_reports_tool
 
-        findings_path = tmp_path / "findings.json"
-        findings_path.write_text(
-            json.dumps([raw_finding_high.model_dump(mode="json")]),
+        verified_path = tmp_path / "verified.json"
+        verified_path.write_text(
+            json.dumps([verified_vuln.model_dump(mode="json")]),
             encoding="utf-8",
         )
         with (
             patch("tools.workspace.runtime.run_dir", return_value=tmp_path),
-            patch("squad.technical_author.http.set_programme") as mhttp,
-            patch(
-                "squad.technical_author.h1.get_programme_policy",
-                return_value={"data": {}},
-            ),
-            patch(
-                "squad.technical_author.h1.get_structured_scope",
-                return_value={},
-            ),
-            patch(
-                "squad.technical_author.h1.parse_programme",
-                return_value=programme,
-            ),
-            patch(
-                "squad.technical_author.triage_findings",
-                return_value=[verified_vuln],
-            ),
             patch(
                 "squad.technical_author.create_disclosure_report",
                 return_value=disclosure_report,
@@ -246,36 +229,20 @@ class TestTechnicalAuthorTools:
             patch("squad.technical_author.save_report") as msave,
             patch("runtime.run_dir", return_value=tmp_path),
         ):
-            result = create_report_tool.func("findings.json", "acme", "summary line")
+            result = create_reports_tool.func("verified.json", "acme", "summary line")
 
-        assert result == disclosure_report.model_dump()
-        assert (tmp_path / "report.json").exists()
-        mhttp.assert_called_once_with("acme")
+        assert result == "reports.json"
+        assert (tmp_path / "reports.json").exists()
         msave.assert_called_once_with(disclosure_report)
 
-    def test_create_report_tool_raises_when_no_findings_pass_triage(
-        self, raw_finding_high, programme, tmp_path
-    ) -> None:
-        from squad.technical_author import create_report_tool
+    def test_create_reports_tool_raises_when_verified_empty(self, tmp_path) -> None:
+        from squad.technical_author import create_reports_tool
 
-        findings_path = tmp_path / "findings.json"
-        findings_path.write_text(
-            json.dumps([raw_finding_high.model_dump(mode="json")]),
-            encoding="utf-8",
-        )
-        with (
-            patch("tools.workspace.runtime.run_dir", return_value=tmp_path),
-            patch("squad.technical_author.http.set_programme"),
-            patch(
-                "squad.technical_author.h1.get_programme_policy",
-                return_value={"data": {}},
-            ),
-            patch("squad.technical_author.h1.get_structured_scope", return_value={}),
-            patch("squad.technical_author.h1.parse_programme", return_value=programme),
-            patch("squad.technical_author.triage_findings", return_value=[]),
-        ):
-            with pytest.raises(ValueError, match="passed scope \\+ severity-floor triage"):
-                create_report_tool.func("findings.json", "acme", "summary line")
+        verified_path = tmp_path / "verified.json"
+        verified_path.write_text("[]", encoding="utf-8")
+        with patch("tools.workspace.runtime.run_dir", return_value=tmp_path):
+            with pytest.raises(ValueError, match="No verified findings"):
+                create_reports_tool.func("verified.json", "acme", "summary line")
 
     def test_calculate_cvss_tool(self) -> None:
         from squad.technical_author import calculate_cvss_tool
@@ -499,9 +466,11 @@ class TestPenetrationTesterTools:
         recon_path.write_text(recon_result.model_dump_json(), encoding="utf-8")
         with patch("tools.workspace.runtime.run_dir", return_value=tmp_path):
             result = recon_endpoints_tool.func("recon.json", status=200)
-        assert isinstance(result, dict)
-        assert result["total"] == 1
-        assert result["endpoints"][0]["url"] == recon_result.endpoints[0].url
+        from models import EndpointPage
+
+        assert isinstance(result, EndpointPage)
+        assert result.total == 1
+        assert result.endpoints[0].url == recon_result.endpoints[0].url
 
     def test_recon_open_ports_tool(self, recon_result, tmp_path) -> None:
         from squad.penetration_tester import recon_open_ports_tool

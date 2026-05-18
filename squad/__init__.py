@@ -52,11 +52,19 @@ def build_task(
     agent: Agent,
     context: list[Task] | None = None,
     human_input: bool = False,
+    description_file: str = "description",
+    expected_output_file: str = "expected_output",
 ) -> Task:
-    """Create a Task from the member's description/expected_output files."""
+    """Create a Task from the member's prose files.
+
+    ``description_file`` and ``expected_output_file`` default to the standard
+    names but can be overridden when a squad member appears in more than one
+    pipeline task (e.g. the Vulnerability Researcher runs as both attack-planner
+    and findings-triager).
+    """
     return Task(
-        description=member.read("description"),
-        expected_output=member.read("expected_output"),
+        description=member.read(description_file),
+        expected_output=member.read(expected_output_file),
         agent=agent,
         context=context or [],
         human_input=human_input,

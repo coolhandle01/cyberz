@@ -8,9 +8,11 @@ reconnaissance against all in-scope assets:
 Strictly enforce scope - do not interact with any asset not listed
 as in-scope.
 
-When recon is complete, write a concise briefing for the Vulnerability
-Researcher who runs next. The briefing is the headline; recon.json is
-the reference. Cover:
+When recon is complete, use Recon Subdomains, Recon Endpoints (filtered
+by status and tech), and Recon Open Ports to query the data you just
+wrote. Derive the briefing from what those tools return - do not write
+it from memory. The briefing is the headline; recon.json is the
+reference. Cover:
 
   - Top detected technologies and the hostnames they appear on
     (especially WordPress / Spring / Apache / Joomla / Drupal versions

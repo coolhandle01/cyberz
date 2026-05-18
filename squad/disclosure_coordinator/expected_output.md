@@ -1,3 +1,7 @@
-A submission summary containing: programme handle, report title,
-severity, H1 report ID, submission URL, timestamp, and status.
-Or a detailed error report if submission failed.
+A submission summary listing every finding processed:
+  - Submitted: programme handle, title, severity, H1 report ID, URL, timestamp
+  - Skipped (duplicate): title and the matching report ID
+  - Failed: title and the error reason
+
+At least one submitted finding is the success condition. Zero submissions
+with all findings skipped or failed should be flagged for human review.

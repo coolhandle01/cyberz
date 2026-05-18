@@ -2,53 +2,47 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from crewai.tools import tool
 
+import runtime
 from squad import SquadMember, read_run_file_tool, read_run_filelist_tool
-from tools import http
-from tools.h1_api import h1
-from tools.pentest import triage_findings
 from tools.report_tools import (
     calculate_cvss_score,
     create_disclosure_report,
     save_report,
 )
+from tools.workspace import resolve_run_path
 
 
-@tool("Create Disclosure Report")
-def create_report_tool(findings_path: str, programme_handle: str, summary: str) -> dict:
+@tool("Create Disclosure Reports")
+def create_reports_tool(verified_path: str, programme_handle: str, summary: str) -> str:
     """
-    Create and save a structured DisclosureReport from the highest-severity
-    finding in findings.json. Internally upgrades RawFindings to a verified,
-    scored VerifiedVulnerability (scope check + severity floor + CVSS assignment),
-    selects the top-severity one, and writes report.json into the run directory.
-    Returns the serialised report ready for submission.
+    Create a DisclosureReport for every VerifiedVulnerability in verified.json
+    and write them all to reports.json in the run directory. Returns the bare
+    filename "reports.json". The Disclosure Coordinator reads this file to
+    submit each finding independently.
+
+    ``summary`` is a 2-3 sentence executive summary covering the overall
+    session; it is included in each report alongside the finding detail.
     """
-    import json
+    from models import VerifiedVulnerability
 
-    import runtime
-    from models import RawFinding
-    from tools.workspace import resolve_run_path
-
-    http.set_programme(programme_handle)
-    raw_data = json.loads(resolve_run_path(findings_path).read_text(encoding="utf-8"))
-    if not raw_data:
-        raise ValueError(f"No findings found in {findings_path}")
-    raw = [RawFinding.model_validate(f) for f in raw_data]
-    policy = h1.get_programme_policy(programme_handle)
-    scope = h1.get_structured_scope(programme_handle)
-    programme = h1.parse_programme(policy["data"], scope)
-    verified = triage_findings(raw, programme)
-    if not verified:
-        raise ValueError(f"No findings in {findings_path} passed scope + severity-floor triage")
-    report = create_disclosure_report(programme_handle, verified[0], summary)
-    save_report(report)
-    out_path = runtime.run_dir() / "report.json"
+    raw = json.loads(resolve_run_path(verified_path).read_text(encoding="utf-8"))
+    if not raw:
+        raise ValueError(f"No verified findings in {verified_path}")
+    verified = [VerifiedVulnerability.model_validate(v) for v in raw]
+    reports = []
+    for vuln in verified:
+        report = create_disclosure_report(programme_handle, vuln, summary)
+        save_report(report)
+        reports.append(report.model_dump(mode="json"))
+    out_path = runtime.run_dir() / "reports.json"
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(report.model_dump_json(), encoding="utf-8")
-    return report.model_dump()
+    out_path.write_text(json.dumps(reports), encoding="utf-8")
+    return "reports.json"
 
 
 @tool("Calculate CVSS Score")
@@ -65,7 +59,7 @@ MEMBER = SquadMember(
     slug="technical_author",
     dir=Path(__file__).parent,
     tools=[
-        create_report_tool,
+        create_reports_tool,
         calculate_cvss_tool,
         read_run_filelist_tool,
         read_run_file_tool,

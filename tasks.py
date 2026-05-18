@@ -45,12 +45,21 @@ def build_tasks(agents: dict) -> list[Task]:
         human_input=hi,
     )
 
+    triage = build_task(
+        VULNERABILITY_RESEARCHER,
+        agents["vulnerability_researcher"],
+        context=[pentest, select],
+        human_input=hi,
+        description_file="triage_description",
+        expected_output_file="triage_expected_output",
+    )
+
     write = build_task(
-        TECHNICAL_AUTHOR, agents["technical_author"], context=[pentest, select], human_input=hi
+        TECHNICAL_AUTHOR, agents["technical_author"], context=[triage, select], human_input=hi
     )
 
     submit = build_task(
         DISCLOSURE_COORDINATOR, agents["disclosure_coordinator"], context=[write], human_input=hi
     )
 
-    return [select, recon, research, pentest, write, submit]
+    return [select, recon, research, pentest, triage, write, submit]

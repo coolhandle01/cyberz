@@ -5,7 +5,7 @@ from pathlib import Path
 
 from crewai.tools import tool
 
-from models import Endpoint, ReconResult
+from models import Endpoint, EndpointPage, ReconResult
 from squad import SquadMember, read_run_file_tool, read_run_filelist_tool
 from tools import http
 from tools.cloud import (
@@ -990,17 +990,17 @@ def recon_endpoints_tool(
     host_contains: str | None = None,
     offset: int = 0,
     limit: int = 50,
-) -> dict:
+) -> EndpointPage:
     """
     Query the endpoints discovered during recon without loading the whole
     ReconResult. Filters are conjunctive: ``status=200`` and ``tech="wordpress"``
     returns endpoints satisfying both. ``host_contains`` matches the URL
-    case-insensitively. Returns a paginated slice with total, offset, returned,
-    and the endpoint dicts - paginate by re-calling with a larger offset.
+    case-insensitively. Returns an EndpointPage with total, offset, returned,
+    and a typed endpoints list - paginate by re-calling with a larger offset.
 
     Use this to build the endpoints_json argument for the narrow probe tools
-    (sqlmap_tool, nuclei_scan_tool, etc.): serialise the returned "endpoints"
-    list to JSON and pass it through.
+    (sqlmap_tool, nuclei_scan_tool, etc.): serialise page.endpoints to JSON
+    and pass it through.
     """
     return recon_endpoints(
         recon_path,

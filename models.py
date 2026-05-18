@@ -87,6 +87,15 @@ class Endpoint(BaseModel):
     parameters: list[str] = Field(default_factory=list)
 
 
+class EndpointPage(BaseModel):
+    """Paginated slice of Endpoint results from a recon query."""
+
+    total: int
+    offset: int
+    returned: int
+    endpoints: list[Endpoint]
+
+
 class ReconResult(BaseModel):
     """Everything the OSINT Analyst found about a programme's attack surface."""
 

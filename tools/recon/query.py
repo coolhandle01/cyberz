@@ -12,7 +12,7 @@ so the agent can issue a typed query rather than a brute-force read.
 
 from __future__ import annotations
 
-from models import ReconResult
+from models import EndpointPage, ReconResult
 from tools.workspace import resolve_run_path
 
 
@@ -40,7 +40,7 @@ def recon_endpoints(
     host_contains: str | None = None,
     offset: int = 0,
     limit: int = 50,
-) -> dict:
+) -> EndpointPage:
     """Return a paginated slice of endpoints matching the given filters.
 
     Filters are conjunctive: a status of 200 *and* tech "wordpress" returns
@@ -67,12 +67,7 @@ def recon_endpoints(
         endpoints = [e for e in endpoints if needle in e.url.lower()]
     total = len(endpoints)
     page = endpoints[offset : offset + limit]
-    return {
-        "total": total,
-        "offset": offset,
-        "returned": len(page),
-        "endpoints": [e.model_dump() for e in page],
-    }
+    return EndpointPage(total=total, offset=offset, returned=len(page), endpoints=page)
 
 
 def recon_open_ports(recon_path: str, host: str | None = None) -> dict[str, list[int]]:
