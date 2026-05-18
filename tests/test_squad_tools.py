@@ -256,9 +256,12 @@ class TestOsintAnalystTools:
 
         assert probe_hostnames_tool.func([], programme_handle="test-programme") == []
 
-    def test_probe_hostnames_tool_drops_out_of_scope(self, programme) -> None:
+    def test_probe_hostnames_tool_drops_out_of_scope(self, programme, bystander_url) -> None:
+        from urllib.parse import urlparse
+
         from squad.osint_analyst import probe_hostnames_tool
 
+        oos_host = urlparse(bystander_url).hostname
         mprobe = MagicMock()
         patches = self._patch_programme(programme) + [
             patch(
@@ -270,9 +273,7 @@ class TestOsintAnalystTools:
         for p in patches:
             p.start()
         try:
-            result = probe_hostnames_tool.func(
-                ["malicious.invalid"], programme_handle="test-programme"
-            )
+            result = probe_hostnames_tool.func([oos_host], programme_handle="test-programme")
         finally:
             for p in reversed(patches):
                 p.stop()
@@ -325,9 +326,14 @@ class TestOsintAnalystTools:
 
         assert detect_takeover_candidates_tool.func([], programme_handle="test-programme") == []
 
-    def test_detect_takeover_candidates_tool_drops_out_of_scope(self, programme) -> None:
+    def test_detect_takeover_candidates_tool_drops_out_of_scope(
+        self, programme, bystander_url
+    ) -> None:
+        from urllib.parse import urlparse
+
         from squad.osint_analyst import detect_takeover_candidates_tool
 
+        oos_host = urlparse(bystander_url).hostname
         mdetect = MagicMock()
         patches = self._patch_programme(programme) + [
             patch(
@@ -340,7 +346,7 @@ class TestOsintAnalystTools:
             p.start()
         try:
             result = detect_takeover_candidates_tool.func(
-                ["malicious.invalid"], programme_handle="test-programme"
+                [oos_host], programme_handle="test-programme"
             )
         finally:
             for p in reversed(patches):

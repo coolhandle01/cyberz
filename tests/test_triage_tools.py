@@ -16,7 +16,7 @@ import json
 
 import pytest
 
-from models import Programme, RawFinding, ScopeItem, ScopeType, Severity, VerifiedVulnerability
+from models import RawFinding, Severity, VerifiedVulnerability
 from tools.triage_tools import (
     DiscardEntry,
     DiscardReason,
@@ -71,11 +71,11 @@ class TestAboveFloor:
 
 
 class TestInScope:
-    def test_in_scope(self, programme):
-        assert in_scope("https://api.example.com/x", programme) is True
+    def test_in_scope(self, programme, victim_url):
+        assert in_scope(f"{victim_url}/x", programme) is True
 
-    def test_out_of_scope(self, programme):
-        assert in_scope("https://malicious.invalid/x", programme) is False
+    def test_out_of_scope(self, programme, bystander_url):
+        assert in_scope(f"{bystander_url}/x", programme) is False
 
 
 # Fixtures
@@ -136,11 +136,11 @@ def in_scope_raw() -> RawFinding:
 
 
 @pytest.fixture
-def oos_raw() -> RawFinding:
+def oos_raw(bystander_url) -> RawFinding:
     return RawFinding(
         title="Header issue",
         vuln_class="Headers",
-        target="https://other.invalid/x",
+        target=f"{bystander_url}/x",
         evidence="missing X-Frame-Options",
         tool="nuclei",
         severity_hint=Severity.HIGH,
@@ -421,24 +421,8 @@ class TestLoadDiscards:
         assert load_discards() == []
 
 
-# Programme fixture override - the in-scope test target needs to be inside the
-# fixture's `*.example.com` wildcard rule. The base programme fixture is fine
-# but the wildcard does not match `https://api.example.com/x` unless we ensure
-# the wildcard rule is present. (The conftest fixture already includes
-# `*.example.com`, so the default fixture is sufficient.)
-
-
-@pytest.fixture
-def programme() -> Programme:
-    return Programme(
-        handle="acme",
-        name="Acme",
-        url="https://hackerone.com/acme",
-        bounty_table={Severity.HIGH: 500},
-        in_scope=[
-            ScopeItem(asset_identifier="*.example.com", asset_type=ScopeType.WILDCARD),
-            ScopeItem(asset_identifier="https://example.com", asset_type=ScopeType.URL),
-        ],
-        out_of_scope=[],
-        allows_automated_scanning=True,
-    )
+# The `programme` and `victim_url` / `bystander_url` fixtures come from
+# tests/conftest.py - the shared `programme` includes `*.example.com` which
+# covers `victim_url` (https://victim.example.com), and `bystander_url`
+# (https://bystander.example.org) sits cleanly outside it for the scope-guard
+# tests.
