@@ -51,7 +51,7 @@ class _FakeTask:
 class TestSquadMemberRead:
     def test_all_members_load_prose(self) -> None:
         for member in _ALL_MEMBERS:
-            for name in ("role", "goal", "backstory", "description", "expected_output"):
+            for name in ("role", "goal", "backstory"):
                 value = member.read(name)
                 assert value, f"{member.slug}/{name}.md is empty"
                 assert "---" not in value, f"{member.slug}/{name}.md still contains '---'"

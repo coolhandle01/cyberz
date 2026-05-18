@@ -27,11 +27,14 @@ from squad.vulnerability_researcher import MEMBER as VULNERABILITY_RESEARCHER
 def build_tasks(agents: dict) -> list[Task]:
     hi = config.human_input
 
-    select = build_task(PROGRAMME_MANAGER, agents["programme_manager"], human_input=hi)
+    select = build_task("select", PROGRAMME_MANAGER, agents["programme_manager"], human_input=hi)
 
-    recon = build_task(OSINT_ANALYST, agents["osint_analyst"], context=[select], human_input=hi)
+    recon = build_task(
+        "recon", OSINT_ANALYST, agents["osint_analyst"], context=[select], human_input=hi
+    )
 
     research = build_task(
+        "research",
         VULNERABILITY_RESEARCHER,
         agents["vulnerability_researcher"],
         context=[recon, select],
@@ -39,6 +42,7 @@ def build_tasks(agents: dict) -> list[Task]:
     )
 
     pentest = build_task(
+        "pentest",
         PENETRATION_TESTER,
         agents["penetration_tester"],
         context=[research, recon, select],
@@ -46,20 +50,27 @@ def build_tasks(agents: dict) -> list[Task]:
     )
 
     triage = build_task(
+        "triage",
         VULNERABILITY_RESEARCHER,
         agents["vulnerability_researcher"],
         context=[pentest, select],
         human_input=hi,
-        description_file="triage_description",
-        expected_output_file="triage_expected_output",
     )
 
     write = build_task(
-        TECHNICAL_AUTHOR, agents["technical_author"], context=[triage, select], human_input=hi
+        "write",
+        TECHNICAL_AUTHOR,
+        agents["technical_author"],
+        context=[triage, select],
+        human_input=hi,
     )
 
     submit = build_task(
-        DISCLOSURE_COORDINATOR, agents["disclosure_coordinator"], context=[write], human_input=hi
+        "submit",
+        DISCLOSURE_COORDINATOR,
+        agents["disclosure_coordinator"],
+        context=[write],
+        human_input=hi,
     )
 
     return [select, recon, research, pentest, triage, write, submit]
