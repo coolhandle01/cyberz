@@ -23,4 +23,5 @@ cybersquad is a six-agent CrewAI pipeline that autonomously selects HackerOne bu
 | `tools/pentest/` | Pentest tools: nuclei, sqlmap, CORS, SSRF, XSS, SRI, header injection, source maps, error disclosure. |
 | `tools/cloud/` | Cloud/service checks: S3, Azure Blob, per-engine databases, admin panels, branded panels. |
 | `tools/cloud/databases/` | Per-engine unauthenticated database checks: one file per engine. |
-| `tools/report_tools.py` | Renders Markdown reports and writes them to disk. |
+| `tools/report_tools.py` | Authoring primitives for the Technical Author: evidence sanitisation, draft persistence, quality validation, and final consolidation into reports.json. |
+| `tools/cwe_data.py` / `tools/owasp_data.py` | Local CWE / OWASP cheat-sheet catalogues the Technical Author cites in disclosure reports. |
