@@ -11,11 +11,7 @@ from models import (
     HostInsight,
     HostPriority,
     HostRole,
-    Programme,
     ReconResult,
-    ScopeItem,
-    ScopeType,
-    Severity,
 )
 from tools.recon_insights import (
     ReconFinalisationError,
@@ -31,27 +27,15 @@ pytestmark = pytest.mark.unit
 
 
 # Fixtures
+#
+# The `programme` (with its `*.example.com` wildcard) and the `bystander_url`
+# fixture (out-of-scope by construction) come from tests/conftest.py.
 
 
 @pytest.fixture
-def sweep_programme() -> Programme:
-    return Programme(
-        handle="acme",
-        name="Acme",
-        url="https://hackerone.com/acme",
-        bounty_table={Severity.HIGH: 500},
-        in_scope=[
-            ScopeItem(asset_identifier="*.example.com", asset_type=ScopeType.WILDCARD),
-        ],
-        out_of_scope=[],
-        allows_automated_scanning=True,
-    )
-
-
-@pytest.fixture
-def sweep(sweep_programme) -> ReconResult:
+def sweep(programme) -> ReconResult:
     return ReconResult(
-        programme=sweep_programme,
+        programme=programme,
         subdomains=["api.example.com", "admin.example.com", "cdn.example.com"],
         endpoints=[
             Endpoint(
@@ -97,74 +81,75 @@ def _good_insight(**overrides) -> HostInsight:
 
 
 class TestValidateInsight:
-    def test_clean_insight_passes(self, sweep, sweep_programme):
-        report = validate_insight(_good_insight(), sweep, sweep_programme)
+    def test_clean_insight_passes(self, sweep, programme):
+        report = validate_insight(_good_insight(), sweep, programme)
         assert report.ok is True
         assert all(i.severity != "error" for i in report.issues)
 
-    def test_rejects_empty_hostname(self, sweep, sweep_programme):
-        report = validate_insight(_good_insight(hostname=""), sweep, sweep_programme)
+    def test_rejects_empty_hostname(self, sweep, programme):
+        report = validate_insight(_good_insight(hostname=""), sweep, programme)
         assert report.ok is False
         assert any(i.section == "hostname" for i in report.issues)
 
-    def test_rejects_out_of_scope_hostname(self, sweep, sweep_programme):
-        report = validate_insight(
-            _good_insight(hostname="api.other.invalid"), sweep, sweep_programme
-        )
+    def test_rejects_out_of_scope_hostname(self, sweep, programme, bystander_url):
+        from urllib.parse import urlparse
+
+        oos_host = urlparse(bystander_url).hostname
+        report = validate_insight(_good_insight(hostname=oos_host), sweep, programme)
         assert report.ok is False
         assert any(
             i.section == "hostname" and "not in programme scope" in i.message for i in report.issues
         )
 
-    def test_rejects_thin_notes(self, sweep, sweep_programme):
-        report = validate_insight(_good_insight(notes="too short"), sweep, sweep_programme)
+    def test_rejects_thin_notes(self, sweep, programme):
+        report = validate_insight(_good_insight(notes="too short"), sweep, programme)
         assert report.ok is False
         assert any(i.section == "notes" for i in report.issues)
 
-    def test_rejects_thin_notes_on_high_priority(self, sweep, sweep_programme):
+    def test_rejects_thin_notes_on_high_priority(self, sweep, programme):
         # 35 chars is >= 30 (so not the basic floor) but < 60 (the high-priority floor)
         thirty_five = "Public API gateway hosting v2 routes."
-        report = validate_insight(_good_insight(notes=thirty_five), sweep, sweep_programme)
+        report = validate_insight(_good_insight(notes=thirty_five), sweep, programme)
         assert report.ok is False
         assert any(
             i.section == "notes" and "high-priority hosts" in i.message for i in report.issues
         )
 
-    def test_rejects_thin_notes_on_skip(self, sweep, sweep_programme):
+    def test_rejects_thin_notes_on_skip(self, sweep, programme):
         report = validate_insight(
             _good_insight(priority=HostPriority.SKIP, notes="skip"),
             sweep,
-            sweep_programme,
+            programme,
         )
         assert report.ok is False
         assert any(i.section == "notes" for i in report.issues)
 
-    def test_warns_when_agent_drops_sweep_tech(self, sweep, sweep_programme):
+    def test_warns_when_agent_drops_sweep_tech(self, sweep, programme):
         # sweep saw ['Nginx', 'Spring Boot 2.6']; agent only carries 'Nginx'
         report = validate_insight(
             _good_insight(detected_tech=["Nginx"]),
             sweep,
-            sweep_programme,
+            programme,
         )
         assert report.ok is True
         assert any(i.section == "detected_tech" and i.severity == "warning" for i in report.issues)
 
-    def test_accepts_when_agent_adds_version_to_sweep_tech(self, sweep, sweep_programme):
+    def test_accepts_when_agent_adds_version_to_sweep_tech(self, sweep, programme):
         # sweep saw 'Spring Boot 2.6'; agent carries 'Spring Boot 2.6.3' (more specific)
         report = validate_insight(
             _good_insight(detected_tech=["Nginx", "Spring Boot 2.6.3"]),
             sweep,
-            sweep_programme,
+            programme,
         )
         # The version-stripping check accepts more-specific versions, but the
         # exact comparison may still warn. Either way, no errors.
         assert report.ok is True
 
-    def test_rejects_trivial_tech_entry(self, sweep, sweep_programme):
+    def test_rejects_trivial_tech_entry(self, sweep, programme):
         report = validate_insight(
             _good_insight(detected_tech=["X"]),
             sweep,
-            sweep_programme,
+            programme,
         )
         assert report.ok is False
         assert any(i.section == "detected_tech" for i in report.issues)
@@ -247,25 +232,23 @@ def _write_sweep(tmp_path, sweep: ReconResult) -> None:
 
 
 class TestFinaliseRecon:
-    def test_writes_recon_json_for_clean_insights(
-        self, sweep, sweep_programme, tmp_path, monkeypatch
-    ):
+    def test_writes_recon_json_for_clean_insights(self, sweep, programme, tmp_path, monkeypatch):
         monkeypatch.setattr("tools.recon_insights.runtime.run_dir", lambda: tmp_path)
         _write_sweep(tmp_path, sweep)
         save_insight(_good_insight())
-        path = finalise_recon(sweep_programme)
+        path = finalise_recon(programme)
         assert path == tmp_path / "recon.json"
         data = json.loads(path.read_text())
         assert len(data["host_insights"]) == 1
         assert data["host_insights"][0]["hostname"] == "api.example.com"
 
-    def test_refuses_without_insights(self, sweep, sweep_programme, tmp_path, monkeypatch):
+    def test_refuses_without_insights(self, sweep, programme, tmp_path, monkeypatch):
         monkeypatch.setattr("tools.recon_insights.runtime.run_dir", lambda: tmp_path)
         _write_sweep(tmp_path, sweep)
         with pytest.raises(ReconFinalisationError, match="no host_insights"):
-            finalise_recon(sweep_programme)
+            finalise_recon(programme)
 
-    def test_refuses_when_no_high_priority(self, sweep, sweep_programme, tmp_path, monkeypatch):
+    def test_refuses_when_no_high_priority(self, sweep, programme, tmp_path, monkeypatch):
         monkeypatch.setattr("tools.recon_insights.runtime.run_dir", lambda: tmp_path)
         _write_sweep(tmp_path, sweep)
         save_insight(
@@ -275,26 +258,26 @@ class TestFinaliseRecon:
             )
         )
         with pytest.raises(ReconFinalisationError, match="HIGH priority"):
-            finalise_recon(sweep_programme)
+            finalise_recon(programme)
 
-    def test_refuses_on_validation_errors(self, sweep, sweep_programme, tmp_path, monkeypatch):
+    def test_refuses_on_validation_errors(self, sweep, programme, tmp_path, monkeypatch):
         monkeypatch.setattr("tools.recon_insights.runtime.run_dir", lambda: tmp_path)
         _write_sweep(tmp_path, sweep)
         save_insight(_good_insight(notes="too short"))
         with pytest.raises(ReconFinalisationError, match="unresolved errors"):
-            finalise_recon(sweep_programme)
+            finalise_recon(programme)
 
-    def test_refuses_without_sweep(self, sweep_programme, tmp_path, monkeypatch):
+    def test_refuses_without_sweep(self, programme, tmp_path, monkeypatch):
         monkeypatch.setattr("tools.recon_insights.runtime.run_dir", lambda: tmp_path)
         save_insight(_good_insight())
         with pytest.raises(FileNotFoundError, match="sweep.json"):
-            finalise_recon(sweep_programme)
+            finalise_recon(programme)
 
-    def test_carries_sweep_fields_through(self, sweep, sweep_programme, tmp_path, monkeypatch):
+    def test_carries_sweep_fields_through(self, sweep, programme, tmp_path, monkeypatch):
         monkeypatch.setattr("tools.recon_insights.runtime.run_dir", lambda: tmp_path)
         _write_sweep(tmp_path, sweep)
         save_insight(_good_insight())
-        path = finalise_recon(sweep_programme)
+        path = finalise_recon(programme)
         data = json.loads(path.read_text())
         assert data["subdomains"] == sweep.subdomains
         assert len(data["endpoints"]) == len(sweep.endpoints)
