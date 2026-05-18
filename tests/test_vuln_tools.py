@@ -1,5 +1,11 @@
 """
-tests/test_vuln_tools.py - unit tests for tools/vuln_tools.py
+tests/test_vuln_tools.py - unit tests for the remaining helpers in
+tools/pentest/triage.py (scope check, NVD CVE lookup) and for the
+nuclei / CORS pentest helpers that historically lived alongside them.
+
+The mechanical ``triage_findings`` rollup and the ``_CVSS_DEFAULTS`` lookup
+table that backed it moved out when triage authoring was refactored into
+``tools/triage_tools.py`` - those tests now live in test_triage_tools.py.
 """
 
 from __future__ import annotations
@@ -8,71 +14,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from models import Endpoint, Severity, VerifiedVulnerability
-from tools.pentest import check_cors_misconfiguration, is_in_scope, run_nuclei, triage_findings
-from tools.pentest.triage import _lookup_cvss
+from models import Endpoint, Severity
+from tools.pentest import check_cors_misconfiguration, is_in_scope, run_nuclei
 
 pytestmark = pytest.mark.unit
-
-
-# _above_floor
-class TestAboveFloor:
-    def test_medium_above_medium_floor(self, monkeypatch):
-        monkeypatch.setenv("MIN_SEVERITY", "medium")
-        import importlib
-
-        import tools.pentest.triage as vt
-
-        importlib.reload(vt)
-        assert vt._above_floor(Severity.MEDIUM) is True
-
-    def test_low_below_medium_floor(self, monkeypatch):
-        monkeypatch.setenv("MIN_SEVERITY", "medium")
-        import importlib
-
-        import tools.pentest.triage as vt
-
-        importlib.reload(vt)
-        assert vt._above_floor(Severity.LOW) is False
-
-    def test_critical_always_above(self, monkeypatch):
-        monkeypatch.setenv("MIN_SEVERITY", "high")
-        import importlib
-
-        import tools.pentest.triage as vt
-
-        importlib.reload(vt)
-        assert vt._above_floor(Severity.CRITICAL) is True
-
-    def test_informational_below_low_floor(self, monkeypatch):
-        monkeypatch.setenv("MIN_SEVERITY", "low")
-        import importlib
-
-        import tools.pentest.triage as vt
-
-        importlib.reload(vt)
-        assert vt._above_floor(Severity.INFORMATIONAL) is False
-
-
-# _lookup_cvss
-class TestLookupCvss:
-    def test_sqli_critical(self):
-        score, vector = _lookup_cvss("SQLi", Severity.CRITICAL)
-        assert score == 9.8
-        assert "CVSS:3.1" in vector
-
-    def test_cors_high(self):
-        score, vector = _lookup_cvss("CORS", Severity.HIGH)
-        assert score == 7.4
-
-    def test_unknown_class_falls_back_to_default(self):
-        score, vector = _lookup_cvss("UnknownVulnType", Severity.HIGH)
-        assert score == 7.5
-
-    def test_returns_tuple(self):
-        result = _lookup_cvss("XSS", Severity.MEDIUM)
-        assert isinstance(result, tuple)
-        assert len(result) == 2
 
 
 # is_in_scope
@@ -82,49 +27,6 @@ class TestIsInScope:
 
     def test_out_of_scope_finding(self, raw_finding_oos, programme):
         assert is_in_scope(raw_finding_oos, programme) is False
-
-
-# triage_findings
-class TestTriageFindings:
-    def test_filters_out_of_scope(self, raw_finding_high, raw_finding_oos, programme):
-        results = triage_findings([raw_finding_high, raw_finding_oos], programme)
-        targets = [v.target for v in results]
-        assert raw_finding_oos.target not in targets
-
-    def test_filters_below_severity_floor(
-        self, raw_finding_high, raw_finding_low, programme, monkeypatch
-    ):
-        monkeypatch.setenv("MIN_SEVERITY", "medium")
-        import importlib
-
-        import tools.pentest.triage as vt
-
-        importlib.reload(vt)
-        results = vt.triage_findings([raw_finding_high, raw_finding_low], programme)
-        severities = [v.severity for v in results]
-        assert Severity.LOW not in severities
-
-    def test_assigns_cvss_score(self, raw_finding_high, programme):
-        results = triage_findings([raw_finding_high], programme)
-        assert len(results) == 1
-        assert results[0].cvss_score > 0
-        assert results[0].cvss_vector.startswith("CVSS:3.1")
-
-    def test_returns_verified_vulnerability_objects(self, raw_finding_high, programme):
-        results = triage_findings([raw_finding_high], programme)
-        for r in results:
-            assert isinstance(r, VerifiedVulnerability)
-
-    def test_empty_input_returns_empty(self, programme):
-        assert triage_findings([], programme) == []
-
-    def test_all_filtered_returns_empty(self, raw_finding_oos, programme):
-        assert triage_findings([raw_finding_oos], programme) == []
-
-    def test_preserves_title_and_target(self, raw_finding_high, programme):
-        results = triage_findings([raw_finding_high], programme)
-        assert results[0].title == raw_finding_high.title
-        assert results[0].target == raw_finding_high.target
 
 
 # run_nuclei

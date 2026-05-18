@@ -1,111 +1,323 @@
 """
-tests/test_report_tools.py - unit tests for tools/report_tools.py
+tests/test_report_tools.py - unit tests for tools/report_tools.py.
+
+Coverage targets the four primitive layers the Technical Author depends on:
+
+* CVSS scoring (calculate_cvss_score)
+* Evidence sanitisation (sanitise_evidence)
+* Draft validation (validate_draft)
+* Draft persistence and finalisation (save_draft / finalise_drafts)
+
+The DC compatibility surface (save_report) is covered at the end.
 """
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
+from models import Severity, VerifiedVulnerability
 from tools.report_tools import (
-    _VULN_CLASS_TO_CWE,
-    build_report_markdown,
-    create_disclosure_report,
+    FinalisationError,
+    ReportDraft,
+    calculate_cvss_score,
+    finalise_drafts,
+    load_drafts,
+    render_draft_markdown,
+    sanitise_evidence,
+    save_draft,
     save_report,
+    validate_draft,
 )
 
 pytestmark = pytest.mark.unit
 
 
-class TestCweMapping:
-    def test_sqli_maps_to_cwe_89(self):
-        assert _VULN_CLASS_TO_CWE["SQLi"] == 89
-
-    def test_xss_maps_to_cwe_79(self):
-        assert _VULN_CLASS_TO_CWE["XSS"] == 79
-
-    def test_cors_maps_to_cwe_942(self):
-        assert _VULN_CLASS_TO_CWE["CORS"] == 942
-
-    def test_ssrf_maps_to_cwe_918(self):
-        assert _VULN_CLASS_TO_CWE["SSRF"] == 918
+# Sanitisation
 
 
-class TestBuildReportMarkdown:
-    def test_contains_title(self, verified_vuln):
-        md = build_report_markdown("test-programme", verified_vuln, "Test summary.")
-        assert verified_vuln.title in md
+class TestSanitiseEvidence:
+    def test_preserves_xss_payload(self):
+        text = "<script>alert(document.cookie)</script>"
+        report = sanitise_evidence(text)
+        assert "<script>alert(document.cookie)</script>" in report.sanitised
+        assert report.redactions == []
 
-    def test_contains_summary(self, verified_vuln):
-        md = build_report_markdown("test-programme", verified_vuln, "My executive summary.")
-        assert "My executive summary." in md
+    def test_redacts_authorization_header(self):
+        text = "GET / HTTP/1.1\nAuthorization: Bearer abc.def.ghi\n"
+        report = sanitise_evidence(text)
+        assert "Bearer abc.def.ghi" not in report.sanitised
+        assert "Authorization: <redacted>" in report.sanitised
+        kinds = {r["kind"] for r in report.redactions}
+        assert "authorization_header" in kinds
 
-    def test_contains_cvss_score(self, verified_vuln):
-        md = build_report_markdown("test-programme", verified_vuln, "Summary.")
-        assert str(verified_vuln.cvss_score) in md
+    def test_redacts_cookie_header(self):
+        text = "Cookie: session=abc; csrf=xyz"
+        report = sanitise_evidence(text)
+        assert "session=abc" not in report.sanitised
+        assert "Cookie: <redacted>" in report.sanitised
 
-    def test_contains_cvss_vector(self, verified_vuln):
-        md = build_report_markdown("test-programme", verified_vuln, "Summary.")
-        assert verified_vuln.cvss_vector in md
+    def test_redacts_set_cookie(self):
+        text = "Set-Cookie: session=abcd; HttpOnly"
+        report = sanitise_evidence(text)
+        assert "session=abcd" not in report.sanitised
+        assert "Set-Cookie: <redacted>" in report.sanitised
 
-    def test_contains_cwe(self, verified_vuln):
-        md = build_report_markdown("test-programme", verified_vuln, "Summary.")
-        assert "CWE-89" in md
+    def test_redacts_bearer_outside_header(self):
+        text = "curl -H 'Auth: Bearer abcdefghijklmnop'"
+        report = sanitise_evidence(text)
+        assert "Bearer abcdefghijklmnop" not in report.sanitised
+        assert "Bearer <redacted>" in report.sanitised
 
-    def test_contains_reproduction_steps(self, verified_vuln):
-        md = build_report_markdown("test-programme", verified_vuln, "Summary.")
-        for step in verified_vuln.steps_to_reproduce:
-            assert step in md
+    def test_redacts_jwt(self):
+        # Three dot-separated base64 segments beginning ``eyJ`` (canonical JWT
+        # header start).
+        jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefghij"
+        report = sanitise_evidence(f"token={jwt}")
+        assert jwt not in report.sanitised
 
-    def test_steps_are_numbered(self, verified_vuln):
-        md = build_report_markdown("test-programme", verified_vuln, "Summary.")
-        assert "1." in md
-        assert "2." in md
+    def test_redacts_aws_access_key(self):
+        text = "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE"
+        report = sanitise_evidence(text)
+        assert "AKIAIOSFODNN7EXAMPLE" not in report.sanitised
+        kinds = {r["kind"] for r in report.redactions}
+        assert "aws_access_key" in kinds
 
-    def test_contains_target(self, verified_vuln):
-        md = build_report_markdown("test-programme", verified_vuln, "Summary.")
-        assert verified_vuln.target in md
+    def test_redacts_secret_kv(self):
+        text = "password=hunter2 api_key=sk-livesecretvaluexx"
+        report = sanitise_evidence(text)
+        assert "hunter2" not in report.sanitised
+        assert "sk-livesecretvaluexx" not in report.sanitised
 
-    def test_contains_severity_label(self, verified_vuln):
-        md = build_report_markdown("test-programme", verified_vuln, "Summary.")
-        assert "High" in md
+    def test_truncates_long_text(self):
+        report = sanitise_evidence("X" * 5000, limit=2000)
+        assert len(report.sanitised) < 5000
+        assert report.warnings
+        assert "truncated" in report.warnings[0]
 
-    def test_evidence_truncated_to_2000_chars(self, verified_vuln):
-        long_vuln = verified_vuln.model_copy(update={"evidence": "X" * 5000})
-        md = build_report_markdown("test-programme", long_vuln, "Summary.")
-        assert md.count("X") <= 2000
-
-    def test_timestamp_present(self, verified_vuln):
-        md = build_report_markdown("test-programme", verified_vuln, "Summary.")
-        assert "UTC" in md
+    def test_empty_input_returns_clean(self):
+        report = sanitise_evidence("")
+        assert report.sanitised == ""
+        assert report.redactions == []
+        assert report.warnings == []
 
 
-class TestCreateDisclosureReport:
-    def test_returns_disclosure_report(self, verified_vuln):
-        from models import DisclosureReport
+# CVSS
 
-        report = create_disclosure_report("test-programme", verified_vuln, "Summary.")
-        assert isinstance(report, DisclosureReport)
 
-    def test_programme_handle_set(self, verified_vuln):
-        report = create_disclosure_report("test-programme", verified_vuln, "Summary.")
-        assert report.programme_handle == "test-programme"
+class TestCalculateCvssScore:
+    def test_known_vector_critical(self):
+        assert calculate_cvss_score("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H") == 9.8
 
-    def test_weakness_id_from_vuln_class(self, verified_vuln):
-        report = create_disclosure_report("test-programme", verified_vuln, "Summary.")
-        assert report.weakness_id == 89
+    def test_known_vector_medium(self):
+        assert calculate_cvss_score("CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N") == 6.1
 
-    def test_body_markdown_is_nonempty(self, verified_vuln):
-        report = create_disclosure_report("test-programme", verified_vuln, "Summary.")
-        assert len(report.body_markdown) > 100
+    def test_known_vector_low(self):
+        assert calculate_cvss_score("CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:L/I:N/A:N") == 3.1
 
-    def test_impact_statement_from_vuln(self, verified_vuln):
-        report = create_disclosure_report("test-programme", verified_vuln, "Summary.")
-        assert report.impact_statement == verified_vuln.impact
+    def test_zero_impact_returns_zero(self):
+        assert calculate_cvss_score("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N") == 0.0
 
-    def test_unknown_vuln_class_weakness_id_is_none(self, verified_vuln):
-        unknown_vuln = verified_vuln.model_copy(update={"vuln_class": "WeirdCustomVuln"})
-        report = create_disclosure_report("test-programme", unknown_vuln, "Summary.")
-        assert report.weakness_id is None
+    def test_version_30_accepted(self):
+        assert calculate_cvss_score("CVSS:3.0/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H") == 9.8
+
+    def test_malformed_version_raises(self):
+        with pytest.raises(ValueError, match="Unrecognised CVSS version"):
+            calculate_cvss_score("CVSS:2.0/AV:N/AC:L/Au:N/C:C/I:C/A:C")
+
+    def test_missing_metric_raises(self):
+        with pytest.raises(ValueError, match="Missing or unknown CVSS metric"):
+            calculate_cvss_score("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H")
+
+    def test_malformed_component_raises(self):
+        with pytest.raises(ValueError, match="Malformed metric"):
+            calculate_cvss_score("CVSS:3.1/AV:N/BADCOMPONENT/PR:N/UI:N/S:U/C:H/I:H/A:H")
+
+
+# Draft fixtures
+
+
+def _good_draft(**overrides) -> ReportDraft:
+    base: dict = {
+        "finding_index": 0,
+        "target": "https://api.example.com/search",
+        "vuln_class": "SQLi",
+        "severity": Severity.HIGH,
+        "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+        "cvss_score": 9.8,
+        "cwe_id": 89,
+        "title": "SQL Injection in /search?q allows full database extraction",
+        "summary": (
+            "The /search endpoint concatenates the q parameter directly into a "
+            "SELECT statement. An unauthenticated attacker can exfiltrate the "
+            "entire database, including hashed passwords."
+        ),
+        "description": (
+            "The handler at routes/search.py builds the SQL by string concatenation: "
+            "`SELECT * FROM products WHERE name LIKE '%' + q + '%'`. There is no "
+            "parameterisation and no allow-list. Any attacker can inject arbitrary SQL "
+            "via the q querystring parameter and extract arbitrary tables."
+        ),
+        "steps_to_reproduce": [
+            "Issue GET https://api.example.com/search?q=test' UNION SELECT 1,2,3-- ",
+            "Observe the response includes the union'd rows alongside legitimate data.",
+        ],
+        "evidence": 'HTTP/1.1 200 OK\n\n[{"username":"alice"}]',
+        "impact": (
+            "An unauthenticated attacker can dump the entire users table, including "
+            "bcrypt password hashes and email addresses, enabling offline cracking "
+            "and account takeover of every user."
+        ),
+        "remediation": (
+            "Use parameterised queries via the ORM driver. See the OWASP SQL "
+            "Injection Prevention Cheat Sheet: "
+            "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html"
+        ),
+    }
+    base.update(overrides)
+    return ReportDraft(**base)
+
+
+# Validation
+
+
+class TestValidateDraft:
+    def test_clean_draft_passes(self):
+        report = validate_draft(_good_draft())
+        assert report.ok is True
+        assert report.issues == []
+
+    def test_empty_title_errors(self):
+        report = validate_draft(_good_draft(title=""))
+        assert report.ok is False
+        assert any(i.section == "title" and "empty" in i.message for i in report.issues)
+
+    def test_title_without_formula_errors(self):
+        report = validate_draft(_good_draft(title="SQL injection bug"))
+        assert report.ok is False
+        assert any(i.section == "title" and "does not match" in i.message for i in report.issues)
+
+    def test_thin_description_errors(self):
+        report = validate_draft(_good_draft(description="Too short."))
+        assert report.ok is False
+        assert any(i.section == "description" for i in report.issues)
+
+    def test_single_step_errors(self):
+        report = validate_draft(
+            _good_draft(steps_to_reproduce=["only one step that is long enough"])
+        )
+        assert report.ok is False
+        assert any(i.section == "steps_to_reproduce" for i in report.issues)
+
+    def test_hand_wavy_impact_errors(self):
+        report = validate_draft(
+            _good_draft(impact="An attacker could compromise user data of the system.")
+        )
+        assert report.ok is False
+        assert any(i.section == "impact" and "hand-wavy" in i.message for i in report.issues)
+
+    def test_remediation_without_url_errors(self):
+        report = validate_draft(
+            _good_draft(remediation="Use parameterised queries throughout the codebase.")
+        )
+        assert report.ok is False
+        assert any(i.section == "remediation" for i in report.issues)
+
+    def test_unsanitised_evidence_errors(self):
+        bad = _good_draft(evidence="Authorization: Bearer leaked.token.here\nGET / HTTP/1.1\n")
+        report = validate_draft(bad)
+        assert report.ok is False
+        assert any(i.section == "evidence" for i in report.issues)
+
+    def test_cvss_score_mismatch_errors(self):
+        # vector computes to 9.8 but score claims 5.0
+        bad = _good_draft(cvss_score=5.0)
+        report = validate_draft(bad)
+        assert report.ok is False
+        assert any(i.section == "cvss" for i in report.issues)
+
+    def test_unknown_cwe_warns(self):
+        # warning, not error
+        report = validate_draft(_good_draft(cwe_id=99999))
+        assert any(i.section == "cwe" and i.severity == "warning" for i in report.issues)
+        # still ok since only warning
+        assert report.ok is True
+
+
+# Rendering
+
+
+class TestRenderDraftMarkdown:
+    def test_contains_title(self):
+        md = render_draft_markdown(_good_draft())
+        assert "/search?q allows full database extraction" in md
+
+    def test_contains_cwe_name(self):
+        md = render_draft_markdown(_good_draft())
+        assert "CWE-89 (SQL Injection)" in md
+
+    def test_steps_are_numbered(self):
+        md = render_draft_markdown(_good_draft())
+        assert "1. " in md
+        assert "2. " in md
+
+    def test_evidence_block_present(self):
+        md = render_draft_markdown(_good_draft())
+        assert "HTTP/1.1 200 OK" in md
+
+
+# Persistence
+
+
+class TestSaveAndLoadDraft:
+    def test_save_writes_indexed_file(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("tools.report_tools.runtime.run_dir", lambda: tmp_path)
+        path = save_draft(_good_draft(finding_index=2))
+        assert path == tmp_path / "drafts" / "002.json"
+        assert path.exists()
+        data = json.loads(path.read_text())
+        assert data["finding_index"] == 2
+
+    def test_load_drafts_orders_by_index(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("tools.report_tools.runtime.run_dir", lambda: tmp_path)
+        save_draft(_good_draft(finding_index=1))
+        save_draft(_good_draft(finding_index=0))
+        drafts = load_drafts()
+        assert [d.finding_index for d in drafts] == [0, 1]
+
+    def test_load_drafts_empty_when_no_dir(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("tools.report_tools.runtime.run_dir", lambda: tmp_path)
+        assert load_drafts() == []
+
+
+# Finalisation
+
+
+class TestFinaliseDrafts:
+    def test_writes_reports_json_for_clean_drafts(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("tools.report_tools.runtime.run_dir", lambda: tmp_path)
+        save_draft(_good_draft(finding_index=0))
+        path = finalise_drafts("test-programme", "Summary line.", expected_count=1)
+        assert path == tmp_path / "reports.json"
+        contents = json.loads(path.read_text())
+        assert len(contents) == 1
+        assert contents[0]["programme_handle"] == "test-programme"
+
+    def test_refuses_when_drafts_missing(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("tools.report_tools.runtime.run_dir", lambda: tmp_path)
+        save_draft(_good_draft(finding_index=0))
+        with pytest.raises(FinalisationError, match="expected 2 drafts, found 1"):
+            finalise_drafts("test-programme", "Summary.", expected_count=2)
+
+    def test_refuses_on_validation_errors(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("tools.report_tools.runtime.run_dir", lambda: tmp_path)
+        save_draft(_good_draft(finding_index=0, title="bad title"))
+        with pytest.raises(FinalisationError, match="unresolved errors"):
+            finalise_drafts("test-programme", "Summary.", expected_count=1)
+
+
+# DC compatibility
 
 
 class TestSaveReport:
@@ -124,21 +336,6 @@ class TestSaveReport:
         assert path.exists()
         assert path.suffix == ".md"
 
-    def test_file_contains_report_body(self, disclosure_report, tmp_path, monkeypatch):
-        monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
-        import importlib
-
-        import config as cfg
-
-        importlib.reload(cfg)
-        import tools.report_tools as rt
-
-        rt.config = cfg.AppConfig()
-
-        path = save_report(disclosure_report)
-        content = path.read_text()
-        assert disclosure_report.body_markdown in content
-
     def test_filename_contains_handle(self, disclosure_report, tmp_path, monkeypatch):
         monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
         import importlib
@@ -154,62 +351,15 @@ class TestSaveReport:
         assert "test-programme" in path.name
 
 
-# calculate_cvss_score
-class TestCalculateCvssScore:
-    def test_known_vector_critical(self):
-        from tools.report_tools import calculate_cvss_score
+# Helper: verified-finding round-trip
 
-        # AV:N AC:L PR:N UI:N S:U C:H I:H A:H -> 9.8
-        score = calculate_cvss_score("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
-        assert score == 9.8
 
-    def test_known_vector_medium(self):
-        from tools.report_tools import calculate_cvss_score
+class TestVerifiedRoundTrip:
+    def test_load_verified(self, tmp_path, verified_vuln: VerifiedVulnerability):
+        from tools.report_tools import load_verified
 
-        # AV:N AC:L PR:N UI:R S:C C:L I:L A:N -> 6.1
-        score = calculate_cvss_score("CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N")
-        assert score == 6.1
-
-    def test_known_vector_low(self):
-        from tools.report_tools import calculate_cvss_score
-
-        # AV:N AC:H PR:N UI:R S:U C:L I:N A:N -> 3.1
-        score = calculate_cvss_score("CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:L/I:N/A:N")
-        assert score == 3.1
-
-    def test_zero_impact_returns_zero(self):
-        from tools.report_tools import calculate_cvss_score
-
-        # C:N I:N A:N -> ISS=0 -> score=0
-        score = calculate_cvss_score("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N")
-        assert score == 0.0
-
-    def test_version_30_accepted(self):
-        from tools.report_tools import calculate_cvss_score
-
-        score = calculate_cvss_score("CVSS:3.0/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
-        assert score == 9.8
-
-    def test_malformed_version_raises(self):
-        from tools.report_tools import calculate_cvss_score
-
-        with pytest.raises(ValueError, match="Unrecognised CVSS version"):
-            calculate_cvss_score("CVSS:2.0/AV:N/AC:L/Au:N/C:C/I:C/A:C")
-
-    def test_missing_metric_raises(self):
-        from tools.report_tools import calculate_cvss_score
-
-        with pytest.raises(ValueError, match="Missing or unknown CVSS metric"):
-            calculate_cvss_score("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H")
-
-    def test_malformed_component_raises(self):
-        from tools.report_tools import calculate_cvss_score
-
-        with pytest.raises(ValueError, match="Malformed metric"):
-            calculate_cvss_score("CVSS:3.1/AV:N/BADCOMPONENT/PR:N/UI:N/S:U/C:H/I:H/A:H")
-
-    def test_result_in_valid_range(self):
-        from tools.report_tools import calculate_cvss_score
-
-        score = calculate_cvss_score("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
-        assert 0.0 <= score <= 10.0
+        path = tmp_path / "verified.json"
+        path.write_text(json.dumps([verified_vuln.model_dump(mode="json")]))
+        loaded = load_verified(path)
+        assert len(loaded) == 1
+        assert loaded[0].vuln_class == verified_vuln.vuln_class
