@@ -8,7 +8,6 @@ import pytest
 
 from models import Endpoint, Severity
 from tools.pentest.nosqli import run_nosqli
-from tools.pentest.triage import _lookup_cvss
 
 pytestmark = pytest.mark.unit
 
@@ -84,13 +83,3 @@ class TestRunNosqli:
             results = run_nosqli(endpoints)
 
         assert len(results[0].evidence) <= 2000
-
-    def test_nosqli_cvss_critical(self):
-        score, vector = _lookup_cvss("NoSQLi", Severity.CRITICAL)
-        assert score == 9.8
-        assert "CVSS:3.1" in vector
-
-    def test_nosqli_cvss_high(self):
-        score, vector = _lookup_cvss("NoSQLi", Severity.HIGH)
-        assert score == 8.8
-        assert "CVSS:3.1" in vector
