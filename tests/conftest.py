@@ -31,12 +31,21 @@ from models import (  # noqa: E402
 # Domain fixtures
 #
 # Use these instead of ad-hoc hostnames so test intent is readable at a glance.
-# victim_url  - the scanning target (an app we are testing)
-# callback_url - OOB receiver (a server we control, used for blind injection);
-#                placeholder until #77 lands real interactsh infrastructure.
+# victim_url    - the scanning target (an app we are testing); in-scope per
+#                 the ``programme`` fixture's ``*.example.com`` wildcard rule.
+# bystander_url - an out-of-scope host on a different TLD. Use it whenever a
+#                 test exercises the scope guard - the name makes the intent
+#                 ("bystander, hands off") obvious at the call site.
+# callback_url  - OOB receiver (a server we control, used for blind injection);
+#                 placeholder until #77 lands real interactsh infrastructure.
 @pytest.fixture()
 def victim_url() -> str:
     return "https://victim.example.com"
+
+
+@pytest.fixture()
+def bystander_url() -> str:
+    return "https://bystander.example.org"
 
 
 @pytest.fixture()
