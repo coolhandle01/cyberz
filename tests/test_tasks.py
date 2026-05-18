@@ -74,10 +74,10 @@ class TestBuildTasks:
         ]
         return {role: MagicMock(name=role) for role in roles}
 
-    def test_returns_six_tasks_in_order(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_returns_seven_tasks_in_order(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(squad, "Task", _FakeTask)
         tasks = build_tasks(self._agents())
-        assert len(tasks) == 6
+        assert len(tasks) == 7
 
     def test_each_task_has_description_and_output(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(squad, "Task", _FakeTask)
@@ -89,11 +89,12 @@ class TestBuildTasks:
     def test_context_chaining_wired(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(squad, "Task", _FakeTask)
         tasks = build_tasks(self._agents())
-        select, recon, research, pentest, write, submit = tasks
+        select, recon, research, pentest, triage, write, submit = tasks
         assert recon.context == [select]
         assert research.context == [recon, select]
         assert pentest.context == [research, recon, select]
-        assert write.context == [pentest, select]
+        assert triage.context == [pentest, select]
+        assert write.context == [triage, select]
         assert submit.context == [write]
 
     def test_human_input_enabled(self, monkeypatch: pytest.MonkeyPatch) -> None:

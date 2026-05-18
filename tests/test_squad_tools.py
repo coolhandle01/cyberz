@@ -210,9 +210,7 @@ class TestVulnerabilityResearcherTools:
 
 
 class TestTechnicalAuthorTools:
-    def test_create_reports_tool(
-        self, verified_vuln, disclosure_report, tmp_path
-    ) -> None:
+    def test_create_reports_tool(self, verified_vuln, disclosure_report, tmp_path) -> None:
         from squad.technical_author import create_reports_tool
 
         verified_path = tmp_path / "verified.json"
