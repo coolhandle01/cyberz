@@ -280,6 +280,75 @@ class TestOsintAnalystTools:
         assert result == []
         mprobe.assert_not_called()
 
+    def test_detect_takeover_candidates_tool(self, programme) -> None:
+        from squad.osint_analyst import detect_takeover_candidates_tool
+        from tools.recon.dnsx import TakeoverCandidate
+
+        candidate = TakeoverCandidate(
+            hostname="legacy.example.com",
+            cname="bucket.s3.amazonaws.com",
+            reason="cname_to_vulnerable_provider",
+            service="AWS S3",
+        )
+        patches = self._patch_programme(programme) + [
+            patch(
+                "squad.osint_analyst.filter_in_scope_impl",
+                return_value=["legacy.example.com"],
+            ),
+            patch(
+                "squad.osint_analyst.detect_takeover_candidates",
+                return_value=[candidate],
+            ),
+        ]
+        for p in patches:
+            p.start()
+        try:
+            result = detect_takeover_candidates_tool.func(
+                ["legacy.example.com"], programme_handle="test-programme"
+            )
+        finally:
+            for p in reversed(patches):
+                p.stop()
+
+        assert isinstance(result, list)
+        assert result == [
+            {
+                "hostname": "legacy.example.com",
+                "cname": "bucket.s3.amazonaws.com",
+                "reason": "cname_to_vulnerable_provider",
+                "service": "AWS S3",
+            }
+        ]
+
+    def test_detect_takeover_candidates_tool_empty(self) -> None:
+        from squad.osint_analyst import detect_takeover_candidates_tool
+
+        assert detect_takeover_candidates_tool.func([], programme_handle="test-programme") == []
+
+    def test_detect_takeover_candidates_tool_drops_out_of_scope(self, programme) -> None:
+        from squad.osint_analyst import detect_takeover_candidates_tool
+
+        mdetect = MagicMock()
+        patches = self._patch_programme(programme) + [
+            patch(
+                "squad.osint_analyst.filter_in_scope_impl",
+                return_value=[],
+            ),
+            patch("squad.osint_analyst.detect_takeover_candidates", mdetect),
+        ]
+        for p in patches:
+            p.start()
+        try:
+            result = detect_takeover_candidates_tool.func(
+                ["malicious.invalid"], programme_handle="test-programme"
+            )
+        finally:
+            for p in reversed(patches):
+                p.stop()
+
+        assert result == []
+        mdetect.assert_not_called()
+
     def test_lookup_cwe_tool(self) -> None:
         from squad.osint_analyst import lookup_cwe_tool
 

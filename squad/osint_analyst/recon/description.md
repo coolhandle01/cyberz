@@ -21,6 +21,11 @@ Your workflow:
        linked).
      - Probe Hostnames on net-new hostnames from those discoveries -
        returns live status + tech.
+     - Detect Takeover Candidates on the full sweep's subdomains (CNAMEs
+       pointing at S3 / Heroku / GitHub Pages / Azure / Vercel / Netlify /
+       Fastly, or dangling CNAMEs). Hits warrant a HIGH-priority annotation
+       and a note pointing the Penetration Tester at the service-specific
+       confirmation fingerprint.
      - LLM Endpoint Detection on the sweep's endpoints - any hit is a
        high-priority annotation candidate for prompt-injection testing.
 

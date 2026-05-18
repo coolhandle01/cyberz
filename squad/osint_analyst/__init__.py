@@ -12,7 +12,13 @@ from models import Endpoint, HostInsight, HostPriority, HostRole, Programme
 from squad import SquadMember, read_run_file_tool, read_run_filelist_tool
 from tools import cwe_data, http, owasp_data
 from tools.h1_api import h1
-from tools.recon import cert_transparency, detect_llm_endpoints, historical_urls, run_recon
+from tools.recon import (
+    cert_transparency,
+    detect_llm_endpoints,
+    detect_takeover_candidates,
+    historical_urls,
+    run_recon,
+)
 from tools.recon import probe_endpoints as probe_endpoints_impl
 from tools.recon.query import recon_endpoints, recon_open_ports, recon_subdomains
 from tools.recon.scope import filter_in_scope as filter_in_scope_impl
@@ -160,6 +166,35 @@ def probe_hostnames_tool(hostnames: list[str], programme_handle: str) -> list[di
         return []
     eps = probe_endpoints_impl(in_scope)
     return [ep.model_dump(mode="json") for ep in eps]
+
+
+@tool("Detect Takeover Candidates")
+def detect_takeover_candidates_tool(hostnames: list[str], programme_handle: str) -> list[dict]:
+    """
+    Resolve each hostname via dnsx and flag subdomain-takeover candidates.
+
+    A candidate is flagged when the host's CNAME points to a known-vulnerable
+    provider (AWS S3, Heroku, GitHub Pages, Azure, Vercel, Netlify, ...) or
+    when the CNAME chain dangles (CNAME exists but resolves to no A records).
+    Returns ``[{hostname, cname, reason, service}]`` where ``reason`` is one
+    of ``cname_to_vulnerable_provider`` or ``dangling_cname``.
+
+    Each candidate is exactly that - a candidate. Follow up by annotating
+    the host HIGH priority with a note pointing the Penetration Tester at
+    the service-specific confirmation step (probe the host and check for
+    the "no such bucket" / "no such app" / "there isn't a GitHub Pages
+    site here" body fingerprint).
+
+    Hostnames are scope-filtered before any DNS traffic is generated.
+    """
+    if not hostnames:
+        return []
+    programme = _load_programme(programme_handle)
+    in_scope = filter_in_scope_impl([h.strip().lower() for h in hostnames if h.strip()], programme)
+    if not in_scope:
+        return []
+    candidates = detect_takeover_candidates(in_scope)
+    return [c.model_dump(mode="json") for c in candidates]
 
 
 @tool("Lookup CWE")
@@ -311,6 +346,7 @@ MEMBER = SquadMember(
         cert_transparency_tool,
         historical_urls_tool,
         probe_hostnames_tool,
+        detect_takeover_candidates_tool,
         llm_detection_tool,
         # Citation hints
         lookup_cwe_tool,
