@@ -28,6 +28,17 @@ from models import (  # noqa: E402
 )
 
 
+# Probe tools call tools._helpers.adaptive_sleep between requests for rate-limit
+# politeness. Inside _helpers, adaptive_sleep calls time.sleep(delay) for real,
+# which dominates unit-test wall-clock time (roughly 40% of the suite). Patch it
+# once here for every test. Tests that need to observe sleep behaviour
+# (TestAdaptiveSleep in test_scan_mode.py) re-patch time.sleep locally and the
+# assertions still fire - the autouse lambda is below their inner patch.
+@pytest.fixture(autouse=True)
+def _no_real_sleep(monkeypatch):
+    monkeypatch.setattr("time.sleep", lambda *_args, **_kwargs: None)
+
+
 # Domain fixtures
 #
 # Use these instead of ad-hoc hostnames so test intent is readable at a glance.
