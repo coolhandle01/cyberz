@@ -32,6 +32,9 @@ coverage.xml
 *.swp
 *.swo
 
+# Claude Code personal overrides (committed: .claude/settings.json)
+.claude/settings.local.json
+
 # OS
 .DS_Store
 Thumbs.db

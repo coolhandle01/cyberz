@@ -8,14 +8,16 @@ Never include session URLs (`https://claude.ai/code/session_...`) in commit mess
 
 ## Skills
 
-Skills under `.claude/skills/` are loaded explicitly via the `Skill` tool when their description matches your task - they do not auto-fire on file edits. **Before editing a file in scope of a skill, invoke that skill via the `Skill` tool first.** The descriptions in the session-start system reminder are summaries; the file contents carry the real guidance.
+Skills under `.claude/skills/` auto-load via a `PreToolUse` hook on `Write`/`Edit` configured in `.claude/settings.json`. The relevant skill's full `SKILL.md` is injected into context on the first matching edit per session, deduplicated so repeated edits to the same scope are silent.
 
-| Skill | When to load |
+| Skill | Triggers on |
 |---|---|
-| `cybersquad-test-fixtures` | Editing any file under `tests/` |
-| `cybersquad-pentest-tool` | Creating or editing files under `tools/pentest/` or `squad/penetration_tester/__init__.py` |
-| `cybersquad-bdd` | Creating or editing files under `tests/features/` or `tests/bdd/` |
-| `cybersquad-agent-llm` | Editing `crew.py` or any code constructing a CrewAI `Agent` or `LLM` |
+| `cybersquad-test-fixtures` | Any file under `tests/` (except the two below) |
+| `cybersquad-pentest-tool` | `tools/pentest/**` or `squad/penetration_tester/__init__.py` |
+| `cybersquad-bdd` | `tests/features/**` or `tests/bdd/**` |
+| `cybersquad-agent-llm` | `crew.py` |
+
+The hook is wired in `.claude/settings.json`; the matching logic lives in `.claude/hooks/load-skill.sh`. If a hook fails to fire in your session, run `/hooks` once (or restart) - the watcher only sees `.claude/settings.json` if it existed at session start. You can always also load a skill manually via the `Skill` tool.
 
 ## Required MCP
 
