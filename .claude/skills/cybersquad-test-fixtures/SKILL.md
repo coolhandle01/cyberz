@@ -1,104 +1,54 @@
 ---
 name: cybersquad-test-fixtures
-description: Use the shared pytest fixtures in tests/conftest.py instead of defining local equivalents when writing or editing cybersquad tests. Covers make_response (HTTP response factory), canonical model fixtures (programme, endpoint, recon_result, raw_finding_high/low/oos, verified_vuln, disclosure_report), and clean_response_body (false-positive-safe HTML). Use when editing any file under tests/.
+description: Use the shared pytest fixtures in tests/conftest.py instead of redefining local equivalents when writing or editing cybersquad tests. Covers make_response, the canonical model fixtures, clean_response_body, and the domain URL fixtures. Load before editing any file under tests/.
 ---
 
 # cybersquad test fixtures
 
-`tests/conftest.py` provides fixtures for all tests. Use them. Do not redefine local equivalents - duplicates drift, hide accidental marker collisions, and make refactors of the canonical models painful.
+`tests/conftest.py` is the source of truth. Use these fixtures rather than redefining local equivalents - duplicates drift, hide accidental marker collisions, and make canonical-model refactors painful.
 
-## make_response
+## Catalogue
 
-Factory for `MagicMock` objects shaped like `requests.Response`. Accepts `status`, `body`, `headers`, `cookies`, and `json`. Use this for any generic HTTP response mock.
+| Fixture | What it provides |
+|---|---|
+| `make_response` | Factory for `MagicMock` shaped like `requests.Response`. Accepts `status`, `body`, `headers`, `cookies`, `json`. |
+| `make_html_page` | Factory for minimal HTML pages with `<script>` tags. Default: one script at `{victim_url}/app.js`. |
+| `programme` | A `Programme` model. In-scope: `https://example.com` and `*.example.com`. |
+| `endpoint` | An `Endpoint` model at `https://api.example.com`. |
+| `recon_result` | A `ReconResult` combining `programme` and `endpoint`. |
+| `raw_finding_high` / `raw_finding_low` / `raw_finding_oos` | `RawFinding` instances at each severity / scope tier. |
+| `verified_vuln` | A `VerifiedVulnerability` model. |
+| `disclosure_report` | A `DisclosureReport` derived from `verified_vuln`. |
+| `clean_response_body` | An HTML body verified at setup time to contain no pentest probe marker - use for "no finding" cases. |
+| `victim_url` | `https://victim.example.com` - in-scope target. |
+| `bystander_url` | `https://bystander.example.org` - out-of-scope; use whenever a test exercises the scope guard. |
+| `callback_url` | `https://callback.cybersquad.com` - OOB receiver placeholder. |
+| `reload_module` | Wraps `importlib.reload` so tests can pick up env-var changes on module-level singletons. |
 
-```python
-# correct - uses shared fixture
-def test_no_finding(self, make_response: Callable[..., MagicMock]) -> None:
-    with patch("requests.get", return_value=make_response(body="<html>ok</html>")):
-        pass  # assertions go here
+## Derive variants with `model_copy`
 
-# wrong - duplicates the fixture locally
-def _resp(body="", status=200):
-    r = MagicMock()
-    r.text = body
-    r.status_code = status
-    return r
-```
-
-Tool-specific response builders that carry extra logic (e.g. cookie-jar inspection, POST body reflection) can stay local to their test file. The rule is: if a local helper is just constructing a generic mock response, replace it with `make_response`.
-
-## Canonical model fixtures
-
-Use these as starting points and derive variants with `model_copy(update={...})`:
-
-- `programme` - a `Programme` model instance
-- `endpoint` - an `Endpoint` model instance
-- `recon_result` - a `ReconResult` model instance
-- `raw_finding_high`, `raw_finding_low`, `raw_finding_oos` - `RawFinding` instances at each severity / scope tier
-- `verified_vuln` - a `VerifiedVuln` model instance
-- `disclosure_report` - a `DisclosureReport` model instance
-
-```python
-# correct - derive a variant
-def test_excludes_out_of_scope(programme):
-    oos = programme.model_copy(update={"in_scope_assets": []})
-    ...
-
-# wrong - reconstruct from scratch
-def test_excludes_out_of_scope():
-    oos = Programme(handle="x", name="y", ...)
-```
-
-## clean_response_body
-
-An HTML body verified at fixture-setup time to contain none of the strings any pentest probe treats as a positive match. Use it for "no finding" cases to avoid false negatives caused by accidental marker collisions in hand-rolled HTML.
-
-```python
-def test_no_finding(make_response, clean_response_body):
-    with patch("requests.get", return_value=make_response(body=clean_response_body)):
-        result = my_probe("https://target.invalid")
-    assert result is None
-```
-
-## Domain fixtures
-
-Use these instead of ad-hoc hostnames so test intent is readable:
-
-- `victim_url` - `"https://victim.example.com"` - the scanning target
-- `callback_url` - `"https://callback.cybersquad.com"` - OOB receiver (placeholder until #77 lands)
+Do not reconstruct a fixture model from scratch:
 
 ```python
 # correct
-def test_detects_injection(make_response, victim_url):
-    ep = Endpoint(url=f"{victim_url}/api/users/42", parameters=["id"])
+out_of_scope = programme.model_copy(update={"in_scope": []})
+
+# wrong - duplicates every other field
+out_of_scope = Programme(handle=programme.handle, name=programme.name, ...)
+```
+
+## Use the domain fixtures
+
+```python
+# correct - intent is readable at the call site
+def test_drops_out_of_scope(make_response, bystander_url):
     ...
 
 # wrong - opaque hostname, no indication of role
-def test_detects_injection(make_response):
-    ep = Endpoint(url="https://app.example.com/api/users/42", parameters=["id"])
-    ...
+def test_drops_out_of_scope(make_response):
+    url = "https://malicious.invalid"
 ```
 
-## make_html_page
+## Tool-specific response builders
 
-Factory for minimal HTML pages containing `<script>` tags. Returns a callable that accepts an optional `scripts` list; omitting it defaults to `[f"{victim_url}/app.js"]`.
-
-Use this wherever a test needs a generic HTML page with script references (e.g. sourcemap probes, SRI checks) rather than hand-rolling `<html><head><script ...></script></head></html>` strings.
-
-```python
-# correct
-def test_map_detected(victim_url, make_html_page):
-    def fake_get(url, **kwargs):
-        ...
-        resp.text = make_html_page()                          # default script
-        resp.text = make_html_page(scripts=["https://cdn.example.net/lib.js"])
-        ...
-
-# wrong - inline string duplicates the pattern and hard-codes the hostname
-def test_map_detected(victim_url):
-    html = f'<html><head><script src="{victim_url}/app.js"></script></head></html>'
-```
-
-## When in doubt
-
-Read `tests/conftest.py` - it is the source of truth for what is available.
+A local response builder that carries extra logic (cookie-jar inspection, POST body reflection - see `_post_resp` in `test_csrf.py`, the cookie-aware `_resp` in `test_cookies.py`) can stay local. The rule is: if the local helper is just constructing a generic mock response, replace it with `make_response`.

@@ -1,59 +1,22 @@
 # cybersquad - AI Contributor Guide
 
-This file carries only the rules that must hold on every turn. Anything situational lives under `docs/` or in a `.claude/skills/` skill that loads on demand.
+**Read `CONTRIBUTING.md` first.** It carries the universal rules (ASCII only, minimal diff, preserve names and comments, linter findings as signal, FIXME/TODO grammar, surface concerns), the `Before you commit` CI parity stack, and the safety invariants. Everything below is AI-contributor-specific layered on top.
 
-**Read `README.md` first.** Setup, install, env vars, and how to run the pipeline live there.
+## Commit messages
 
-## Before you commit - non-negotiable
+Never include session URLs (`https://claude.ai/code/session_...`) in commit messages or PR bodies. They reference private conversations.
 
-1. **Work inside a virtualenv with full dev deps.** Without `python -m venv .venv && .venv/bin/pip install -e ".[dev]"`, `mypy` silently passes locally because it cannot resolve `crewai`, `crewai.tools`, or `langchain_anthropic`. No venv, no valid local signal.
+## Skills
 
-2. **Run the full CI stack locally, in order, before every push.** Ruff alone is not enough:
+Skills under `.claude/skills/` are loaded explicitly via the `Skill` tool when their description matches your task - they do not auto-fire on file edits. **Before editing a file in scope of a skill, invoke that skill via the `Skill` tool first.** The descriptions in the session-start system reminder are summaries; the file contents carry the real guidance.
 
-   ```bash
-   .venv/bin/ruff check .
-   .venv/bin/ruff format --check .
-   .venv/bin/mypy . --ignore-missing-imports
-   H1_API_USERNAME=ci-user H1_API_TOKEN=ci-token CYBERSQUAD_CONTACT_EMAIL=ci@example.invalid .venv/bin/pytest -m unit --cov --cov-report=term-missing
-   .venv/bin/bandit -c pyproject.toml -r . -q
-   ```
+| Skill | When to load |
+|---|---|
+| `cybersquad-test-fixtures` | Editing any file under `tests/` |
+| `cybersquad-pentest-tool` | Creating or editing files under `tools/pentest/` or `squad/penetration_tester/__init__.py` |
+| `cybersquad-bdd` | Creating or editing files under `tests/features/` or `tests/bdd/` |
+| `cybersquad-agent-llm` | Editing `crew.py` or any code constructing a CrewAI `Agent` or `LLM` |
 
-   All five must pass. Fix locally - never "push and let CI tell me".
+## Required MCP
 
-3. **Never push a change you haven't actually executed.** A passing mypy run after a `type: ignore` removal means nothing if the file wasn't reachable.
-
-4. **Read the actual file before planning any change.** Check `proposals/` for in-flight design work.
-
-5. **Never include session URLs (`https://claude.ai/code/session_...`) in commit messages.** They reference private conversations.
-
-## Safety invariants - do not weaken
-
-- **Scope enforcement** in `tools/recon/scope.py`: `if host == pattern or host.endswith("." + pattern)`. A bare `host.endswith(pattern)` would let `evil.notexample.com` match `example.com`.
-- **Automated-scanning gate** in `tools/h1_api.py:parse_programme()`: sets `allows_automated_scanning=False` on policy text like "no automated" / "automated scanning prohibited". The PM discards such programmes.
-- **Import order in `main.py`**: `check_env()` must run before `build_crew()` is imported. The crew import chain reads env vars; `check_env()` must exit cleanly first.
-- **No module-level side effects in `crew.py`**. The old `crew = build_crew()` at module level was deliberately removed.
-
-## Required skills and MCP
-
-- **CrewAI skill** ([docs](https://docs.crewai.com/en/skills)) - understand/write valid CrewAI agents, tasks, tools.
-- **skill-creator** ([SKILL.md](https://github.com/anthropics/skills/blob/main/skills/skill-creator/SKILL.md)) - author skills under `.claude/skills/`.
 - **Filesystem MCP** - configure `@modelcontextprotocol/server-filesystem` with this repo's absolute path in `claude_desktop_config.json`.
-
-## Index
-
-Reference docs (read on demand):
-
-- `docs/architecture.md` - what the project does, key files
-- `docs/git-workflow.md` - branch naming, fresh-from-main flow, commit-message rules
-- `docs/testing.md` - pytest invocation, coverage floor, shared fixtures
-- `docs/ci.md` - ruff/mypy/bandit guidance, SHA pinning, `upload-artifact` gotcha
-- `docs/contributing/{adding-an-agent,adding-a-tool,adding-config}.md` - includes probe-`StrEnum` and `default_factory=lambda` rules
-
-Skills under `.claude/skills/` fire automatically when relevant files are edited:
-
-- `cybersquad-conventions` - ASCII-only, `StrEnum`, `X | None`, `model_copy`, five-file prompt layout. Trigger: `.py` / `.md` edits.
-- `cybersquad-agent-llm` - `crewai.LLM(...)` construction + `anthropic/` model prefix. Trigger: `crew.py` / `Agent` construction.
-- `cybersquad-test-fixtures` - the `conftest.py` fixture catalogue. Trigger: edits under `tests/`.
-- `cybersquad-change-discipline` - minimal-diff philosophy, intentional renames, linter-as-signal, FIXME/TODO grammar, Chesterton's Fence. Trigger: editing existing code, suppressing a linter finding, or considering an out-of-scope rename/refactor.
-- `cybersquad-pentest-tool` - attack-classification StrEnum, check function filter parameter, squad @tool wiring. Trigger: creating or editing files under `tools/pentest/` or `squad/penetration_tester/__init__.py`.
-- `cybersquad-bdd` - Gherkin conventions, step definition patterns, fixture injection, running BDD tests in isolation. Trigger: creating or editing files under `tests/features/` or `tests/bdd/`.
