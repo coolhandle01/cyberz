@@ -5,8 +5,8 @@ from pathlib import Path
 
 from crewai.tools import tool
 
-from models import Endpoint, ReconResult
-from squad import SquadMember
+from models import Endpoint, EndpointPage, ReconResult
+from squad import SquadMember, read_run_file_tool, read_run_filelist_tool
 from tools import http
 from tools.cloud import (
     check_admin_panels,
@@ -55,6 +55,7 @@ from tools.pentest.ssti import SstiPayload, check_ssti
 from tools.pentest.webapp_headers import check_header_injection, check_host_headers
 from tools.pentest.xss import check_reflected_xss
 from tools.pentest.xxe import XxePayload, check_xxe
+from tools.recon.query import recon_endpoints, recon_open_ports, recon_subdomains
 
 
 def _parse_endpoints(endpoints_json: str) -> list[Endpoint]:
@@ -62,14 +63,19 @@ def _parse_endpoints(endpoints_json: str) -> list[Endpoint]:
     return [Endpoint.model_validate(e) for e in json.loads(endpoints_json)]
 
 
-def _recon_from_json(recon_result_json: str) -> ReconResult:
-    """Parse a serialised ReconResult and seed the http programme context.
+def _recon_from_path(recon_path: str) -> ReconResult:
+    """Read a serialised ReconResult from disk and seed the http programme context.
 
-    Centralised here so any wrapper that has a ReconResult propagates the
+    Centralised here so any wrapper that loads a ReconResult propagates the
     programme handle into outbound User-Agent headers without each call site
-    having to remember the http.set_programme(...) call.
+    having to remember the http.set_programme(...) call. ``recon_path`` is a
+    relative path under the run directory.
     """
-    recon = ReconResult.model_validate_json(recon_result_json)
+    from tools.workspace import resolve_run_path
+
+    recon = ReconResult.model_validate_json(
+        resolve_run_path(recon_path).read_text(encoding="utf-8")
+    )
     http.set_programme(recon.programme.handle)
     return recon
 
@@ -118,7 +124,7 @@ def sqlmap_tool(endpoints_json: str) -> list[dict]:
 
 
 @tool("Cookie Security Check")
-def cookie_check_tool(recon_result_json: str) -> list[dict]:
+def cookie_check_tool(recon_path: str) -> list[dict]:
     """
     Inspect Set-Cookie attributes across the recon surface for: missing
     Secure on HTTPS cookies, missing HttpOnly on session-shaped cookies,
@@ -130,26 +136,26 @@ def cookie_check_tool(recon_result_json: str) -> list[dict]:
     Run this broadly - one request per distinct host, findings deduped per
     (host, cookie name, check class). Especially useful on login, dashboard,
     and authenticated API endpoints where Set-Cookie is most likely.
-    Pass the full serialised ReconResult. Returns raw findings as dicts.
+    Pass the path to the recon.json file in the run directory. Returns raw findings as dicts.
     """
-    recon = _recon_from_json(recon_result_json)
+    recon = _recon_from_path(recon_path)
     return [f.model_dump() for f in check_cookies(recon.endpoints)]
 
 
 @tool("CORS Misconfiguration Check")
-def cors_check_tool(recon_result_json: str) -> list[dict]:
+def cors_check_tool(recon_path: str) -> list[dict]:
     """
     Check all live endpoints for CORS misconfigurations: origin reflection,
     null origin acceptance, and overly permissive Access-Control-Allow-Origin headers.
     Relevant wherever the target exposes an API or serves authenticated content.
-    Pass the full serialised ReconResult. Returns raw findings as dicts.
+    Pass the path to the recon.json file in the run directory. Returns raw findings as dicts.
     """
-    recon = _recon_from_json(recon_result_json)
+    recon = _recon_from_path(recon_path)
     return [f.model_dump() for f in check_cors_misconfiguration(recon.endpoints)]
 
 
 @tool("CSRF Detection")
-def csrf_check_tool(recon_result_json: str) -> list[dict]:
+def csrf_check_tool(recon_path: str) -> list[dict]:
     """
     Detect CSRF vulnerabilities across HTML endpoints in the recon surface.
 
@@ -172,9 +178,9 @@ def csrf_check_tool(recon_result_json: str) -> list[dict]:
 
     Run broadly against all HTML-serving endpoints; especially relevant on
     login, registration, account management, and any state-changing form.
-    Pass the full serialised ReconResult. Returns raw findings as dicts.
+    Pass the path to the recon.json file in the run directory. Returns raw findings as dicts.
     """
-    recon = _recon_from_json(recon_result_json)
+    recon = _recon_from_path(recon_path)
     return [f.model_dump() for f in check_csrf(recon.endpoints)]
 
 
@@ -202,24 +208,24 @@ def ssrf_probe_tool(
 
 
 @tool("Header Injection Check")
-def header_injection_tool(recon_result_json: str) -> list[dict]:
+def header_injection_tool(recon_path: str) -> list[dict]:
     """
     Check for CRLF injection via X-Forwarded-For and similar headers.
     Relevant on all endpoints - run this broadly.
-    Pass the full serialised ReconResult. Returns raw findings as dicts.
+    Pass the path to the recon.json file in the run directory. Returns raw findings as dicts.
     """
-    recon = _recon_from_json(recon_result_json)
+    recon = _recon_from_path(recon_path)
     return [f.model_dump() for f in check_header_injection(recon.endpoints)]
 
 
 @tool("Host Header Attack Check")
-def host_header_tool(recon_result_json: str) -> list[dict]:
+def host_header_tool(recon_path: str) -> list[dict]:
     """
     Test for Host header reflection (cache poisoning, password-reset poisoning)
     and X-Original-URL / X-Rewrite-URL overrides that may bypass access controls.
-    Pass the full serialised ReconResult. Returns raw findings as dicts.
+    Pass the path to the recon.json file in the run directory. Returns raw findings as dicts.
     """
-    recon = _recon_from_json(recon_result_json)
+    recon = _recon_from_path(recon_path)
     return [f.model_dump() for f in check_host_headers(recon.endpoints)]
 
 
@@ -260,14 +266,14 @@ def header_xss_tool(
 
 
 @tool("JS Source Map Scan")
-def source_maps_tool(recon_result_json: str) -> list[dict]:
+def source_maps_tool(recon_path: str) -> list[dict]:
     """
     Discover exposed .js.map source map files and scan reconstructed source for
     secrets and internal paths. Use when the recon surface includes HTML pages
     that load JavaScript bundles (React, Angular, Vue, etc.).
-    Pass the full serialised ReconResult. Returns raw findings as dicts.
+    Pass the path to the recon.json file in the run directory. Returns raw findings as dicts.
     """
-    recon = _recon_from_json(recon_result_json)
+    recon = _recon_from_path(recon_path)
     return [f.model_dump() for f in check_js_source_maps(recon.endpoints)]
 
 
@@ -413,13 +419,13 @@ def xss_probe_tool(endpoints_json: str) -> list[dict]:
 
 
 @tool("Subresource Integrity Check")
-def sri_check_tool(recon_result_json: str) -> list[dict]:
+def sri_check_tool(recon_path: str) -> list[dict]:
     """
     Scan HTML pages for cross-origin <script> and <link> tags missing an
     integrity= attribute. Run broadly against all HTML-serving endpoints.
-    Pass the full serialised ReconResult. Returns raw findings as dicts.
+    Pass the path to the recon.json file in the run directory. Returns raw findings as dicts.
     """
-    recon = _recon_from_json(recon_result_json)
+    recon = _recon_from_path(recon_path)
     return [f.model_dump() for f in check_sri(recon.endpoints)]
 
 
@@ -441,38 +447,38 @@ def error_disclosure_tool(endpoints_json: str) -> list[dict]:
 
 
 @tool("S3 Bucket Check")
-def s3_check_tool(recon_result_json: str) -> list[dict]:
+def s3_check_tool(recon_path: str) -> list[dict]:
     """
     Check for publicly accessible or listable AWS S3 buckets derived from the
     programme handle and any S3 subdomains in the recon surface.
     Use when the target is known to use AWS, or when S3 subdomains appear in recon.
-    Pass the full serialised ReconResult. Returns raw findings as dicts.
+    Pass the path to the recon.json file in the run directory. Returns raw findings as dicts.
     """
-    recon = _recon_from_json(recon_result_json)
+    recon = _recon_from_path(recon_path)
     return [f.model_dump() for f in check_s3_buckets(recon)]
 
 
 @tool("Azure Blob Storage Check")
-def azure_storage_check_tool(recon_result_json: str) -> list[dict]:
+def azure_storage_check_tool(recon_path: str) -> list[dict]:
     """
     Check for publicly accessible Azure Blob Storage containers and exposed SAS
     tokens in endpoint URLs. Use when the target is known to use Azure, or when
     *.blob.core.windows.net subdomains appear in recon.
-    Pass the full serialised ReconResult. Returns raw findings as dicts.
+    Pass the path to the recon.json file in the run directory. Returns raw findings as dicts.
     """
-    recon = _recon_from_json(recon_result_json)
+    recon = _recon_from_path(recon_path)
     return [f.model_dump() for f in check_azure_storage(recon)]
 
 
 @tool("Unauthenticated Elasticsearch Check")
-def elasticsearch_tool(recon_result_json: str) -> list[dict]:
+def elasticsearch_tool(recon_path: str) -> list[dict]:
     """
     Check for an unauthenticated Elasticsearch instance on port 9200.
     Probes /_cluster/health - a 200 response with cluster_name confirms no auth.
     Use when open_ports shows 9200, or when technologies mention Elasticsearch.
-    Pass the full serialised ReconResult. Returns raw findings as dicts.
+    Pass the path to the recon.json file in the run directory. Returns raw findings as dicts.
     """
-    recon = _recon_from_json(recon_result_json)
+    recon = _recon_from_path(recon_path)
     findings = []
     for host, ports in recon.open_ports.items():
         if 9200 in ports:
@@ -481,14 +487,14 @@ def elasticsearch_tool(recon_result_json: str) -> list[dict]:
 
 
 @tool("Unauthenticated CouchDB Check")
-def couchdb_tool(recon_result_json: str) -> list[dict]:
+def couchdb_tool(recon_path: str) -> list[dict]:
     """
     Check for an unauthenticated CouchDB instance on port 5984.
     Probes /_all_dbs - a 200 response listing databases confirms no auth.
     Use when open_ports shows 5984.
-    Pass the full serialised ReconResult. Returns raw findings as dicts.
+    Pass the path to the recon.json file in the run directory. Returns raw findings as dicts.
     """
-    recon = _recon_from_json(recon_result_json)
+    recon = _recon_from_path(recon_path)
     findings = []
     for host, ports in recon.open_ports.items():
         if 5984 in ports:
@@ -497,14 +503,14 @@ def couchdb_tool(recon_result_json: str) -> list[dict]:
 
 
 @tool("Unauthenticated Redis Check")
-def redis_tool(recon_result_json: str) -> list[dict]:
+def redis_tool(recon_path: str) -> list[dict]:
     """
     Check for an unauthenticated Redis instance on port 6379 via a PING command.
     A +PONG response without sending AUTH confirms no password is set.
     Use when open_ports shows 6379.
-    Pass the full serialised ReconResult. Returns raw findings as dicts.
+    Pass the path to the recon.json file in the run directory. Returns raw findings as dicts.
     """
-    recon = _recon_from_json(recon_result_json)
+    recon = _recon_from_path(recon_path)
     findings = []
     for host, ports in recon.open_ports.items():
         if 6379 in ports:
@@ -513,15 +519,15 @@ def redis_tool(recon_result_json: str) -> list[dict]:
 
 
 @tool("Unauthenticated MongoDB Check")
-def mongodb_tool(recon_result_json: str) -> list[dict]:
+def mongodb_tool(recon_path: str) -> list[dict]:
     """
     Check for an unauthenticated MongoDB instance on port 27017.
     Sends a minimal isMaster wire-protocol query - a valid response without
     error confirms the instance accepts connections without credentials.
     Use when open_ports shows 27017.
-    Pass the full serialised ReconResult. Returns raw findings as dicts.
+    Pass the path to the recon.json file in the run directory. Returns raw findings as dicts.
     """
-    recon = _recon_from_json(recon_result_json)
+    recon = _recon_from_path(recon_path)
     findings = []
     for host, ports in recon.open_ports.items():
         if 27017 in ports:
@@ -530,15 +536,15 @@ def mongodb_tool(recon_result_json: str) -> list[dict]:
 
 
 @tool("Exposed PostgreSQL Check")
-def postgresql_tool(recon_result_json: str) -> list[dict]:
+def postgresql_tool(recon_path: str) -> list[dict]:
     """
     Check for PostgreSQL on port 5432. Returns CRITICAL if trust authentication
     allows connection without a password; MEDIUM if the port is exposed but
     credentials are required (unnecessary internet exposure).
     Use when open_ports shows 5432.
-    Pass the full serialised ReconResult. Returns raw findings as dicts.
+    Pass the path to the recon.json file in the run directory. Returns raw findings as dicts.
     """
-    recon = _recon_from_json(recon_result_json)
+    recon = _recon_from_path(recon_path)
     findings = []
     for host, ports in recon.open_ports.items():
         if 5432 in ports:
@@ -547,15 +553,15 @@ def postgresql_tool(recon_result_json: str) -> list[dict]:
 
 
 @tool("Exposed MySQL/MariaDB Check")
-def mysql_tool(recon_result_json: str) -> list[dict]:
+def mysql_tool(recon_path: str) -> list[dict]:
     """
     Check for MySQL or MariaDB on port 3306. Returns MEDIUM if the port is
     reachable and the server responds with a valid handshake (unnecessary
     internet exposure; verify anonymous login is disabled).
     Use when open_ports shows 3306.
-    Pass the full serialised ReconResult. Returns raw findings as dicts.
+    Pass the path to the recon.json file in the run directory. Returns raw findings as dicts.
     """
-    recon = _recon_from_json(recon_result_json)
+    recon = _recon_from_path(recon_path)
     findings = []
     for host, ports in recon.open_ports.items():
         if 3306 in ports:
@@ -594,101 +600,101 @@ def admin_panels_tool(endpoints_json: str) -> list[dict]:
 
 
 @tool("cPanel/WHM Check")
-def cpanel_tool(recon_result_json: str) -> list[dict]:
+def cpanel_tool(recon_path: str) -> list[dict]:
     """
     Check for an exposed cPanel hosting control panel (ports 2082/2083) and
     WHM (WebHost Manager) panel (ports 2086/2087) on all discovered hostnames.
     Use when open_ports shows 2082, 2083, 2086, or 2087, or when the target
     appears to be a shared/managed hosting environment.
-    Pass the full serialised ReconResult. Returns raw findings as dicts.
+    Pass the path to the recon.json file in the run directory. Returns raw findings as dicts.
     """
-    recon = _recon_from_json(recon_result_json)
+    recon = _recon_from_path(recon_path)
     return [f.model_dump() for f in check_cpanel(recon)]
 
 
 @tool("Plesk Check")
-def plesk_tool(recon_result_json: str) -> list[dict]:
+def plesk_tool(recon_path: str) -> list[dict]:
     """
     Check for an exposed Plesk web hosting control panel on ports 8880 (HTTP)
     and 8443 (HTTPS). Use when open_ports shows 8880 or 8443, or when the
     target is a managed hosting or VPS provider.
-    Pass the full serialised ReconResult. Returns raw findings as dicts.
+    Pass the path to the recon.json file in the run directory. Returns raw findings as dicts.
     """
-    recon = _recon_from_json(recon_result_json)
+    recon = _recon_from_path(recon_path)
     return [f.model_dump() for f in check_plesk(recon)]
 
 
 @tool("DirectAdmin Check")
-def directadmin_tool(recon_result_json: str) -> list[dict]:
+def directadmin_tool(recon_path: str) -> list[dict]:
     """
     Check for an exposed DirectAdmin hosting control panel on port 2222.
     Use when open_ports shows 2222 on a target that appears to be shared hosting.
-    Pass the full serialised ReconResult. Returns raw findings as dicts.
+    Pass the path to the recon.json file in the run directory. Returns raw findings as dicts.
     """
-    recon = _recon_from_json(recon_result_json)
+    recon = _recon_from_path(recon_path)
     return [f.model_dump() for f in check_directadmin(recon)]
 
 
 @tool("Webmin Check")
-def webmin_tool(recon_result_json: str) -> list[dict]:
+def webmin_tool(recon_path: str) -> list[dict]:
     """
     Check for an exposed Webmin Linux server administration panel on port 10000.
     Use when open_ports shows 10000, or when the target is a self-hosted Linux server.
-    Pass the full serialised ReconResult. Returns raw findings as dicts.
+    Pass the path to the recon.json file in the run directory. Returns raw findings as dicts.
     """
-    recon = _recon_from_json(recon_result_json)
+    recon = _recon_from_path(recon_path)
     return [f.model_dump() for f in check_webmin(recon)]
 
 
 @tool("Grafana Check")
-def grafana_tool(recon_result_json: str) -> list[dict]:
+def grafana_tool(recon_path: str) -> list[dict]:
     """
     Check for an exposed Grafana metrics dashboard on port 3000 and via /grafana
     reverse-proxy path on existing endpoints.
     Use when open_ports shows 3000, or when technologies mention Grafana, or when
     the target is a DevOps/SRE-heavy organisation.
-    Pass the full serialised ReconResult. Returns raw findings as dicts.
+    Pass the path to the recon.json file in the run directory. Returns raw findings as dicts.
     """
-    recon = _recon_from_json(recon_result_json)
+    recon = _recon_from_path(recon_path)
     return [f.model_dump() for f in check_grafana(recon)]
 
 
 @tool("Kibana Check")
-def kibana_tool(recon_result_json: str) -> list[dict]:
+def kibana_tool(recon_path: str) -> list[dict]:
     """
     Check for an exposed Kibana log/data visualisation dashboard on port 5601 and
     via /kibana reverse-proxy path on existing endpoints.
     Use when open_ports shows 5601 or 9200 (Elasticsearch stack), or when
     technologies mention Kibana or Elasticsearch.
-    Pass the full serialised ReconResult. Returns raw findings as dicts.
+    Pass the path to the recon.json file in the run directory. Returns raw findings as dicts.
     """
-    recon = _recon_from_json(recon_result_json)
+    recon = _recon_from_path(recon_path)
     return [f.model_dump() for f in check_kibana(recon)]
 
 
 @tool("Portainer Check")
-def portainer_tool(recon_result_json: str) -> list[dict]:
+def portainer_tool(recon_path: str) -> list[dict]:
     """
     Check for an exposed Portainer Docker management UI on port 9000 and via
     /portainer reverse-proxy path on existing endpoints.
     Use when open_ports shows 9000, or when technologies mention Docker or
     containerised infrastructure.
-    Pass the full serialised ReconResult. Returns raw findings as dicts.
+    Pass the path to the recon.json file in the run directory. Returns raw findings as dicts.
     """
-    recon = _recon_from_json(recon_result_json)
+    recon = _recon_from_path(recon_path)
     return [f.model_dump() for f in check_portainer(recon)]
 
 
 @tool("Consul/Vault Check")
-def consul_vault_tool(recon_result_json: str) -> list[dict]:
+def consul_vault_tool(recon_path: str) -> list[dict]:
     """
     Check for an exposed HashiCorp Consul UI (port 8500) or Vault UI (port 8200),
     and via /consul/ui and /vault/ui reverse-proxy paths on existing endpoints.
     Use when open_ports shows 8500 or 8200, or when the target is a cloud-native
     or microservices environment.
-    Pass the full serialised ReconResult. Returns raw findings as dicts.
+    Pass the path to the recon.json file in the run directory. Returns raw findings as dicts.
     """
-    recon = _recon_from_json(recon_result_json)
+    recon = _recon_from_path(recon_path)
     return [f.model_dump() for f in check_consul_vault(recon)]
 
 
@@ -964,6 +970,76 @@ def jwt_check_tool(
     return [f.model_dump() for f in check_jwt(token, endpoint, attacks)]
 
 
+@tool("Recon Subdomains")
+def recon_subdomains_tool(recon_path: str, host_filter: str | None = None) -> list[str]:
+    """
+    Return the in-scope subdomains discovered during recon. Pass the recon.json
+    path you received from the OSINT Analyst. ``host_filter`` is a
+    case-insensitive substring (e.g. "api" returns every subdomain containing
+    "api"). Use this instead of reading recon.json directly when you only need
+    the subdomain list.
+    """
+    return recon_subdomains(recon_path, host_filter=host_filter)
+
+
+@tool("Recon Endpoints")
+def recon_endpoints_tool(
+    recon_path: str,
+    status: int | None = None,
+    tech: str | None = None,
+    host_contains: str | None = None,
+    offset: int = 0,
+    limit: int = 50,
+) -> EndpointPage:
+    """
+    Query the endpoints discovered during recon without loading the whole
+    ReconResult. Filters are conjunctive: ``status=200`` and ``tech="wordpress"``
+    returns endpoints satisfying both. ``host_contains`` matches the URL
+    case-insensitively. Returns an EndpointPage with total, offset, returned,
+    and a typed endpoints list - paginate by re-calling with a larger offset.
+
+    Use this to build the endpoints_json argument for the narrow probe tools
+    (sqlmap_tool, nuclei_scan_tool, etc.): serialise page.endpoints to JSON
+    and pass it through.
+    """
+    return recon_endpoints(
+        recon_path,
+        status=status,
+        tech=tech,
+        host_contains=host_contains,
+        offset=offset,
+        limit=limit,
+    )
+
+
+@tool("Recon Open Ports")
+def recon_open_ports_tool(recon_path: str, host: str | None = None) -> dict:
+    """
+    Return the open-port map per host from recon.json. Passing a ``host``
+    restricts the result to that single host. Use this to decide which of the
+    port-specific probes to run (Elasticsearch on 9200, Redis on 6379, etc.)
+    without loading the whole ReconResult.
+    """
+    return recon_open_ports(recon_path, host=host)
+
+
+@tool("Save Findings")
+def save_findings_tool(findings_json: str) -> str:
+    """
+    Write the collected raw findings to findings.json in the run directory.
+    Call this once after all probe tools have run, passing a JSON array of
+    finding dicts. Returns the relative filename for downstream agents.
+    """
+    import runtime
+
+    out_path = runtime.run_dir() / "findings.json"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    # Validate the payload parses as JSON before writing.
+    json.loads(findings_json)
+    out_path.write_text(findings_json, encoding="utf-8")
+    return "findings.json"
+
+
 MEMBER = SquadMember(
     slug="penetration_tester",
     dir=Path(__file__).parent,
@@ -1011,5 +1087,11 @@ MEMBER = SquadMember(
         prototype_pollution_tool,
         jwt_check_tool,
         idor_probe_tool,
+        recon_subdomains_tool,
+        recon_endpoints_tool,
+        recon_open_ports_tool,
+        save_findings_tool,
+        read_run_filelist_tool,
+        read_run_file_tool,
     ],
 )

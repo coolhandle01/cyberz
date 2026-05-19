@@ -6,7 +6,7 @@
 #
 # Tools installed:
 #   Go (if absent or < 1.22): official tarball from go.dev
-#   go install: subfinder, httpx, nuclei, ffuf, waybackurls
+#   go install: subfinder, httpx, nuclei, ffuf, waybackurls, dnsx
 #   apt         : nmap, sqlmap
 #   git clone   : testssl.sh -> /usr/local/bin/testssl.sh
 
@@ -90,6 +90,7 @@ declare -A GO_TOOLS=(
   [nuclei]="github.com/projectdiscovery/nuclei/v3/cmd/nuclei"
   [ffuf]="github.com/ffuf/ffuf/v2@latest"
   [waybackurls]="github.com/tomnomnom/waybackurls"
+  [dnsx]="github.com/projectdiscovery/dnsx/cmd/dnsx"
 )
 
 for tool in "${!GO_TOOLS[@]}"; do
@@ -155,7 +156,7 @@ echo "==> PATH is updated. Run 'source ~/.bashrc' (or open a new terminal) to us
 
 echo ""
 echo "==> Tool check:"
-for tool in subfinder httpx nmap nuclei ffuf waybackurls sqlmap testssl.sh; do
+for tool in subfinder httpx dnsx nmap nuclei ffuf waybackurls sqlmap testssl.sh; do
   if need "${tool}"; then
     echo "  [ok]      ${tool} -> $(command -v ${tool})"
   else

@@ -42,7 +42,7 @@ Examples:
 
 ## One issue, one branch, one PR
 
-For each GitHub issue worked on, present a single branch with a single PR for review. Do not bundle multiple issues into one PR even if they touch adjacent files - reviewer attention is the bottleneck, not branch count. If mid-task you discover unrelated work that needs doing, capture it as a `# FIXME` or `# TODO` (see `.claude/skills/cybersquad-change-discipline/SKILL.md`) or as a new issue, and finish the original task first.
+For each GitHub issue worked on, present a single branch with a single PR for review. Do not bundle multiple issues into one PR even if they touch adjacent files - reviewer attention is the bottleneck, not branch count. If mid-task you discover unrelated work that needs doing, capture it as a `# FIXME` or `# TODO` (see the FIXME/TODO grammar in `CONTRIBUTING.md`) or as a new issue, and finish the original task first.
 
 ## Force-push policy
 
