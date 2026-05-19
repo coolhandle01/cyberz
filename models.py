@@ -96,6 +96,66 @@ class Endpoint(BaseModel):
     parameters: list[str] = Field(default_factory=list)
 
 
+class EndpointPage(BaseModel):
+    """Paginated slice of Endpoint results from a recon query."""
+
+    total: int
+    offset: int
+    returned: int
+    endpoints: list[Endpoint]
+
+
+class HostRole(StrEnum):
+    """The role a host plays in the programme's attack surface.
+
+    Drives priority decisions downstream: an ``ADMIN`` host with a known
+    framework is a higher-value pentest target than a ``CDN`` host that
+    serves static assets.
+    """
+
+    ADMIN = "admin"  # admin / control-plane UIs
+    API = "api"  # REST / GraphQL / SOAP endpoints
+    AUTH = "auth"  # SSO, OAuth, login, password reset
+    APP = "app"  # main user-facing application
+    CDN = "cdn"  # static asset delivery, edge caches
+    STATIC = "static"  # purely static content (marketing, blog, docs)
+    MAIL = "mail"  # SMTP / IMAP / MX hosts
+    INFRA = "infra"  # name servers, monitoring, IaaS
+    DEV = "dev"  # dev / staging / beta surfaces
+    UNKNOWN = "unknown"
+
+
+class HostPriority(StrEnum):
+    """The OSINT Analyst's curation signal for downstream agents.
+
+    The Penetration Tester biases probe budget toward ``HIGH`` hosts; the
+    Vulnerability Researcher prioritises CVE / report-history research for
+    them. ``SKIP`` is a hard signal not to probe (third-party-managed, known
+    decoy, etc.)."""
+
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+    SKIP = "skip"
+
+
+class HostInsight(BaseModel):
+    """One OSINT Analyst-authored annotation for a single host.
+
+    The sweep produces ``subdomains`` / ``endpoints`` / ``open_ports`` /
+    ``technologies`` as raw inventory; ``HostInsight`` is the agent's
+    curation layer that tells downstream agents WHERE to look first and
+    WHY.
+    """
+
+    hostname: str
+    role: HostRole
+    priority: HostPriority
+    notes: str  # agent-authored, >= 30 chars
+    detected_tech: list[str] = Field(default_factory=list)  # ideally with versions
+    annotated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
 class ReconResult(BaseModel):
     """Everything the OSINT Analyst found about a programme's attack surface."""
 
@@ -111,6 +171,9 @@ class ReconResult(BaseModel):
     # hostname -> ordered list of public hop IPs from traceroute.
     # Useful for identifying origin IPs behind CDNs/WAFs (CDN bypass vector).
     network_hops: dict[str, list[str]] = Field(default_factory=dict)
+    # Per-host curation the OSINT Analyst authors via Annotate Host. Empty on
+    # the OA's internal sweep.json; populated on the final recon.json.
+    host_insights: list[HostInsight] = Field(default_factory=list)
     completed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 

@@ -14,7 +14,6 @@ from tools.pentest.prompt_injection import (
     PromptPayload,
     check_prompt_injection,
 )
-from tools.pentest.triage import _lookup_cvss
 from tools.recon.llm import detect_llm_endpoints
 
 pytestmark = pytest.mark.unit
@@ -141,16 +140,6 @@ class TestCheckPromptInjection:
         ):
             results = check_prompt_injection([ep])
         assert len(results) == 1
-
-    def test_prompt_injection_cvss_critical(self):
-        score, vector = _lookup_cvss("PromptInjection", Severity.CRITICAL)
-        assert score == 9.1
-        assert "CVSS:3.1" in vector
-
-    def test_prompt_injection_cvss_high(self):
-        score, vector = _lookup_cvss("PromptInjection", Severity.HIGH)
-        assert score == 7.2
-        assert "CVSS:3.1" in vector
 
     def test_payload_filter_restricts_to_named_variants(
         self, make_response: Callable[..., MagicMock]

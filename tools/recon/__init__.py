@@ -12,6 +12,7 @@ from urllib.parse import urlparse
 from models import Endpoint, Programme, ReconResult, ScopeType
 from tools.recon.cert_transparency import cert_transparency
 from tools.recon.dirfuzz import discover_paths
+from tools.recon.dnsx import TakeoverCandidate, detect_takeover_candidates
 from tools.recon.llm import detect_llm_endpoints
 from tools.recon.nmap import port_scan
 from tools.recon.probe import probe_endpoints
@@ -74,10 +75,12 @@ _ACTIVE_RECON_TYPES: frozenset[ScopeType] = frozenset(
 __all__ = [
     "_ACTIVE_RECON_TYPES",
     "_CODE_HOSTS",
+    "TakeoverCandidate",
     "cert_transparency",
     "check_dns_email_security",
     "check_tls",
     "detect_llm_endpoints",
+    "detect_takeover_candidates",
     "discover_paths",
     "enumerate_subdomains",
     "extract_domain",

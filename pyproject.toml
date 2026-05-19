@@ -24,6 +24,7 @@ dev = [
     "pytest>=8.2",
     "pytest-cov>=5.0",
     "pytest-mock>=3.14",
+    "pytest-bdd>=7.2",
     "respx>=0.21",          # mock httpx/requests at transport level
 
     # Linting & formatting
@@ -42,7 +43,7 @@ bounty-squad = "main:main"
 
 [tool.setuptools]
 packages = ["tools"]
-py-modules = ["config", "models", "tasks", "crew", "main"]
+py-modules = ["config", "models", "tasks", "crew", "main", "runtime"]
 
 # -- pytest --------------------------------------------------------------------
 
@@ -56,7 +57,9 @@ addopts = [
 markers = [
     "unit: fast, no I/O, no external calls",
     "integration: hits real APIs or binaries (skipped in CI by default)",
+    "bdd: behaviour scenarios exercising agent reasoning against a real LLM (slow, costs tokens)",
 ]
+bdd_features_base_dir = "tests/features"
 
 # -- coverage ------------------------------------------------------------------
 

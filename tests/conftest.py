@@ -28,15 +28,35 @@ from models import (  # noqa: E402
 )
 
 
+# Probe tools call tools._helpers.adaptive_sleep between requests for rate-limit
+# politeness. Inside _helpers, adaptive_sleep calls time.sleep(delay) for real,
+# which dominates unit-test wall-clock time (roughly 40% of the suite). Patch it
+# once here for every test. Tests that need to observe sleep behaviour
+# (TestAdaptiveSleep in test_scan_mode.py) re-patch time.sleep locally and the
+# assertions still fire - the autouse lambda is below their inner patch.
+@pytest.fixture(autouse=True)
+def _no_real_sleep(monkeypatch):
+    monkeypatch.setattr("time.sleep", lambda *_args, **_kwargs: None)
+
+
 # Domain fixtures
 #
 # Use these instead of ad-hoc hostnames so test intent is readable at a glance.
-# victim_url  - the scanning target (an app we are testing)
-# callback_url - OOB receiver (a server we control, used for blind injection);
-#                placeholder until #77 lands real interactsh infrastructure.
+# victim_url    - the scanning target (an app we are testing); in-scope per
+#                 the ``programme`` fixture's ``*.example.com`` wildcard rule.
+# bystander_url - an out-of-scope host on a different TLD. Use it whenever a
+#                 test exercises the scope guard - the name makes the intent
+#                 ("bystander, hands off") obvious at the call site.
+# callback_url  - OOB receiver (a server we control, used for blind injection);
+#                 placeholder until #77 lands real interactsh infrastructure.
 @pytest.fixture()
 def victim_url() -> str:
     return "https://victim.example.com"
+
+
+@pytest.fixture()
+def bystander_url() -> str:
+    return "https://bystander.example.org"
 
 
 @pytest.fixture()
