@@ -66,6 +66,8 @@ not score):
     filtered by browse, but check the hydrated programme as well in
     case the server-side filter behaved unexpectedly)
   - accepts_new_reports is false (closed programme)
+  - triage_active is false (programme is not actively triaging; a
+    report will sit untouched)
   - policy_text contains any prohibition on automated tools, scanners,
     fuzzing, brute force, or rate testing
   - Access authorisation fails per Step 0
@@ -88,8 +90,7 @@ Step 5 - Score remaining candidates on:
   4. Response efficiency and speed (weight: 20%)
      response_efficiency_pct, avg_time_to_first_response_days, and
      avg_time_to_bounty_days combined. A programme that ignores reports
-     for months scores poorly here. triage_active=true is a strong
-     positive signal.
+     for months scores poorly here.
 
 Select the single highest-scoring programme that passed all filters.
 Call save_programme_tool with the chosen handle to record the selection
