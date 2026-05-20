@@ -11,7 +11,20 @@ A JSON object with the following fields:
   - triage_active: whether the programme currently has active triage (bool or null)
   - in_scope: list of asset objects, each with asset_identifier, asset_type,
     eligible_for_bounty, and max_severity (null means uncapped)
-  - selection_rationale: 2-3 sentences explaining why this programme scored
-    highest over the alternatives considered
+  - state: the programme's H1 access-state attribute, copied verbatim
+    from the input (e.g. "public_mode" or "private_mode", or null if H1
+    did not supply one). Recorded so the downstream artefact carries the
+    same signal the PM reasoned about.
+  - authorisation_basis: 1-2 sentences confirming why the squad is
+    authorised to scan this programme. State the access signal (returned
+    by find_programmes_tool, i.e. accessible to this hacker account),
+    name the value of state and how you handled it (public -> proceed;
+    non-public -> name the corroborating evidence of admission), and
+    confirm policy_text contains no contradicting private/invite-only
+    restriction.
+  - selection_rationale: 3-5 sentences explaining (a) the catalog survey
+    you ran (filters passed to browse_programmes_tool, total previews
+    seen, which handles you shortlisted and hydrated) and (b) why the
+    selected programme scored highest over the alternatives considered
   - run_dir: the absolute path to the run folder created by
     save_programme_tool (downstream agents write their outputs there)

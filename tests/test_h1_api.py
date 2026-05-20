@@ -15,11 +15,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
-from models import (
-    ScopeType,
-    Severity,
-    SubmissionStatus,
-)
+from models import Severity
+from models.h1 import ScopeType, SubmissionStatus
 
 pytestmark = pytest.mark.unit
 
@@ -123,6 +120,21 @@ class TestParseProgramme:
     def test_accepts_new_reports_defaults_true_when_missing(self, h1_client):
         prog = h1_client.parse_programme(self._raw_programme(), self._raw_scope())
         assert prog.accepts_new_reports is True
+
+    def test_state_extracted_verbatim(self, h1_client):
+        # The PM agent reads state directly to reason about access; the value
+        # is surfaced raw so prompt updates do not have to chase a Python-side
+        # enum of accepted values. "private_mode" matches the value already
+        # asserted in TestGetProgrammeStats - the only non-public state value
+        # grounded in code; other invite-only states await a captured response.
+        raw = self._raw_programme()
+        raw["attributes"]["state"] = "private_mode"
+        prog = h1_client.parse_programme(raw, self._raw_scope())
+        assert prog.state == "private_mode"
+
+    def test_state_none_when_missing(self, h1_client):
+        prog = h1_client.parse_programme(self._raw_programme(), self._raw_scope())
+        assert prog.state is None
 
     def test_parses_response_efficiency_pct(self, h1_client):
         raw = self._raw_programme()
@@ -304,78 +316,145 @@ class TestListProgrammes:
         assert params == {"include": "bounty_table,structured_scopes"}
 
 
-class TestFindProgrammes:
-    """find_programmes batches list + detail and filters early."""
+class TestBrowseProgrammes:
+    """browse_programmes returns lightweight previews from the list endpoint
+    only - no per-programme detail fetch."""
 
-    def _list_resp(self, programmes):
+    def _list_resp(self, programmes, next_link: str | None = None):
         return {
             "data": [
                 {
                     "id": handle,
-                    "attributes": {
-                        "handle": handle,
-                        "offers_bounties": offers,
-                        "submission_state": state,
-                    },
+                    "attributes": attrs,
                 }
-                for handle, offers, state in programmes
+                for handle, attrs in programmes
+            ],
+            "links": {"next": next_link} if next_link else {},
+        }
+
+    def test_returns_one_preview_per_programme_no_detail_fetch(self, h1_client):
+        list_payload = self._list_resp(
+            [
+                ("acme", {"handle": "acme", "name": "Acme", "offers_bounties": True}),
+                ("beta", {"handle": "beta", "name": "Beta", "offers_bounties": False}),
+            ]
+        )
+        with patch.object(h1_client, "_get", side_effect=[list_payload]) as m:
+            previews = h1_client.browse_programmes()
+        assert [p.handle for p in previews] == ["acme", "beta"]
+        assert previews[0].offers_bounties is True
+        assert previews[1].offers_bounties is False
+        # Critical: exactly one HTTP call - no detail hydration.
+        assert m.call_count == 1
+
+    def test_preserves_state_and_submission_state_attributes(self, h1_client):
+        list_payload = self._list_resp(
+            [
+                (
+                    "acme",
+                    {
+                        "handle": "acme",
+                        "name": "Acme",
+                        "state": "public_mode",
+                        "submission_state": "open",
+                        "bookmarked": True,
+                    },
+                ),
+            ]
+        )
+        with patch.object(h1_client, "_get", return_value=list_payload):
+            previews = h1_client.browse_programmes()
+        assert previews[0].state == "public_mode"
+        assert previews[0].submission_state == "open"
+        assert previews[0].bookmarked is True
+
+    def test_paginates_until_limit(self, h1_client):
+        # Two pages of 3, limit 5 -> 5 results.
+        page1 = self._list_resp(
+            [(f"p{i}", {"handle": f"p{i}"}) for i in range(3)],
+            next_link="/hackers/programs?page=2",
+        )
+        page2 = self._list_resp([(f"p{i}", {"handle": f"p{i}"}) for i in range(3, 6)])
+        with patch.object(h1_client, "_get", side_effect=[page1, page2]):
+            previews = h1_client.browse_programmes(limit=5)
+        assert [p.handle for p in previews] == ["p0", "p1", "p2", "p3", "p4"]
+
+    def test_stops_at_limit_within_first_page(self, h1_client):
+        page1 = self._list_resp(
+            [(f"p{i}", {"handle": f"p{i}"}) for i in range(10)],
+            next_link="/hackers/programs?page=2",
+        )
+        # limit=3 means we trim the first page; no need to fetch page 2.
+        with patch.object(h1_client, "_get", side_effect=[page1]) as m:
+            previews = h1_client.browse_programmes(limit=3)
+        assert [p.handle for p in previews] == ["p0", "p1", "p2"]
+        assert m.call_count == 1
+
+    def test_filter_kwargs_become_filter_bracket_params(self, h1_client):
+        list_payload = self._list_resp([])
+        with patch.object(h1_client, "_get", return_value=list_payload) as m:
+            h1_client.browse_programmes(
+                offers_bounties=True,
+                bookmarked=False,
+                submission_state="open",
+                asset_type="URL",
+                sort="-launched_at",
+            )
+        params = m.call_args[0][1]
+        # H1 filter params follow JSON:API bracket notation.
+        assert params["filter[offers_bounties]"] == "true"
+        assert params["filter[bookmarked]"] == "false"
+        assert params["filter[submission_state]"] == "open"
+        assert params["filter[asset_type]"] == "URL"
+        assert params["sort"] == "-launched_at"
+
+    def test_omits_filter_param_when_arg_is_none(self, h1_client):
+        list_payload = self._list_resp([])
+        with patch.object(h1_client, "_get", return_value=list_payload) as m:
+            h1_client.browse_programmes(offers_bounties=True)
+        params = m.call_args[0][1]
+        assert "filter[offers_bounties]" in params
+        assert "filter[bookmarked]" not in params
+        assert "filter[asset_type]" not in params
+        assert "filter[submission_state]" not in params
+        assert "sort" not in params
+
+    def test_skips_records_with_missing_handle(self, h1_client):
+        # H1 list shapes that have no handle attribute and no id field are
+        # unusable as previews - the PM needs a handle to hydrate. Drop them.
+        list_payload = {
+            "data": [
+                {"id": "acme", "attributes": {"handle": "acme"}},
+                {"attributes": {}},  # no id, no handle
             ],
             "links": {},
         }
+        with patch.object(h1_client, "_get", return_value=list_payload):
+            previews = h1_client.browse_programmes()
+        assert [p.handle for p in previews] == ["acme"]
 
-    def _detail_resp(self, handle):
-        return {
-            "data": {
-                "attributes": {
-                    "handle": handle,
-                    "name": handle.upper(),
-                    "policy": "We allow automated scanning.",
-                    "bounty_table": {"data": []},
-                }
+
+class TestHydrateProgramme:
+    """hydrate_programme fetches one full Programme from the detail endpoint."""
+
+    def _detail_resp(self, handle, state: str | None = "public_mode"):
+        attributes = {
+            "handle": handle,
+            "name": handle.upper(),
+            "policy": "Automated scanning permitted.",
+            "bounty_table": {
+                "data": [{"attributes": {"label": "critical", "maximum_amount": 5000}}]
             },
-            "included": [],
         }
-
-    def test_returns_one_programme_per_handle(self, h1_client):
-        list_payload = self._list_resp([("acme", True, "open"), ("beta", True, "open")])
-        responses = [list_payload, self._detail_resp("acme"), self._detail_resp("beta")]
-        with patch.object(h1_client, "_get", side_effect=responses):
-            programmes = h1_client.find_programmes()
-        assert [p.handle for p in programmes] == ["acme", "beta"]
-
-    def test_filters_out_vdp_when_bounty_only(self, h1_client):
-        list_payload = self._list_resp([("acme", True, "open"), ("vdp", False, "open")])
-        # Only acme should trigger a detail fetch
-        responses = [list_payload, self._detail_resp("acme")]
-        with patch.object(h1_client, "_get", side_effect=responses) as m:
-            programmes = h1_client.find_programmes(bounty_only=True)
-        assert [p.handle for p in programmes] == ["acme"]
-        # 1 list call + 1 detail call = 2 total
-        assert m.call_count == 2
-
-    def test_filters_out_closed_when_open_only(self, h1_client):
-        list_payload = self._list_resp([("acme", True, "open"), ("closed", True, "disabled")])
-        responses = [list_payload, self._detail_resp("acme")]
-        with patch.object(h1_client, "_get", side_effect=responses) as m:
-            programmes = h1_client.find_programmes(open_only=True)
-        assert [p.handle for p in programmes] == ["acme"]
-        assert m.call_count == 2
-
-    def test_includes_structured_scope_from_detail(self, h1_client):
-        detail = {
-            "data": {
-                "attributes": {
-                    "handle": "acme",
-                    "name": "Acme",
-                    "policy": "Allowed.",
-                    "bounty_table": {"data": []},
-                }
-            },
+        if state is not None:
+            attributes["state"] = state
+        return {
+            "data": {"attributes": attributes},
             "included": [
                 {
                     "type": "structured-scope",
                     "attributes": {
-                        "asset_identifier": "*.acme.com",
+                        "asset_identifier": f"*.{handle}.com",
                         "asset_type": "WILDCARD",
                         "eligible_for_bounty": True,
                         "eligible_for_submission": True,
@@ -383,10 +462,39 @@ class TestFindProgrammes:
                 }
             ],
         }
-        list_payload = self._list_resp([("acme", True, "open")])
-        with patch.object(h1_client, "_get", side_effect=[list_payload, detail]):
-            programmes = h1_client.find_programmes()
-        assert programmes[0].in_scope[0].asset_identifier == "*.acme.com"
+
+    def test_returns_typed_programme(self, h1_client):
+        with patch.object(h1_client, "_get", return_value=self._detail_resp("acme")):
+            prog = h1_client.hydrate_programme("acme")
+        assert prog.handle == "acme"
+        assert prog.name == "ACME"
+        assert prog.bounty_table[Severity.CRITICAL] == 5000
+
+    def test_hydrate_carries_state_through(self, h1_client):
+        with patch.object(
+            h1_client, "_get", return_value=self._detail_resp("acme", state="private_mode")
+        ):
+            prog = h1_client.hydrate_programme("acme")
+        assert prog.state == "private_mode"
+
+    def test_uses_detail_endpoint_with_include(self, h1_client):
+        with patch.object(h1_client, "_get", return_value=self._detail_resp("acme")) as m:
+            h1_client.hydrate_programme("acme")
+        path = m.call_args[0][0]
+        if "params" in m.call_args[1]:
+            params = m.call_args[1]["params"]
+        elif len(m.call_args[0]) > 1:
+            params = m.call_args[0][1]
+        else:
+            params = {}
+        assert "/hackers/programs/acme" in path
+        assert params.get("include") == "bounty_table,structured_scopes"
+
+    def test_includes_structured_scope_from_detail(self, h1_client):
+        with patch.object(h1_client, "_get", return_value=self._detail_resp("acme")):
+            prog = h1_client.hydrate_programme("acme")
+        assert prog.in_scope[0].asset_identifier == "*.acme.com"
+        assert prog.in_scope[0].asset_type == ScopeType.WILDCARD
 
 
 class TestGetProgrammeStats:

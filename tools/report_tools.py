@@ -40,7 +40,8 @@ from pydantic import BaseModel, Field
 
 import runtime
 from config import config
-from models import DisclosureReport, Severity, VerifiedVulnerability
+from models import Severity, VerifiedVulnerability
+from models.h1 import DisclosureReport
 from tools.cwe_data import get_by_id as cwe_get_by_id
 
 _SEVERITY_LABELS: dict[Severity, str] = {

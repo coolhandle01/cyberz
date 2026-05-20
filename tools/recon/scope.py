@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from urllib.parse import urlparse
 
-from models import Programme, ScopeType
+from models.h1 import Programme, ScopeType
 
 logger = logging.getLogger(__name__)
 

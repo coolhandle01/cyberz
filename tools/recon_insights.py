@@ -33,7 +33,8 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 import runtime
-from models import HostInsight, HostPriority, Programme, ReconResult
+from models import HostInsight, HostPriority, ReconResult
+from models.h1 import Programme
 from tools.recon.scope import extract_domain, filter_in_scope
 
 _INSIGHTS_SUBDIR = "host_insights"

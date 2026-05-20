@@ -9,7 +9,8 @@ from __future__ import annotations
 import logging
 from urllib.parse import urlparse
 
-from models import Endpoint, Programme, ReconResult, ScopeType
+from models import Endpoint, ReconResult
+from models.h1 import Programme, ScopeType
 from tools.recon.cert_transparency import cert_transparency
 from tools.recon.dirfuzz import discover_paths
 from tools.recon.dnsx import TakeoverCandidate, detect_takeover_candidates
