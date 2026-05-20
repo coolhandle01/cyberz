@@ -26,14 +26,14 @@ junit.xml
 htmlcov/
 coverage.xml
 
-# Claude Code agent worktrees
-.claude/worktrees/
-
 # IDE
 .idea/
 .vscode/
 *.swp
 *.swo
+
+# Claude Code personal overrides (committed: .claude/settings.json)
+.claude/settings.local.json
 
 # OS
 .DS_Store
