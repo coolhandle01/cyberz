@@ -35,6 +35,14 @@ from textual.containers import Horizontal, Vertical
 from textual.css.query import NoMatches
 from textual.widgets import Input, Label, RichLog, Static
 
+from tools.tui._helpers import (
+    format_metrics_block,
+    format_step_message,
+    route_log_record,
+    task_phase_layout,
+    truncate,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -65,12 +73,9 @@ class CrewAIPipelineTUI(App):
             with Vertical(id="sidebar"):
                 yield Label(self._record_prefix, id="sidebar-title")
 
-                seen_tasks: set[str] = set()
-                for name in self._task_names:
-                    task_label = self._task_map.get(name, name)
-                    if task_label not in seen_tasks:
-                        seen_tasks.add(task_label)
-                        yield Label(task_label, classes="phase-heading")
+                for phase, name in task_phase_layout(self._task_names, self._task_map):
+                    if phase is not None:
+                        yield Label(phase, classes="phase-heading")
                     name_lbl = Label(name, classes="task-name")
                     status_lbl = Label("Waiting", classes="task-status")
                     self._task_widgets.append((name_lbl, status_lbl))
@@ -132,22 +137,11 @@ class CrewAIPipelineTUI(App):
 
     def _make_step_callback(self) -> Callable[[object], None]:
         def _cb(step: object) -> None:
-            try:
-                from crewai.agents.parser import AgentAction, AgentFinish
-
-                if isinstance(step, AgentAction):
-                    tool_call = f"[cyan]> {step.tool}[/cyan]({step.tool_input[:120]})"
-                    msg = f"[yellow]Thought:[/yellow] {step.thought}\n{tool_call}"
-                    if step.result:
-                        msg += f"\n[dim]{step.result[:300]}[/dim]"
-                elif isinstance(step, AgentFinish):
-                    out = str(step.output)
-                    msg = f"[bold green]Answer:[/bold green] {out[:500]}"
-                else:
-                    msg = str(step)[:300]
-                self.call_from_thread(self._write_agent, msg)
-            except (AttributeError, ImportError, TypeError) as exc:
-                logger.debug("step callback error: %s", exc)
+            msg = format_step_message(step)
+            if msg is None:
+                logger.debug("step callback could not format step")
+                return
+            self.call_from_thread(self._write_agent, msg)
 
         return _cb
 
@@ -176,7 +170,7 @@ class CrewAIPipelineTUI(App):
 
         raw = getattr(result, "raw", str(result))
         self._write_agent("[bold green]Pipeline complete.[/bold green]")
-        self._write_agent(raw[:2000] if len(raw) > 2000 else raw)
+        self._write_agent(truncate(raw, 2000))
 
         usage = getattr(result, "token_usage", None)
         if usage is None:
@@ -192,10 +186,11 @@ class CrewAIPipelineTUI(App):
             )
             save_metrics(metrics, config.reports_dir)
             self.query_one("#metrics", Static).update(
-                f" Tokens:  {metrics.total_tokens:,}\n"
-                f" Cost:    ${metrics.estimated_cost_usd:.4f}\n"
-                f" Run:     {run_id}\n"
-                f" Status:  done"
+                format_metrics_block(
+                    total_tokens=metrics.total_tokens,
+                    estimated_cost_usd=metrics.estimated_cost_usd,
+                    run_id=run_id,
+                )
             )
         except OSError as exc:
             self._write_crew(f"[yellow]Metrics error: {exc}[/yellow]")
@@ -222,7 +217,8 @@ class _TUILogHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         msg = self.format(record)
-        if record.name.startswith(self._app._record_prefix):
+        target = route_log_record(record.name, self._app._record_prefix)
+        if target == "agent":
             self._app.call_from_thread(self._app._write_agent, msg)
         else:
             self._app.call_from_thread(self._app._write_crew, msg)

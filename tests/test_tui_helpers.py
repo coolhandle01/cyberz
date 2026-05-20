@@ -1,0 +1,200 @@
+"""
+tests/test_tui_helpers.py - branch-coverage of the pure helpers extracted from
+the CrewAIPipelineTUI class.
+
+The Textual App / widget / threading layer in tools/tui/__init__.py needs a
+textual.pilot harness to test (tracked separately); the helpers here are pure
+functions so every conditional path can be exercised by ordinary unit tests.
+"""
+
+from __future__ import annotations
+
+from types import SimpleNamespace
+from unittest.mock import patch
+
+import pytest
+
+from tools.tui._helpers import (
+    format_metrics_block,
+    format_step_message,
+    route_log_record,
+    task_phase_layout,
+    truncate,
+)
+
+pytestmark = pytest.mark.unit
+
+
+class TestTruncate:
+    def test_returns_text_unchanged_when_under_limit(self) -> None:
+        assert truncate("hello", 10) == "hello"
+
+    def test_returns_text_unchanged_when_at_limit(self) -> None:
+        assert truncate("hello", 5) == "hello"
+
+    def test_truncates_when_over_limit(self) -> None:
+        assert truncate("hello world", 5) == "hello"
+
+
+class TestRouteLogRecord:
+    def test_routes_to_agent_when_record_starts_with_prefix(self) -> None:
+        assert route_log_record("cybersquad.osint_analyst", "cybersquad") == "agent"
+
+    def test_routes_to_crew_when_record_does_not_start_with_prefix(self) -> None:
+        assert route_log_record("urllib3.connectionpool", "cybersquad") == "crew"
+
+    def test_empty_prefix_routes_everything_to_agent(self) -> None:
+        # Every string starts with "" so the prefix-empty case lands on agent.
+        assert route_log_record("anything", "") == "agent"
+
+
+class TestTaskPhaseLayout:
+    def test_empty_input_yields_empty_layout(self) -> None:
+        assert task_phase_layout([], {"x": "y"}) == []
+
+    def test_single_task_emits_phase_heading(self) -> None:
+        assert task_phase_layout(["Recon"], {"Recon": "Reconnaissance"}) == [
+            ("Reconnaissance", "Recon")
+        ]
+
+    def test_two_tasks_same_phase_dedups_heading(self) -> None:
+        layout = task_phase_layout(
+            ["Sweep", "Probe"],
+            {"Sweep": "Reconnaissance", "Probe": "Reconnaissance"},
+        )
+        assert layout == [("Reconnaissance", "Sweep"), (None, "Probe")]
+
+    def test_two_tasks_different_phases_emit_both_headings(self) -> None:
+        layout = task_phase_layout(
+            ["Recon", "Triage"],
+            {"Recon": "Reconnaissance", "Triage": "Vulnerability Research"},
+        )
+        assert layout == [
+            ("Reconnaissance", "Recon"),
+            ("Vulnerability Research", "Triage"),
+        ]
+
+    def test_missing_task_in_map_falls_back_to_task_name(self) -> None:
+        # No entry in task_map -> uses the task name itself as the phase label.
+        layout = task_phase_layout(["Recon"], {})
+        assert layout == [("Recon", "Recon")]
+
+
+class TestFormatMetricsBlock:
+    def test_renders_thousands_separator_and_fixed_decimals(self) -> None:
+        block = format_metrics_block(
+            total_tokens=12345, estimated_cost_usd=0.0418, run_id="20260520-001122-abc123"
+        )
+        assert " Tokens:  12,345" in block
+        assert " Cost:    $0.0418" in block
+        assert " Run:     20260520-001122-abc123" in block
+        assert " Status:  done" in block
+
+
+class TestFormatStepMessage:
+    def test_agent_action_with_result_includes_thought_tool_call_and_result(self) -> None:
+        # AgentAction is duck-typed via SimpleNamespace because the real class
+        # would require constructing a full crewai agent stack just to check
+        # formatting. Patch isinstance() to recognise our stub.
+        action = SimpleNamespace(
+            thought="planning", tool="recon", tool_input="example.com", result="found 2 hosts"
+        )
+        with patch("tools.tui._helpers.isinstance", side_effect=lambda obj, cls: obj is action):
+            msg = format_step_message(action)
+        assert msg is not None
+        assert "[yellow]Thought:[/yellow] planning" in msg
+        assert "[cyan]> recon[/cyan](example.com)" in msg
+        assert "[dim]found 2 hosts[/dim]" in msg
+
+    def test_agent_action_without_result_omits_result_block(self) -> None:
+        action = SimpleNamespace(thought="planning", tool="recon", tool_input="x", result="")
+        with patch("tools.tui._helpers.isinstance", side_effect=lambda obj, cls: obj is action):
+            msg = format_step_message(action)
+        assert msg is not None
+        assert "[dim]" not in msg
+
+    def test_agent_action_long_inputs_are_truncated(self) -> None:
+        long_input = "x" * 500
+        long_result = "y" * 1000
+        action = SimpleNamespace(
+            thought="planning", tool="recon", tool_input=long_input, result=long_result
+        )
+        with patch("tools.tui._helpers.isinstance", side_effect=lambda obj, cls: obj is action):
+            msg = format_step_message(action)
+        assert msg is not None
+        # tool_input clipped to 120 chars inside the parens
+        assert "[cyan]> recon[/cyan](" + "x" * 120 + ")" in msg
+        # result clipped to 300 chars inside [dim]...[/dim]
+        assert msg.endswith("[dim]" + "y" * 300 + "[/dim]")
+
+    def test_agent_finish_returns_answer_prefixed_truncation(self) -> None:
+        from crewai.agents.parser import AgentFinish
+
+        finish = AgentFinish(thought="done", output="y" * 700, text="t")
+        msg = format_step_message(finish)
+        assert msg is not None
+        assert msg.startswith("[bold green]Answer:[/bold green] ")
+        assert msg.count("y") == 500
+
+    def test_other_step_type_returns_truncated_repr(self) -> None:
+        msg = format_step_message("random output " + "z" * 500)
+        assert msg is not None
+        assert msg.startswith("random output ")
+        assert len(msg) == 300
+
+    def test_returns_none_when_step_missing_expected_attribute(self) -> None:
+        broken = SimpleNamespace(thought="planning")  # no .tool, .tool_input etc.
+        with patch("tools.tui._helpers.isinstance", side_effect=lambda obj, cls: obj is broken):
+            assert format_step_message(broken) is None
+
+    def test_returns_none_when_crewai_parser_unavailable(self) -> None:
+        # Simulate the ImportError branch: the parser import inside the
+        # function fails, the function should return None silently.
+        import builtins
+
+        real_import = builtins.__import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == "crewai.agents.parser":
+                raise ImportError("simulated")
+            return real_import(name, *args, **kwargs)
+
+        with patch("builtins.__import__", side_effect=fake_import):
+            assert format_step_message(SimpleNamespace()) is None
+
+
+class TestCybersquadTUIWrapper:
+    """Cover tui.py's CybersquadTUI - the cybersquad-specific binding of the
+    generic CrewAIPipelineTUI. The Textual App itself needs textual.pilot to
+    exercise meaningfully; here we only verify that the wrapper passes
+    build_crew() output, crew_tasks() output, record_prefix='cybersquad',
+    and the verbose/dry_run flags through to the base class init.
+    """
+
+    def test_wires_crew_task_map_prefix_and_flags(self) -> None:
+        from unittest.mock import MagicMock
+
+        captured: dict[str, object] = {}
+
+        def fake_base_init(self, **kw):  # noqa: ANN001 - test helper
+            captured.update(kw)
+
+        fake_crew = MagicMock(tasks=[])
+        fake_task_map = {"some_role": "Some Phase"}
+
+        with (
+            patch("crew.build_crew", return_value=fake_crew) as mb,
+            patch("crew.crew_tasks", return_value=fake_task_map) as mt,
+            patch("tools.tui.CrewAIPipelineTUI.__init__", new=fake_base_init),
+        ):
+            from tui import CybersquadTUI
+
+            CybersquadTUI(verbose=True, dry_run=False)
+
+        mb.assert_called_once_with(verbose=True)
+        mt.assert_called_once_with()
+        assert captured["crew"] is fake_crew
+        assert captured["task_map"] is fake_task_map
+        assert captured["record_prefix"] == "cybersquad"
+        assert captured["verbose"] is True
+        assert captured["dry_run"] is False
