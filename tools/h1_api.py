@@ -26,11 +26,9 @@ import requests
 from requests.auth import HTTPBasicAuth
 
 from config import config
-from models import (
-    DisclosureReport,
-    Severity,
-)
+from models import Severity
 from models.h1 import (
+    DisclosureReport,
     Programme,
     ProgrammePreview,
     ScopeItem,

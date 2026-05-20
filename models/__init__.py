@@ -2,8 +2,15 @@
 models - Pydantic data models shared across the entire pipeline.
 
 Each model represents a discrete artefact that agents pass to one another.
-H1-specific shapes (programme catalog, scope) live in models.h1; everything
-else stays here until a similar size/concern split is warranted.
+H1-specific shapes (programme catalog, scope, submission payloads) live in
+models.h1; everything else stays here until a similar size/concern split is
+warranted.
+
+Declaration order is tweaked from the natural pipeline order (recon ->
+findings -> report) so that the types models.h1 depends on (Severity,
+VerifiedVulnerability) are defined before the `from models.h1 import ...`
+line. Without this, h1 hits a partially-initialised package and the import
+fails.
 """
 
 from __future__ import annotations
@@ -24,8 +31,43 @@ class Severity(StrEnum):
     CRITICAL = "critical"
 
 
-# models.h1 imports Severity from above; import after the enum is defined so
-# the submodule's import-time `from models import Severity` resolves cleanly.
+# Vulnerability findings (Penetration Tester -> Vulnerability Researcher)
+#
+# Defined ahead of the H1 import below because models.h1 needs
+# VerifiedVulnerability for DisclosureReport.vulnerability, and RawFinding is
+# referenced by ReconResult further down.
+
+
+class RawFinding(BaseModel):
+    """An unverified potential vulnerability from automated tooling."""
+
+    title: str
+    vuln_class: str
+    target: str
+    evidence: str
+    tool: str
+    severity_hint: Severity = Severity.MEDIUM
+
+
+class VerifiedVulnerability(BaseModel):
+    """A confirmed, in-scope vulnerability after Vulnerability Researcher triage."""
+
+    title: str
+    vuln_class: str
+    target: str
+    severity: Severity
+    cvss_score: float
+    cvss_vector: str
+    description: str
+    steps_to_reproduce: list[str]
+    evidence: str
+    impact: str
+    remediation: str
+    in_scope: bool = True
+    confirmed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+# H1 import - models.h1 imports Severity and VerifiedVulnerability from above;
 # Programme is referenced by ReconResult below as a pydantic field type, which
 # pydantic resolves against this module's globals at class-definition time.
 from models.h1 import Programme  # noqa: E402
@@ -121,56 +163,6 @@ class ReconResult(BaseModel):
     # the OA's internal sweep.json; populated on the final recon.json.
     host_insights: list[HostInsight] = Field(default_factory=list)
     completed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-
-
-# Vulnerability findings (Penetration Tester -> Vulnerability Researcher)
-
-
-class RawFinding(BaseModel):
-    """An unverified potential vulnerability from automated tooling."""
-
-    title: str
-    vuln_class: str
-    target: str
-    evidence: str
-    tool: str
-    severity_hint: Severity = Severity.MEDIUM
-
-
-class VerifiedVulnerability(BaseModel):
-    """A confirmed, in-scope vulnerability after Vulnerability Researcher triage."""
-
-    title: str
-    vuln_class: str
-    target: str
-    severity: Severity
-    cvss_score: float
-    cvss_vector: str
-    description: str
-    steps_to_reproduce: list[str]
-    evidence: str
-    impact: str
-    remediation: str
-    in_scope: bool = True
-    confirmed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-
-
-# Report (Technical Author -> Disclosure Coordinator)
-
-
-class DisclosureReport(BaseModel):
-    """A complete, submission-ready vulnerability report in H1 format."""
-
-    programme_handle: str
-    title: str
-    vulnerability: VerifiedVulnerability
-    summary: str
-    body_markdown: str
-    weakness_id: int | None = None
-    structured_scope_id: str | None = None
-    impact_statement: str
-    attachments: list[str] = Field(default_factory=list)
-    authored_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 # Operational metrics (emitted after every pipeline run)

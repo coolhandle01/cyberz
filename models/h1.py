@@ -1,12 +1,13 @@
 """
 models.h1 - HackerOne API shapes.
 
-The Programme Manager and the H1 client (tools/h1_api.py) exchange these
-types directly with the H1 API:
+The Programme Manager, Technical Author, and Disclosure Coordinator exchange
+these types directly with the H1 API via tools/h1_api.py:
   - ScopeType enumerates H1's asset_type field;
   - ScopeItem is one in/out-of-scope entry;
   - ProgrammePreview is the /hackers/programs list-endpoint shape;
   - Programme is the hydrated detail shape;
+  - DisclosureReport is the POST /reports payload (Technical Author -> Disclosure Coordinator);
   - SubmissionStatus enumerates H1's report state taxonomy;
   - SubmissionResult is the outcome of POSTing a report to /reports.
 """
@@ -18,7 +19,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
-from models import Severity
+from models import Severity, VerifiedVulnerability
 
 
 class ScopeType(StrEnum):
@@ -98,6 +99,28 @@ class Programme(BaseModel):
     policy_text: str = ""
     priority_score: float = 0.0
     selected_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class DisclosureReport(BaseModel):
+    """A complete, submission-ready vulnerability report in H1 format.
+
+    Every field maps directly onto the POST /reports payload built in
+    tools/h1_api.H1Client.submit_report - title -> attributes.title,
+    body_markdown -> attributes.vulnerability_information, weakness_id ->
+    attributes.weakness_id, programme_handle -> relationships.program.data.id,
+    and so on. The class IS the wire shape, not an intermediate.
+    """
+
+    programme_handle: str
+    title: str
+    vulnerability: VerifiedVulnerability
+    summary: str
+    body_markdown: str
+    weakness_id: int | None = None
+    structured_scope_id: str | None = None
+    impact_statement: str
+    attachments: list[str] = Field(default_factory=list)
+    authored_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class SubmissionStatus(StrEnum):

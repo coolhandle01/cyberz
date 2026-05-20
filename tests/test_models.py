@@ -8,7 +8,6 @@ import pytest
 from pydantic import ValidationError
 
 from models import (
-    DisclosureReport,
     Endpoint,
     RawFinding,
     ReconResult,
@@ -16,6 +15,7 @@ from models import (
     VerifiedVulnerability,
 )
 from models.h1 import (
+    DisclosureReport,
     Programme,
     ScopeItem,
     ScopeType,
