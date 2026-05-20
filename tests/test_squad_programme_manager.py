@@ -9,7 +9,6 @@ underlying helpers are exercised in their own dedicated test files.
 
 from __future__ import annotations
 
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -19,50 +18,82 @@ import runtime
 pytestmark = pytest.mark.unit
 
 
+class TestBrowseProgrammesTool:
+    def test_returns_preview_dicts_no_cache(self, tmp_path) -> None:
+        from models import ProgrammePreview
+        from squad.programme_manager import browse_programmes_tool
+
+        previews = [
+            ProgrammePreview(handle="acme", name="Acme", offers_bounties=True),
+            ProgrammePreview(handle="beta", name="Beta", offers_bounties=True),
+        ]
+        with patch(
+            "squad.programme_manager.h1.browse_programmes",
+            return_value=previews,
+        ) as mbrowse:
+            result = browse_programmes_tool.func(offers_bounties=True)
+
+        assert result == [p.model_dump() for p in previews]
+        # No filter args defaulted, only the one we passed in flight.
+        mbrowse.assert_called_once_with(
+            asset_type=None,
+            bookmarked=None,
+            offers_bounties=True,
+            submission_state=None,
+            sort=None,
+            limit=None,
+        )
+
+    def test_forwards_all_filter_args(self, tmp_path) -> None:
+        from squad.programme_manager import browse_programmes_tool
+
+        with patch(
+            "squad.programme_manager.h1.browse_programmes",
+            return_value=[],
+        ) as mbrowse:
+            browse_programmes_tool.func(
+                asset_type="WILDCARD",
+                bookmarked=True,
+                offers_bounties=True,
+                submission_state="open",
+                sort="-launched_at",
+                limit=50,
+            )
+
+        mbrowse.assert_called_once_with(
+            asset_type="WILDCARD",
+            bookmarked=True,
+            offers_bounties=True,
+            submission_state="open",
+            sort="-launched_at",
+            limit=50,
+        )
+
+
+class TestHydrateProgrammeTool:
+    def test_caches_hydrated_programme(self, programme, tmp_path) -> None:
+        from squad.programme_manager import hydrate_programme_tool
+
+        cache_path = tmp_path / programme.handle / "programme.json"
+
+        with (
+            patch(
+                "squad.programme_manager.h1.hydrate_programme",
+                return_value=programme,
+            ) as mhydrate,
+            patch(
+                "runtime.programme_cache_path",
+                return_value=cache_path,
+            ),
+        ):
+            result = hydrate_programme_tool.func(programme.handle)
+
+        assert result == programme.model_dump()
+        mhydrate.assert_called_once_with(programme.handle)
+        assert cache_path.exists()
+
+
 class TestProgrammeManagerTools:
-    def test_find_programmes_tool_caches_each(self, programme, tmp_path) -> None:
-        from squad.programme_manager import find_programmes_tool
-
-        cache_paths: dict[str, Path] = {}
-
-        def cache_path_for(handle):
-            p = tmp_path / handle / "programme.json"
-            cache_paths[handle] = p
-            return p
-
-        with (
-            patch(
-                "squad.programme_manager.h1.find_programmes",
-                return_value=[programme],
-            ) as mfind,
-            patch(
-                "runtime.programme_cache_path",
-                side_effect=cache_path_for,
-            ),
-        ):
-            result = find_programmes_tool.func()
-
-        assert result == [programme.model_dump()]
-        mfind.assert_called_once_with(open_only=True, bounty_only=True)
-        assert cache_paths[programme.handle].exists()
-
-    def test_find_programmes_tool_passes_explicit_flags(self, programme, tmp_path) -> None:
-        from squad.programme_manager import find_programmes_tool
-
-        with (
-            patch(
-                "squad.programme_manager.h1.find_programmes",
-                return_value=[],
-            ) as mfind,
-            patch(
-                "runtime.programme_cache_path",
-                return_value=tmp_path / "unused" / "programme.json",
-            ),
-        ):
-            find_programmes_tool.func(open_only=False, bounty_only=False)
-
-        mfind.assert_called_once_with(open_only=False, bounty_only=False)
-
     def test_save_programme_tool_sets_handle_and_copies(self, programme, tmp_path) -> None:
         from squad.programme_manager import save_programme_tool
 

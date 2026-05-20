@@ -62,6 +62,27 @@ class ScopeItem(BaseModel):
     max_severity: Severity | None = None
 
 
+class ProgrammePreview(BaseModel):
+    """A lightweight programme summary from the H1 /hackers/programs list endpoint.
+
+    Returned by browse_programmes_tool so the Programme Manager can survey the
+    full accessible catalog without paying the per-programme detail-fetch cost
+    that Programme hydration incurs. The PM picks shortlisted handles from the
+    preview list and hydrates each one with hydrate_programme_tool.
+
+    Only `handle` is required - the list endpoint's payload shape is not pinned
+    against a captured response, so any individual attribute may be absent for
+    a given programme.
+    """
+
+    handle: str
+    name: str | None = None
+    offers_bounties: bool | None = None
+    submission_state: str | None = None
+    state: str | None = None
+    bookmarked: bool | None = None
+
+
 class Programme(BaseModel):
     """A HackerOne bug bounty programme selected by the Programme Manager."""
 

@@ -45,6 +45,7 @@ def pm_runs(non_public_programme, tmp_path):
     from crewai import LLM, Crew, Process
 
     from config import config
+    from models import ProgrammePreview
     from squad import build_agent, build_task
     from squad.programme_manager import MEMBER as PROGRAMME_MANAGER
 
@@ -67,10 +68,25 @@ def pm_runs(non_public_programme, tmp_path):
     # programme_handle after kickoff (save_programme_tool sets it).
     runtime.programme_handle = ""
 
+    # The agent now drives a two-step workflow: browse for previews, then
+    # hydrate the shortlisted handles. Mock both boundaries so the LLM
+    # sees a coherent non-public programme regardless of which tool path
+    # it takes.
+    preview = ProgrammePreview(
+        handle=non_public_programme.handle,
+        name=non_public_programme.name,
+        offers_bounties=non_public_programme.offers_bounties,
+        submission_state="open",
+        state=non_public_programme.state,
+    )
     with (
         patch(
-            "squad.programme_manager.h1.find_programmes",
-            return_value=[non_public_programme],
+            "squad.programme_manager.h1.browse_programmes",
+            return_value=[preview],
+        ),
+        patch(
+            "squad.programme_manager.h1.hydrate_programme",
+            return_value=non_public_programme,
         ),
         patch("runtime.programme_cache_path", return_value=tmp_path / "programme.json"),
         patch("runtime.run_dir", return_value=tmp_path / "run"),

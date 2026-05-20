@@ -29,6 +29,7 @@ from config import config
 from models import (
     DisclosureReport,
     Programme,
+    ProgrammePreview,
     ScopeItem,
     ScopeType,
     Severity,
@@ -148,29 +149,96 @@ class H1Client:
             params={"include": "bounty_table,structured_scopes"},
         )
 
-    def find_programmes(self, open_only: bool = True, bounty_only: bool = True) -> list[Programme]:
-        """List accessible programmes and hydrate each with the detail endpoint.
+    def browse_programmes(
+        self,
+        *,
+        asset_type: str | None = None,
+        bookmarked: bool | None = None,
+        offers_bounties: bool | None = None,
+        submission_state: str | None = None,
+        sort: str | None = None,
+        limit: int | None = None,
+        page_size: int = 25,
+    ) -> list[ProgrammePreview]:
+        """Paginate through accessible programmes returning lightweight previews.
 
-        Two GETs per surviving programme: the paginated list call (batched),
-        then the per-programme detail call with bounty_table + structured_scopes.
-        Programmes are pre-filtered on the list-level attributes before the
-        detail fetch so we do not pay for programmes we will discard anyway.
+        Cheap by design - one HTTP call per page, no per-programme detail fetch.
+        The caller surveys the catalog, shortlists handles, then pays for
+        hydration on just those candidates via hydrate_programme.
+
+        Filter kwargs map to H1's JSON:API filter[*] query params on
+        /hackers/programs. Each kwarg is omitted from the request entirely
+        when None, so the H1 default applies. Booleans are sent as lowercase
+        "true"/"false" - the wire form filter[*] params expect.
+
+        limit caps the total returned previews across pages; defaults to
+        config.h1.max_programmes. page_size is the per-request page size,
+        not the cap.
         """
-        raw_list = self.list_programmes(page_size=25)
-        programmes: list[Programme] = []
-        for raw in raw_list:
-            attrs = raw.get("attributes", {})
-            if bounty_only and not attrs.get("offers_bounties", True):
+        cap = limit if limit is not None else config.h1.max_programmes
+
+        params: dict[str, object] = {"page[size]": page_size}
+        # FIXME: the exact H1 filter[*] keys for /hackers/programs are not
+        # exhaustively confirmed against a captured request - tracked in #43.
+        # The four below match attributes the list endpoint is known to
+        # expose; passing an unknown filter key would be silently ignored by
+        # H1, so the worst case is "filter did nothing".
+        _filter_kwargs = {
+            "asset_type": asset_type,
+            "bookmarked": bookmarked,
+            "offers_bounties": offers_bounties,
+            "submission_state": submission_state,
+        }
+        for key, value in _filter_kwargs.items():
+            if value is None:
                 continue
-            if open_only and (attrs.get("submission_state", "open") or "open") != "open":
-                continue
-            handle = attrs.get("handle") or raw.get("id", "unknown")
-            detail = self.get_programme_detail(handle)
-            detail_data = detail.get("data", {})
-            included = detail.get("included", [])
-            scope_data = {"data": [i for i in included if i.get("type") == "structured-scope"]}
-            programmes.append(self.parse_programme(detail_data, scope_data))
-        return programmes
+            params[f"filter[{key}]"] = str(value).lower() if isinstance(value, bool) else str(value)
+        if sort is not None:
+            params["sort"] = sort
+
+        previews: list[ProgrammePreview] = []
+        path: str | None = "/hackers/programs"
+        while path and len(previews) < cap:
+            data = self._get(path, params)
+            for raw in data.get("data", []):
+                attrs = raw.get("attributes", {}) or {}
+                handle = attrs.get("handle") or raw.get("id")
+                if not handle:
+                    # A preview with no handle cannot be hydrated downstream;
+                    # the PM has no way to act on it. Drop it rather than
+                    # surface a record the agent must defensively skip.
+                    continue
+                previews.append(
+                    ProgrammePreview(
+                        handle=handle,
+                        name=attrs.get("name"),
+                        offers_bounties=attrs.get("offers_bounties"),
+                        submission_state=attrs.get("submission_state"),
+                        state=attrs.get("state"),
+                        bookmarked=attrs.get("bookmarked"),
+                    )
+                )
+                if len(previews) >= cap:
+                    break
+            path = data.get("links", {}).get("next")
+            # Pagination links from H1 already encode page params; subsequent
+            # calls should not redundantly carry the initial filter dict.
+            params = {}
+
+        return previews
+
+    def hydrate_programme(self, handle: str) -> Programme:
+        """Fetch full detail for one programme and return a typed Programme.
+
+        Pulls bounty_table + structured_scopes inline via the detail endpoint's
+        include parameter. One HTTP call. Use after browse_programmes to drill
+        into a specific candidate the PM wants to score.
+        """
+        detail = self.get_programme_detail(handle)
+        detail_data = detail.get("data", {})
+        included = detail.get("included", [])
+        scope_data = {"data": [i for i in included if i.get("type") == "structured-scope"]}
+        return self.parse_programme(detail_data, scope_data)
 
     # Data parsers
 

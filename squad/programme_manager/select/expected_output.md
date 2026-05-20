@@ -22,7 +22,9 @@ A JSON object with the following fields:
     non-public -> name the corroborating evidence of admission), and
     confirm policy_text contains no contradicting private/invite-only
     restriction.
-  - selection_rationale: 2-3 sentences explaining why this programme scored
-    highest over the alternatives considered
+  - selection_rationale: 3-5 sentences explaining (a) the catalog survey
+    you ran (filters passed to browse_programmes_tool, total previews
+    seen, which handles you shortlisted and hydrated) and (b) why the
+    selected programme scored highest over the alternatives considered
   - run_dir: the absolute path to the run folder created by
     save_programme_tool (downstream agents write their outputs there)
