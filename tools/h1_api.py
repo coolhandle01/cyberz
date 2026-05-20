@@ -69,40 +69,6 @@ _H1_SCOPE_TYPE_MAP: dict[str, ScopeType] = {
 }
 
 
-# Defence in depth for issue #43: the /hackers/programs endpoint should only
-# return programmes the authenticated hacker is authorised to access (public
-# programmes plus accepted private invitations), but we do not rely on that
-# behaviour silently. If a private programme ever leaks into the list response
-# without an invitation signal, drop it locally before any recon or pentest
-# tooling touches the target.
-#
-# A programme is treated as "public, scan freely" only when state == "public_mode"
-# (or state is absent, which is how older list-level payloads were shaped).
-# Any other state value (soft_launched, sandboxed, private_mode, ...) means
-# private/limited access and requires an explicit per-payload participation
-# signal: participating=true.
-#
-# FIXME: the exact attribute name H1 uses to mark hacker participation on the
-# list response is not yet confirmed against a live response capture - the docs
-# describe a participating relationship but the flat attribute name is best
-# verified once we have a real fixture. Tracked in #43. The current conservative
-# behaviour (require an explicit truthy participating attribute, else skip with
-# a warning) holds regardless of which form the field takes.
-_PUBLIC_PROGRAMME_STATES: frozenset[str] = frozenset({"public_mode"})
-
-
-def _is_authorised_for_hacker(attrs: dict) -> bool:
-    """Return True if the programme is safe for this hacker to scan.
-
-    Public programmes pass freely. Private/limited programmes require an
-    explicit participation signal in the payload; missing or falsy means skip.
-    """
-    state = attrs.get("state")
-    if state is None or state in _PUBLIC_PROGRAMME_STATES:
-        return True
-    return bool(attrs.get("participating"))
-
-
 class H1Client:
     """
     Thin, authenticated wrapper around the HackerOne v1 hacker REST API.
@@ -199,12 +165,6 @@ class H1Client:
             if open_only and (attrs.get("submission_state", "open") or "open") != "open":
                 continue
             handle = attrs.get("handle") or raw.get("id", "unknown")
-            if not _is_authorised_for_hacker(attrs):
-                logger.warning(
-                    "skipping %s: private programme with no participation signal",
-                    handle,
-                )
-                continue
             detail = self.get_programme_detail(handle)
             detail_data = detail.get("data", {})
             included = detail.get("included", [])

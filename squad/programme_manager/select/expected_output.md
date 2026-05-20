@@ -11,6 +11,11 @@ A JSON object with the following fields:
   - triage_active: whether the programme currently has active triage (bool or null)
   - in_scope: list of asset objects, each with asset_identifier, asset_type,
     eligible_for_bounty, and max_severity (null means uncapped)
+  - authorisation_basis: 1-2 sentences confirming why the squad is
+    authorised to scan this programme. State the access signal (returned
+    by find_programmes_tool, i.e. accessible to this hacker account) and
+    confirm policy_text contains no contradicting private/invite-only
+    restriction. If you saw an access signal that you cleared, name it.
   - selection_rationale: 2-3 sentences explaining why this programme scored
     highest over the alternatives considered
   - run_dir: the absolute path to the run folder created by

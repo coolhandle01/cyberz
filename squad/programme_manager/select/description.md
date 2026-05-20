@@ -2,6 +2,19 @@ Call find_programmes_tool once. It returns every accessible programme
 fully hydrated with structured scope, bounty table, response stats, and
 policy text - no second per-programme lookups needed.
 
+Step 0 - Access authorisation (operative invariant, applies to every candidate):
+  find_programmes_tool returns only programmes accessible to the authenticated
+  hacker. The HackerOne hacker API filters by account authorisation, so
+  appearance in this list is the necessary precondition for any work the
+  squad will perform. Treat that as load-bearing. For each candidate, look
+  for any signal in the hydrated programme that contradicts the access
+  assumption - policy_text declaring the programme private, invitation-only,
+  confidential, or "do not share"; scope item instructions describing
+  out-of-band approval requirements; a programme name explicitly marked
+  confidential. Any such signal means reject the programme regardless of
+  bounty, scope, or policy permissiveness. You are the gate, not a Python
+  predicate downstream of you.
+
 Step 1 - Hard filters (discard immediately, do not score):
   - offers_bounties is false (VDP - no payment)
   - accepts_new_reports is false (closed programme)
@@ -30,4 +43,6 @@ Step 3 - Score remaining candidates on:
 Select the single highest-scoring programme that passed all filters.
 Call save_programme_tool with the chosen handle to record the selection
 and create the run directory the downstream agents will write into.
-Document your policy reading and scoring in selection_rationale.
+Document your access authorisation, policy reading, and scoring in
+selection_rationale - the access reasoning must be stated explicitly,
+not left implicit.
