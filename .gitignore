@@ -35,6 +35,9 @@ coverage.xml
 # Claude Code personal overrides (committed: .claude/settings.json)
 .claude/settings.local.json
 
+# Claude Code agent worktrees
+.claude/worktrees/
+
 # OS
 .DS_Store
 Thumbs.db

@@ -9,52 +9,91 @@ underlying helpers are exercised in their own dedicated test files.
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+
+import runtime
 
 pytestmark = pytest.mark.unit
 
 
 class TestProgrammeManagerTools:
-    def test_list_programmes_tool(self) -> None:
-        from squad.programme_manager import list_programmes_tool
+    def test_find_programmes_tool_caches_each(self, programme, tmp_path) -> None:
+        from squad.programme_manager import find_programmes_tool
 
-        sentinel = [{"handle": "acme"}]
-        with patch("squad.programme_manager.h1.list_programmes", return_value=sentinel) as m:
-            result = list_programmes_tool.func(page_size=5)
+        cache_paths: dict[str, Path] = {}
 
-        assert result == sentinel
-        m.assert_called_once_with(page_size=5)
-
-    def test_get_scope_tool(self) -> None:
-        from squad.programme_manager import get_scope_tool
+        def cache_path_for(handle):
+            p = tmp_path / handle / "programme.json"
+            cache_paths[handle] = p
+            return p
 
         with (
             patch(
-                "squad.programme_manager.h1.get_programme_policy",
-                return_value={"data": {"x": 1}},
-            ) as mp,
+                "squad.programme_manager.h1.find_programmes",
+                return_value=[programme],
+            ) as mfind,
             patch(
-                "squad.programme_manager.h1.get_structured_scope",
-                return_value={"items": []},
-            ) as ms,
+                "runtime.programme_cache_path",
+                side_effect=cache_path_for,
+            ),
         ):
-            result = get_scope_tool.func("acme")
+            result = find_programmes_tool.func()
 
-        assert result == {"policy": {"data": {"x": 1}}, "scope": {"items": []}}
-        mp.assert_called_once_with("acme")
-        ms.assert_called_once_with("acme")
+        assert result == [programme.model_dump()]
+        mfind.assert_called_once_with(open_only=True, bounty_only=True)
+        assert cache_paths[programme.handle].exists()
 
-    def test_get_programme_stats_tool(self) -> None:
-        from squad.programme_manager import get_programme_stats_tool
+    def test_find_programmes_tool_passes_explicit_flags(self, programme, tmp_path) -> None:
+        from squad.programme_manager import find_programmes_tool
 
-        sentinel = {"reports_received": 100}
-        with patch(
-            "squad.programme_manager.h1.get_programme_stats",
-            return_value=sentinel,
-        ) as m:
-            result = get_programme_stats_tool.func("acme")
+        with (
+            patch(
+                "squad.programme_manager.h1.find_programmes",
+                return_value=[],
+            ) as mfind,
+            patch(
+                "runtime.programme_cache_path",
+                return_value=tmp_path / "unused" / "programme.json",
+            ),
+        ):
+            find_programmes_tool.func(open_only=False, bounty_only=False)
 
-        assert result == sentinel
-        m.assert_called_once_with("acme")
+        mfind.assert_called_once_with(open_only=False, bounty_only=False)
+
+    def test_save_programme_tool_sets_handle_and_copies(self, programme, tmp_path) -> None:
+        from squad.programme_manager import save_programme_tool
+
+        cache = tmp_path / "cache" / "programme.json"
+        cache.parent.mkdir(parents=True)
+        cache.write_text(programme.model_dump_json(), encoding="utf-8")
+        run_dir = tmp_path / "run"
+
+        with (
+            patch("runtime.run_dir", return_value=run_dir),
+            patch("runtime.programme_cache_path", return_value=cache),
+        ):
+            result = save_programme_tool.func(programme.handle)
+
+        assert runtime.programme_handle == programme.handle
+        assert result == str(run_dir)
+        assert (run_dir / "programme.json").exists()
+
+    def test_save_programme_tool_skips_copy_when_cache_missing(self, programme, tmp_path) -> None:
+        from squad.programme_manager import save_programme_tool
+
+        run_dir = tmp_path / "run"
+        absent_cache = tmp_path / "cache" / "programme.json"
+
+        with (
+            patch("runtime.run_dir", return_value=run_dir),
+            patch("runtime.programme_cache_path", return_value=absent_cache),
+        ):
+            result = save_programme_tool.func(programme.handle)
+
+        assert runtime.programme_handle == programme.handle
+        assert result == str(run_dir)
+        assert run_dir.exists()
+        assert not (run_dir / "programme.json").exists()

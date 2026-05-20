@@ -23,9 +23,29 @@ H1_API_USERNAME=ci-user H1_API_TOKEN=ci-token CYBERSQUAD_CONTACT_EMAIL=ci@exampl
 .venv/bin/bandit -c pyproject.toml -r . -q
 ```
 
+`pytest --cov` runs with **branch coverage on** by default - it is wired in `pyproject.toml`'s `[tool.coverage.run] branch = true`. The 90% `fail_under` gate applies to combined line + branch coverage. A green run means every conditional you touched has both its True and False path exercised.
+
 Never push a change you haven't actually executed. A passing `mypy` run after removing a `# type: ignore` means nothing if the file wasn't reachable.
 
 Read the actual file before planning any change. Check `proposals/` for in-flight design work.
+
+## Test-first discipline
+
+cybersquad is a TDD codebase. For any new behaviour, bug fix, or modification you make, the discipline is:
+
+1. **Write the failing test first.** Capture the behaviour you want, or the bug you're fixing. The test should fail for the *right reason* - re-run and check the failure message before writing any production code.
+2. **Write the minimum production code** to make that test pass. Resist the urge to also write the next thing, or the abstraction, or the helper. Just pass the one test.
+3. **Re-run the suite.** Green.
+4. **Refactor under green tests** if the code that just landed needs tidying.
+5. **Loop.** Next failing test, next minimum code, next green.
+
+This discipline is not negotiable for code that ships. Bug-fix PRs without a regression test are rejected. Feature PRs without coverage of every conditional path you wrote are rejected.
+
+### Branch coverage on your diff is 100% or you say why
+
+The 90% project-wide floor catches drift. On the lines you write, modify, or fix, the bar is higher: **every conditional has both branches exercised by a test**. `--cov-report=term-missing` (already in the default `pytest --cov` invocation) prints the missing line + branch numbers; cross-reference them against your diff before you push. If a branch is genuinely unreachable, mark it `# pragma: no cover` with a one-line comment explaining why - silent suppression is the same anti-pattern as a bare `# noqa`.
+
+Line coverage at 100% does not mean tested. Branch coverage at 100% on your diff means the conditional has been thought about.
 
 ## Universal rules
 
@@ -117,7 +137,7 @@ squad/<member>/
 These exist for reasons that are not obvious from the code alone. Touching any of them requires deliberate, explained intent.
 
 - **Scope enforcement** in `tools/recon/scope.py`: `if host == pattern or host.endswith("." + pattern)`. A bare `host.endswith(pattern)` would let `evil.notexample.com` match `example.com`.
-- **Automated-scanning gate** in `tools/h1_api.py:parse_programme()`: sets `allows_automated_scanning=False` on policy text like "no automated" or "automated scanning prohibited". The Programme Manager discards such programmes.
+- **Automated-scanning gate**: the Programme Manager reads `policy_text` and discards any programme whose policy forbids automated tools, scanners, fuzzing, brute force, or rate testing. The discard rule lives in `squad/programme_manager/description.md`; `policy_text` is the source of truth and there is intentionally no boolean shortcut on the `Programme` model.
 - **Import order in `main.py`**: `check_env()` must run before `build_crew()` is imported. The crew import chain reads env vars; `check_env()` must exit cleanly first.
 - **No module-level side effects in `crew.py`**. The old `crew = build_crew()` at module level was deliberately removed.
 - **`default_factory=lambda` in `config.py`** preserves `monkeypatch.setenv` semantics in tests. Do not "simplify" to direct env reads at class-definition time.

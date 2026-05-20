@@ -60,7 +60,6 @@ class TestScopeItem:
 class TestProgramme:
     def test_valid_programme(self, programme):
         assert programme.handle == "test-programme"
-        assert programme.allows_automated_scanning is True
         assert Severity.HIGH in programme.bounty_table
 
     def test_priority_score_defaults_to_zero(self, programme):

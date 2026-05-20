@@ -16,7 +16,6 @@ dependencies = [
     "dnspython>=2.6",
     "python-dotenv>=1.0.0",
     "rich>=13.0",
-    "textual>=0.80.0",
 ]
 
 [project.optional-dependencies]
@@ -43,8 +42,8 @@ dev = [
 bounty-squad = "main:main"
 
 [tool.setuptools]
-packages = ["tools", "tools.tui"]
-py-modules = ["config", "models", "tasks", "crew", "main", "runtime", "tui"]
+packages = ["tools"]
+py-modules = ["config", "models", "tasks", "crew", "main", "runtime"]
 
 # -- pytest --------------------------------------------------------------------
 
@@ -66,7 +65,11 @@ bdd_features_base_dir = "tests/features"
 
 [tool.coverage.run]
 source = ["."]
+# tui.py / tools/tui/* excluded pending a TUI test harness (textual.pilot).
+# Without this exclude project coverage drops from 91% to 88% and the 90% gate
+# fails. Tracked as known debt to ratchet via a follow-up PR.
 omit = ["tests/*", ".venv/*", "tui.py", "tools/tui/*"]
+branch = true
 
 [tool.coverage.report]
 fail_under = 90
