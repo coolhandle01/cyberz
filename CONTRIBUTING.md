@@ -13,12 +13,13 @@ python -m venv .venv
 .venv/bin/pip install -e ".[dev]"
 ```
 
-Then run the full CI stack locally, in this order. All five must pass before pushing - never "push and let CI tell me":
+Then run the full CI stack locally, in this order. All six must pass before pushing - never "push and let CI tell me":
 
 ```bash
 .venv/bin/ruff check .
 .venv/bin/ruff format --check .
 .venv/bin/mypy . --ignore-missing-imports
+.venv/bin/pylint .
 H1_API_USERNAME=ci-user H1_API_TOKEN=ci-token CYBERSQUAD_CONTACT_EMAIL=ci@example.invalid .venv/bin/pytest -m unit --cov --cov-report=term-missing
 .venv/bin/bandit -c pyproject.toml -r . -q
 ```
@@ -85,6 +86,10 @@ os.getenv("FOO", "/tmp/bar")  # nosec B108  # noqa: S108 - intentional dev defau
 # not acceptable
 result = something_dangerous()  # nosec
 ```
+
+### Pylint says split, not suppress
+
+Pylint is scoped (see `[tool.pylint]` in `pyproject.toml`) to the design rules that fire when a module, function, or class outgrows its single responsibility. When it fails on code you edited, split the unit - pull a cohesive piece into its own module, extract a helper. Suppression (`# pylint: disable=...`) is reserved for cases where the unit genuinely is one thing; same grammar as other suppressions, one-line comment explaining why.
 
 ### FIXME and TODO grammar
 
