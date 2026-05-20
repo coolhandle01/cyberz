@@ -27,7 +27,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 import runtime
-from models import AttackPlan
+from models.attack import AttackPlan
 
 _ATTACK_PLAN_FILENAME = "attack_plan.json"
 
