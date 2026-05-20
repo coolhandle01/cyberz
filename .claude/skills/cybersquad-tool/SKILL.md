@@ -93,3 +93,12 @@ Cross-agent intent matters: this skill applies to every agent's `@tool` wrappers
   - `Finalise Triage` (`squad/vulnerability_researcher/__init__.py`) -> `"verified.json"`
   - `Finalise Reports` (`squad/technical_author/__init__.py`) -> the reports manifest filename
 - `squad/workspace_tools.py` `read_attack_plan_tool` is on the #139 backlog - it should return `AttackPlan` but currently returns a `dict` shape. Cite it as the *target* of the typed-reader pattern, not the example to mirror today.
+
+## Upstream alignment
+
+CrewAI's [crewAIInc/skills](https://github.com/crewAIInc/skills) repository publishes three skills today: `getting-started`, `design-agent`, `design-task`. None of them cover `@tool` conventions at the project level; the closest upstream document is [`design-agent/references/custom-tools.md`](https://github.com/crewAIInc/skills/blob/main/skills/design-agent/references/custom-tools.md), which covers `@tool` vs `BaseTool` decoration mechanics. This skill is a project layer on top of those mechanics, not a replacement.
+
+Two relationship points to know:
+
+- **"Return pydantic" vs upstream "return strings".** Upstream advises tool functions return strings because the LLM sees text. CrewAI serialises any return value to JSON for the LLM, so a pydantic-model return delivers the same text to the LLM *and* preserves the schema at the Python level (downstream code calling `tool.func(...)` directly gets a typed model; `mypy` can verify wiring; the contract test in #139 has something to introspect). Returning `dict` keeps the LLM side and strips the Python side.
+- **`@tool` vs `BaseTool`.** This skill assumes `@tool` because that is what cybersquad uses today. If you reach for `BaseTool` (when you need `args_schema`, async via `_arun`, or per-tool state), defer to the upstream reference for mechanics - the pydantic-return rule still applies.
