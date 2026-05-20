@@ -22,6 +22,7 @@ from models import (  # noqa: E402
     Severity,
     VerifiedVulnerability,
 )
+from models.attack import AttackPlan, AttackPlanItem  # noqa: E402
 from models.h1 import (  # noqa: E402
     DisclosureReport,
     Programme,
@@ -138,6 +139,35 @@ def recon_result(programme, endpoint) -> ReconResult:
         open_ports={"api.example.com": [80, 443]},
         technologies=["nginx", "React"],
         notes="Test recon result.",
+    )
+
+
+# Attack plan fixtures
+@pytest.fixture()
+def attack_plan_item() -> AttackPlanItem:
+    return AttackPlanItem(
+        probe="CVE-2022-22965",
+        target="https://api.example.com",
+        expected_ceiling=Severity.CRITICAL,
+        rationale=(
+            "Tomcat-served Spring Boot 2.3 detected in recon; test the standard "
+            "POST payload and look for arbitrary file write in the webroot."
+        ),
+        recon_evidence=[
+            "api.example.com runs Tomcat 9.0",
+            "Spring Boot 2.3 banner observed on /actuator/info",
+        ],
+    )
+
+
+@pytest.fixture()
+def attack_plan(attack_plan_item) -> AttackPlan:
+    from datetime import UTC, datetime
+
+    return AttackPlan(
+        programme_handle="test-programme",
+        drafted_at=datetime(2026, 1, 1, tzinfo=UTC),
+        items=[attack_plan_item],
     )
 
 
