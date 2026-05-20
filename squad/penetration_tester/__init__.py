@@ -1,7 +1,9 @@
 """Penetration Tester - runs targeted vulnerability checks against the recon surface."""
 
 import json
+from collections.abc import Callable
 from pathlib import Path
+from typing import Protocol, cast
 
 from crewai.tools import tool
 
@@ -57,6 +59,30 @@ from tools.pentest.xss import check_reflected_xss
 from tools.pentest.xxe import XxePayload, check_xxe
 from tools.recon.query import recon_endpoints, recon_open_ports, recon_subdomains
 
+_PentestFn = Callable[..., list[dict]]
+
+
+class _PentestTool(Protocol):
+    """Runtime shape of a CrewAI @tool: callable that also exposes .func."""
+
+    func: _PentestFn
+
+    def __call__(self, *args: object, **kwargs: object) -> list[dict]: ...
+
+
+def pentest_tool(name: str, *, check_fn: object = None) -> Callable[[_PentestFn], _PentestTool]:
+    """Drop-in replacement for @tool that auto-appends OWASP categories from check_fn."""
+
+    def decorator(fn: _PentestFn) -> _PentestTool:
+        if check_fn is not None:
+            cats = getattr(check_fn, "owasp_categories", ())
+            if cats:
+                lines = "\n".join(f"  - {c}" for c in cats)
+                fn.__doc__ = (fn.__doc__ or "").rstrip() + f"\n\nOWASP Top 10:\n{lines}\n"
+        return cast(_PentestTool, tool(name)(fn))
+
+    return decorator
+
 
 def _parse_endpoints(endpoints_json: str) -> list[Endpoint]:
     """Deserialise a JSON array of endpoint dicts into Endpoint objects."""
@@ -80,7 +106,7 @@ def _recon_from_path(recon_path: str) -> ReconResult:
     return recon
 
 
-@tool("Nuclei Scan")
+@pentest_tool("Nuclei Scan", check_fn=run_nuclei)
 def nuclei_scan_tool(endpoints_json: str, tech_tags_json: str = "[]") -> list[dict]:
     """
     Run nuclei against a specific set of endpoints, optionally filtered by template tags.
@@ -105,7 +131,7 @@ def nuclei_scan_tool(endpoints_json: str, tech_tags_json: str = "[]") -> list[di
     return [f.model_dump() for f in run_nuclei(endpoints, tech_tags=tech_tags or None)]
 
 
-@tool("SQLMap Injection Scan")
+@pentest_tool("SQLMap Injection Scan", check_fn=run_sqlmap)
 def sqlmap_tool(endpoints_json: str) -> list[dict]:
     """
     Run sqlmap against specific parameterised endpoints.
@@ -123,7 +149,7 @@ def sqlmap_tool(endpoints_json: str) -> list[dict]:
     return [f.model_dump() for f in run_sqlmap(_parse_endpoints(endpoints_json))]
 
 
-@tool("Cookie Security Check")
+@pentest_tool("Cookie Security Check", check_fn=check_cookies)
 def cookie_check_tool(recon_path: str) -> list[dict]:
     """
     Inspect Set-Cookie attributes across the recon surface for: missing
@@ -142,7 +168,7 @@ def cookie_check_tool(recon_path: str) -> list[dict]:
     return [f.model_dump() for f in check_cookies(recon.endpoints)]
 
 
-@tool("CORS Misconfiguration Check")
+@pentest_tool("CORS Misconfiguration Check", check_fn=check_cors_misconfiguration)
 def cors_check_tool(recon_path: str) -> list[dict]:
     """
     Check all live endpoints for CORS misconfigurations: origin reflection,
@@ -154,7 +180,7 @@ def cors_check_tool(recon_path: str) -> list[dict]:
     return [f.model_dump() for f in check_cors_misconfiguration(recon.endpoints)]
 
 
-@tool("CSRF Detection")
+@pentest_tool("CSRF Detection", check_fn=check_csrf)
 def csrf_check_tool(recon_path: str) -> list[dict]:
     """
     Detect CSRF vulnerabilities across HTML endpoints in the recon surface.
@@ -184,7 +210,7 @@ def csrf_check_tool(recon_path: str) -> list[dict]:
     return [f.model_dump() for f in check_csrf(recon.endpoints)]
 
 
-@tool("SSRF Probe")
+@pentest_tool("SSRF Probe", check_fn=check_ssrf)
 def ssrf_probe_tool(
     endpoints_json: str,
     payloads: list[SsrfPayload] | None = None,
@@ -207,7 +233,7 @@ def ssrf_probe_tool(
     return [f.model_dump() for f in check_ssrf(_parse_endpoints(endpoints_json), payloads)]
 
 
-@tool("Header Injection Check")
+@pentest_tool("Header Injection Check", check_fn=check_header_injection)
 def header_injection_tool(recon_path: str) -> list[dict]:
     """
     Check for CRLF injection via X-Forwarded-For and similar headers.
@@ -218,7 +244,7 @@ def header_injection_tool(recon_path: str) -> list[dict]:
     return [f.model_dump() for f in check_header_injection(recon.endpoints)]
 
 
-@tool("Host Header Attack Check")
+@pentest_tool("Host Header Attack Check", check_fn=check_host_headers)
 def host_header_tool(recon_path: str) -> list[dict]:
     """
     Test for Host header reflection (cache poisoning, password-reset poisoning)
@@ -229,7 +255,7 @@ def host_header_tool(recon_path: str) -> list[dict]:
     return [f.model_dump() for f in check_host_headers(recon.endpoints)]
 
 
-@tool("Header XSS Probe")
+@pentest_tool("Header XSS Probe", check_fn=check_header_xss)
 def header_xss_tool(
     endpoints_json: str,
     header_names: list[XSSHeader] | None = None,
@@ -265,7 +291,7 @@ def header_xss_tool(
     ]
 
 
-@tool("JS Source Map Scan")
+@pentest_tool("JS Source Map Scan", check_fn=check_js_source_maps)
 def source_maps_tool(recon_path: str) -> list[dict]:
     """
     Discover exposed .js.map source map files and scan reconstructed source for
@@ -277,7 +303,7 @@ def source_maps_tool(recon_path: str) -> list[dict]:
     return [f.model_dump() for f in check_js_source_maps(recon.endpoints)]
 
 
-@tool("Path Traversal Probe")
+@pentest_tool("Path Traversal Probe", check_fn=check_path_traversal)
 def path_traversal_tool(
     endpoints_json: str,
     payloads: list[PathTraversalPayload] | None = None,
@@ -312,7 +338,7 @@ def path_traversal_tool(
     ]
 
 
-@tool("HTTP Parameter Pollution Probe")
+@pentest_tool("HTTP Parameter Pollution Probe", check_fn=check_hpp)
 def hpp_probe_tool(endpoints_json: str) -> list[dict]:
     """
     Detect HTTP Parameter Pollution by sending a baseline request
@@ -340,7 +366,7 @@ def hpp_probe_tool(endpoints_json: str) -> list[dict]:
     return [f.model_dump() for f in check_hpp(_parse_endpoints(endpoints_json))]
 
 
-@tool("Server-Side Template Injection Probe")
+@pentest_tool("Server-Side Template Injection Probe", check_fn=check_ssti)
 def ssti_probe_tool(
     endpoints_json: str,
     payloads: list[SstiPayload] | None = None,
@@ -373,7 +399,7 @@ def ssti_probe_tool(
     return [f.model_dump() for f in check_ssti(_parse_endpoints(endpoints_json), payloads)]
 
 
-@tool("Open Redirect Probe")
+@pentest_tool("Open Redirect Probe", check_fn=check_open_redirect)
 def open_redirect_tool(
     endpoints_json: str,
     payloads: list[OpenRedirectPayload] | None = None,
@@ -402,7 +428,7 @@ def open_redirect_tool(
     return [f.model_dump() for f in check_open_redirect(_parse_endpoints(endpoints_json), payloads)]
 
 
-@tool("Reflected XSS Probe")
+@pentest_tool("Reflected XSS Probe", check_fn=check_reflected_xss)
 def xss_probe_tool(endpoints_json: str) -> list[dict]:
     """
     Inject an angle-bracket canary into URL parameters and check for unescaped
@@ -418,7 +444,7 @@ def xss_probe_tool(endpoints_json: str) -> list[dict]:
     return [f.model_dump() for f in check_reflected_xss(_parse_endpoints(endpoints_json))]
 
 
-@tool("Subresource Integrity Check")
+@pentest_tool("Subresource Integrity Check", check_fn=check_sri)
 def sri_check_tool(recon_path: str) -> list[dict]:
     """
     Scan HTML pages for cross-origin <script> and <link> tags missing an
@@ -429,7 +455,7 @@ def sri_check_tool(recon_path: str) -> list[dict]:
     return [f.model_dump() for f in check_sri(recon.endpoints)]
 
 
-@tool("Error and Stack Trace Disclosure Check")
+@pentest_tool("Error and Stack Trace Disclosure Check", check_fn=check_error_disclosure)
 def error_disclosure_tool(endpoints_json: str) -> list[dict]:
     """
     Probe endpoints with error-triggering inputs and scan responses for framework
@@ -698,7 +724,7 @@ def consul_vault_tool(recon_path: str) -> list[dict]:
     return [f.model_dump() for f in check_consul_vault(recon)]
 
 
-@tool("Prompt Injection Probe")
+@pentest_tool("Prompt Injection Probe", check_fn=check_prompt_injection)
 def prompt_injection_tool(
     endpoints_json: str,
     payloads: list[PromptPayload] | None = None,
@@ -729,7 +755,7 @@ def prompt_injection_tool(
     ]
 
 
-@tool("NoSQL Injection Scan")
+@pentest_tool("NoSQL Injection Scan", check_fn=run_nosqli)
 def nosqli_tool(endpoints_json: str) -> list[dict]:
     """
     Run nosqli against parameterised endpoints to detect NoSQL injection vulnerabilities.
@@ -747,7 +773,7 @@ def nosqli_tool(endpoints_json: str) -> list[dict]:
     return [f.model_dump() for f in run_nosqli(_parse_endpoints(endpoints_json))]
 
 
-@tool("LDAP Injection Probe")
+@pentest_tool("LDAP Injection Probe", check_fn=check_ldap_injection)
 def ldap_injection_tool(
     endpoints_json: str,
     payloads: list[LdapPayload] | None = None,
@@ -781,7 +807,7 @@ def ldap_injection_tool(
     ]
 
 
-@tool("Command Injection Probe")
+@pentest_tool("Command Injection Probe", check_fn=check_cmd_injection)
 def cmd_injection_tool(
     endpoints_json: str,
     payloads: list[CmdPayload] | None = None,
@@ -813,7 +839,7 @@ def cmd_injection_tool(
     return [f.model_dump() for f in check_cmd_injection(_parse_endpoints(endpoints_json), payloads)]
 
 
-@tool("XXE Probe")
+@pentest_tool("XXE Probe", check_fn=check_xxe)
 def xxe_probe_tool(
     endpoints_json: str,
     payloads: list[XxePayload] | None = None,
@@ -849,7 +875,7 @@ def xxe_probe_tool(
     return [f.model_dump() for f in check_xxe(_parse_endpoints(endpoints_json), payloads)]
 
 
-@tool("Prototype Pollution Check")
+@pentest_tool("Prototype Pollution Check", check_fn=check_prototype_pollution)
 def prototype_pollution_tool(
     endpoints_json: str,
     payloads: list[PrototypePollutionPayload] | None = None,
@@ -891,7 +917,7 @@ def prototype_pollution_tool(
     ]
 
 
-@tool("IDOR Probe")
+@pentest_tool("IDOR Probe", check_fn=check_idor)
 def idor_probe_tool(
     endpoints_json: str,
     attacks: list[IDORAttack] | None = None,
@@ -933,7 +959,7 @@ def idor_probe_tool(
     return [f.model_dump() for f in check_idor(_parse_endpoints(endpoints_json), attacks)]
 
 
-@tool("JWT Vulnerability Check")
+@pentest_tool("JWT Vulnerability Check", check_fn=check_jwt)
 def jwt_check_tool(
     token: str,
     endpoint: str,

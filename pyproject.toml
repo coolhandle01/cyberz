@@ -30,6 +30,7 @@ dev = [
     # Linting & formatting
     "ruff>=0.4",
     "mypy>=1.10",
+    "pylint>=4.0",
     "types-requests>=2.32",
     "types-beautifulsoup4>=4.12",
 
@@ -130,6 +131,34 @@ disallow_any_generics = false
 [[tool.mypy.overrides]]
 module = "tests.*"
 disallow_untyped_defs = false
+
+# -- pylint --------------------------------------------------------------------
+# Scoped to the "this is getting monolithic, split it" rule family. Everything
+# else is off so the signal stays focused. Expand the enable list later if we
+# want pylint's other checks (similar-code, score, etc.) on top.
+
+[tool.pylint.main]
+recursive = true
+ignore = [".venv"]
+ignore-paths = ["tests/.*"]
+
+[tool.pylint."messages control"]
+disable = ["all"]
+enable = [
+    "C0302",  # too-many-lines (module)
+    "R0911",  # too-many-return-statements
+    "R0912",  # too-many-branches
+    "R0913",  # too-many-arguments
+    "R0914",  # too-many-locals
+    "R0915",  # too-many-statements
+    "R0917",  # too-many-positional-arguments
+    "R0902",  # too-many-instance-attributes
+    "R0904",  # too-many-public-methods
+    "R1702",  # too-many-nested-blocks
+]
+
+[tool.pylint.format]
+max-module-lines = 500
 
 # -- bandit --------------------------------------------------------------------
 
