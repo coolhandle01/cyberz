@@ -1,6 +1,6 @@
 ---
 name: cybersquad-tool
-description: Universal rules for every CrewAI `@tool`-wrapped function in cybersquad. Covers the pydantic return-shape rule, typed parameters, the workspace writer/reader pair, and where shared tools live. Load before editing any `@tool` wrapper - `squad/*/__init__.py`, `squad/workspace_tools.py`, or `squad/__init__.py`. Pentest probes layer the `cybersquad-pentest-tool` skill on top of this one.
+description: Universal rules for every CrewAI `@tool`-wrapped function in cybersquad. Pydantic return shape, typed parameters, writer/reader workspace pair. Load before editing any `@tool` wrapper.
 ---
 
 # cybersquad @tool conventions
