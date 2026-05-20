@@ -388,6 +388,71 @@ class TestFindProgrammes:
             programmes = h1_client.find_programmes()
         assert programmes[0].in_scope[0].asset_identifier == "*.acme.com"
 
+    def test_skips_private_programme_without_participation_signal(self, h1_client, caplog):
+        """Defence in depth: if /hackers/programs ever leaks a private programme
+        we have no invitation for, we must drop it locally - not just trust
+        the endpoint filter. Issue #43.
+        """
+        list_payload = {
+            "data": [
+                {
+                    "id": "acme",
+                    "attributes": {
+                        "handle": "acme",
+                        "offers_bounties": True,
+                        "submission_state": "open",
+                        "state": "public_mode",
+                    },
+                },
+                {
+                    "id": "secretco",
+                    "attributes": {
+                        "handle": "secretco",
+                        "offers_bounties": True,
+                        "submission_state": "open",
+                        "state": "soft_launched",
+                        # No participation/invitation signal in the payload.
+                    },
+                },
+            ],
+            "links": {},
+        }
+        # Only acme should trigger a detail fetch; secretco is rejected at the
+        # list-level guard before we pay for hydration.
+        responses = [list_payload, self._detail_resp("acme")]
+        with caplog.at_level("WARNING"):
+            with patch.object(h1_client, "_get", side_effect=responses) as m:
+                programmes = h1_client.find_programmes()
+        assert [p.handle for p in programmes] == ["acme"]
+        assert m.call_count == 2
+        assert any(
+            "secretco" in record.message and "private" in record.message.lower()
+            for record in caplog.records
+        )
+
+    def test_allows_private_programme_with_participation_signal(self, h1_client):
+        """A private programme is fine to keep when the payload confirms we are
+        an invited participant (e.g. participating=true)."""
+        list_payload = {
+            "data": [
+                {
+                    "id": "invited",
+                    "attributes": {
+                        "handle": "invited",
+                        "offers_bounties": True,
+                        "submission_state": "open",
+                        "state": "soft_launched",
+                        "participating": True,
+                    },
+                },
+            ],
+            "links": {},
+        }
+        responses = [list_payload, self._detail_resp("invited")]
+        with patch.object(h1_client, "_get", side_effect=responses):
+            programmes = h1_client.find_programmes()
+        assert [p.handle for p in programmes] == ["invited"]
+
 
 class TestGetProgrammeStats:
     def test_returns_parsed_fields(self, h1_client):
