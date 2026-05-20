@@ -19,7 +19,7 @@ Then run the full CI stack locally, in this order. All six must pass before push
 .venv/bin/ruff check .
 .venv/bin/ruff format --check .
 .venv/bin/mypy . --ignore-missing-imports
-.venv/bin/pylint squad tools config.py crew.py main.py models.py runtime.py tasks.py
+.venv/bin/pylint .
 H1_API_USERNAME=ci-user H1_API_TOKEN=ci-token CYBERSQUAD_CONTACT_EMAIL=ci@example.invalid .venv/bin/pytest -m unit --cov --cov-report=term-missing
 .venv/bin/bandit -c pyproject.toml -r . -q
 ```

@@ -134,7 +134,9 @@ disallow_untyped_defs = false
 # want pylint's other checks (similar-code, score, etc.) on top.
 
 [tool.pylint.main]
-ignore-paths = ["tests/.*", "\\.venv/.*"]
+recursive = true
+ignore = [".venv"]
+ignore-paths = ["tests/.*"]
 
 [tool.pylint."messages control"]
 disable = ["all"]
