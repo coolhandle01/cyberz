@@ -13,11 +13,15 @@ from models import (
     RawFinding,
     ReconResult,
     Severity,
-    SubmissionResult,
-    SubmissionStatus,
     VerifiedVulnerability,
 )
-from models.h1 import Programme, ScopeItem, ScopeType
+from models.h1 import (
+    Programme,
+    ScopeItem,
+    ScopeType,
+    SubmissionResult,
+    SubmissionStatus,
+)
 
 pytestmark = pytest.mark.unit
 

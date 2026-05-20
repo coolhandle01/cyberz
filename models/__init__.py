@@ -24,16 +24,6 @@ class Severity(StrEnum):
     CRITICAL = "critical"
 
 
-class SubmissionStatus(StrEnum):
-    PENDING = "pending"
-    SUBMITTED = "submitted"
-    TRIAGED = "triaged"
-    RESOLVED = "resolved"
-    DUPLICATE = "duplicate"
-    NOT_APPLICABLE = "not_applicable"
-    INFORMATIVE = "informative"
-
-
 # models.h1 imports Severity from above; import after the enum is defined so
 # the submodule's import-time `from models import Severity` resolves cleanly.
 # Programme is referenced by ReconResult below as a pydantic field type, which
@@ -181,19 +171,6 @@ class DisclosureReport(BaseModel):
     impact_statement: str
     attachments: list[str] = Field(default_factory=list)
     authored_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-
-
-# Submission (Disclosure Coordinator)
-
-
-class SubmissionResult(BaseModel):
-    """Result of a HackerOne report submission."""
-
-    report_id: str | None = None
-    status: SubmissionStatus = SubmissionStatus.PENDING
-    h1_url: str | None = None
-    submitted_at: datetime | None = None
-    error: str | None = None
 
 
 # Operational metrics (emitted after every pipeline run)

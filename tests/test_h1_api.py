@@ -15,11 +15,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
-from models import (
-    Severity,
-    SubmissionStatus,
-)
-from models.h1 import ScopeType
+from models import Severity
+from models.h1 import ScopeType, SubmissionStatus
 
 pytestmark = pytest.mark.unit
 

@@ -29,10 +29,15 @@ from config import config
 from models import (
     DisclosureReport,
     Severity,
+)
+from models.h1 import (
+    Programme,
+    ProgrammePreview,
+    ScopeItem,
+    ScopeType,
     SubmissionResult,
     SubmissionStatus,
 )
-from models.h1 import Programme, ProgrammePreview, ScopeItem, ScopeType
 from tools import http
 
 logger = logging.getLogger(__name__)

@@ -1,10 +1,14 @@
 """
-models.h1 - HackerOne programme catalog shapes.
+models.h1 - HackerOne API shapes.
 
 The Programme Manager and the H1 client (tools/h1_api.py) exchange these
-types directly with the H1 API: ScopeType enumerates H1's asset_type field,
-ScopeItem is one in/out-of-scope entry, ProgrammePreview is the list-endpoint
-shape, and Programme is the hydrated detail shape.
+types directly with the H1 API:
+  - ScopeType enumerates H1's asset_type field;
+  - ScopeItem is one in/out-of-scope entry;
+  - ProgrammePreview is the /hackers/programs list-endpoint shape;
+  - Programme is the hydrated detail shape;
+  - SubmissionStatus enumerates H1's report state taxonomy;
+  - SubmissionResult is the outcome of POSTing a report to /reports.
 """
 
 from __future__ import annotations
@@ -94,3 +98,23 @@ class Programme(BaseModel):
     policy_text: str = ""
     priority_score: float = 0.0
     selected_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class SubmissionStatus(StrEnum):
+    PENDING = "pending"
+    SUBMITTED = "submitted"
+    TRIAGED = "triaged"
+    RESOLVED = "resolved"
+    DUPLICATE = "duplicate"
+    NOT_APPLICABLE = "not_applicable"
+    INFORMATIVE = "informative"
+
+
+class SubmissionResult(BaseModel):
+    """Result of a HackerOne report submission."""
+
+    report_id: str | None = None
+    status: SubmissionStatus = SubmissionStatus.PENDING
+    h1_url: str | None = None
+    submitted_at: datetime | None = None
+    error: str | None = None
