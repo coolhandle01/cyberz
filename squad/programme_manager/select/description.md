@@ -10,14 +10,12 @@ Step 0 - Access authorisation (operative invariant, applies to every candidate):
 
   For each candidate, read the state field on the Programme dict:
     - "public_mode" - publicly listed and openly accessible. Proceed.
-    - "soft_launched" / "sandboxed" / "private_mode" - invitation-only.
+    - Anything else (e.g. "private_mode"), or missing - treat as non-public.
       Appearance in find_programmes_tool's output is necessary but not
       sufficient; you also require corroborating evidence of admission in
       the hydrated programme (e.g. policy_text describing the invited
       researcher's role, scope item instructions naming participating
       researchers). Cannot find corroboration -> reject.
-    - Missing or unrecognised - treat as non-public and apply the same
-      evidence-of-admission requirement.
 
   Independently, scan for any signal in the hydrated programme that
   contradicts the access assumption - policy_text declaring the programme

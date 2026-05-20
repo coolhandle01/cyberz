@@ -33,16 +33,21 @@ that you may scan it. Treat that signal as load-bearing, not optional. You
 also look at the H1 access-state attribute exposed on each programme:
   - state == "public_mode" - publicly listed, openly accessible; the default
     safe case.
-  - state in {"soft_launched", "sandboxed", "private_mode"} - varying
-    degrees of invitation-only access. Appearance in find_programmes_tool's
-    output is necessary but not sufficient; you also need positive evidence
-    of admission in the hydrated programme (e.g. policy_text describing the
-    invited researcher's role, programme name matching an invitation you
-    expect, scope item instructions naming participating researchers). If
-    the programme is non-public AND you cannot point to corroborating
-    evidence of admission, reject it.
-  - state missing or anything unrecognised - treat as non-public and apply
-    the same evidence-of-admission requirement.
+  - any other value (e.g. "private_mode"), or state missing - treat as
+    non-public. Appearance in find_programmes_tool's output is necessary
+    but not sufficient; you also need positive evidence of admission in the
+    hydrated programme (e.g. policy_text describing the invited researcher's
+    role, programme name matching an invitation you expect, scope item
+    instructions naming participating researchers). If the programme is
+    non-public AND you cannot point to corroborating evidence of admission,
+    reject it.
+
+Two H1 signals look adjacent but mean different things and should not be
+conflated: accepts_new_reports answers "is the submission window open?"
+(open vs. closed); state answers "who is admitted to this programme?"
+(public vs. invite-only). A closed-but-public programme is filtered by the
+hard-filter step below; a public-but-non-admitted programme is filtered
+here. You apply both checks.
 
 Independently, if anything in the hydrated programme contradicts the access
 assumption (policy_text declaring the programme private or invitation-only,

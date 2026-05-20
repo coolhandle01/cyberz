@@ -12,9 +12,9 @@ A JSON object with the following fields:
   - in_scope: list of asset objects, each with asset_identifier, asset_type,
     eligible_for_bounty, and max_severity (null means uncapped)
   - state: the programme's H1 access-state attribute, copied verbatim
-    from the input (e.g. "public_mode", "soft_launched", "sandboxed",
-    "private_mode", or null if H1 did not supply one). Recorded so the
-    downstream artefact carries the same signal the PM reasoned about.
+    from the input (e.g. "public_mode" or "private_mode", or null if H1
+    did not supply one). Recorded so the downstream artefact carries the
+    same signal the PM reasoned about.
   - authorisation_basis: 1-2 sentences confirming why the squad is
     authorised to scan this programme. State the access signal (returned
     by find_programmes_tool, i.e. accessible to this hacker account),

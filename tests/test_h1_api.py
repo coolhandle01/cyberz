@@ -127,11 +127,13 @@ class TestParseProgramme:
     def test_state_extracted_verbatim(self, h1_client):
         # The PM agent reads state directly to reason about access; the value
         # is surfaced raw so prompt updates do not have to chase a Python-side
-        # enum of accepted values.
+        # enum of accepted values. "private_mode" matches the value already
+        # asserted in TestGetProgrammeStats - the only non-public state value
+        # grounded in code; other invite-only states await a captured response.
         raw = self._raw_programme()
-        raw["attributes"]["state"] = "soft_launched"
+        raw["attributes"]["state"] = "private_mode"
         prog = h1_client.parse_programme(raw, self._raw_scope())
-        assert prog.state == "soft_launched"
+        assert prog.state == "private_mode"
 
     def test_state_none_when_missing(self, h1_client):
         prog = h1_client.parse_programme(self._raw_programme(), self._raw_scope())
