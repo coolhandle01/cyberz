@@ -16,17 +16,19 @@ os.environ.setdefault("CYBERSQUAD_CONTACT_EMAIL", "ci@example.invalid")
 import pytest  # noqa: E402
 
 from models import (  # noqa: E402
-    DisclosureReport,
     Endpoint,
-    Programme,
     RawFinding,
     ReconResult,
-    ScopeItem,
-    ScopeType,
     Severity,
     VerifiedVulnerability,
 )
 from models.attack import AttackPlan, AttackPlanItem  # noqa: E402
+from models.h1 import (  # noqa: E402
+    DisclosureReport,
+    Programme,
+    ScopeItem,
+    ScopeType,
+)
 
 
 # Probe tools call tools._helpers.adaptive_sleep between requests for rate-limit

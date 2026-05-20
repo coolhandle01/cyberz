@@ -38,7 +38,8 @@ from pydantic import BaseModel, Field
 
 import runtime
 from config import config
-from models import Programme, RawFinding, Severity, VerifiedVulnerability
+from models import RawFinding, Severity, VerifiedVulnerability
+from models.h1 import Programme
 from tools._helpers import _SEVERITY_FLOOR_ORDER
 from tools.recon.scope import extract_domain, filter_in_scope
 from tools.report_tools import _HAND_WAVY_IMPACT, _URL, calculate_cvss_score

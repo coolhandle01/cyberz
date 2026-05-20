@@ -8,7 +8,8 @@ from pathlib import Path
 from crewai.tools import tool
 
 import runtime
-from models import Endpoint, HostInsight, HostPriority, HostRole, Programme
+from models import Endpoint, HostInsight, HostPriority, HostRole
+from models.h1 import Programme
 from squad import SquadMember, read_run_file_tool, read_run_filelist_tool
 from tools import cwe_data, http, owasp_data
 from tools.h1_api import h1
