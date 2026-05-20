@@ -1,6 +1,7 @@
 """Penetration Tester - runs targeted vulnerability checks against the recon surface."""
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 
 from crewai.tools import tool
@@ -56,6 +57,22 @@ from tools.pentest.webapp_headers import check_header_injection, check_host_head
 from tools.pentest.xss import check_reflected_xss
 from tools.pentest.xxe import XxePayload, check_xxe
 from tools.recon.query import recon_endpoints, recon_open_ports, recon_subdomains
+
+_PentestFn = Callable[..., list[dict]]
+
+
+def pentest_tool(name: str, *, check_fn: object = None) -> Callable[[_PentestFn], _PentestFn]:
+    """Drop-in replacement for @tool that auto-appends OWASP categories from check_fn."""
+
+    def decorator(fn: _PentestFn) -> _PentestFn:
+        if check_fn is not None:
+            cats = getattr(check_fn, "owasp_categories", ())
+            if cats:
+                lines = "\n".join(f"  - {c}" for c in cats)
+                fn.__doc__ = (fn.__doc__ or "").rstrip() + f"\n\nOWASP Top 10:\n{lines}\n"
+        return tool(name)(fn)  # type: ignore[return-value]
+
+    return decorator
 
 
 def _parse_endpoints(endpoints_json: str) -> list[Endpoint]:
@@ -184,7 +201,7 @@ def csrf_check_tool(recon_path: str) -> list[dict]:
     return [f.model_dump() for f in check_csrf(recon.endpoints)]
 
 
-@tool("SSRF Probe")
+@pentest_tool("SSRF Probe", check_fn=check_ssrf)
 def ssrf_probe_tool(
     endpoints_json: str,
     payloads: list[SsrfPayload] | None = None,
@@ -933,7 +950,7 @@ def idor_probe_tool(
     return [f.model_dump() for f in check_idor(_parse_endpoints(endpoints_json), attacks)]
 
 
-@tool("JWT Vulnerability Check")
+@pentest_tool("JWT Vulnerability Check", check_fn=check_jwt)
 def jwt_check_tool(
     token: str,
     endpoint: str,

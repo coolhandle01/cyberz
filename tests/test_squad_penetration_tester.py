@@ -104,7 +104,7 @@ class TestPenetrationTesterTools:
             "squad.penetration_tester.check_ssrf",
             return_value=[raw_finding_low],
         ):
-            result = ssrf_probe_tool.func(endpoints_json, None)
+            result = ssrf_probe_tool.func(endpoints_json, None)  # type: ignore[attr-defined]
 
         assert result == [raw_finding_low.model_dump()]
 
