@@ -14,6 +14,7 @@ from models import (
     Severity,
     VerifiedVulnerability,
 )
+from models.attack import AttackPlan, AttackPlanItem
 from models.h1 import (
     DisclosureReport,
     Programme,
@@ -102,6 +103,29 @@ class TestReconResult:
         restored = ReconResult.model_validate_json(json_str)
         assert restored.programme.handle == recon_result.programme.handle
         assert len(restored.endpoints) == len(recon_result.endpoints)
+
+
+class TestAttackPlan:
+    def test_serialise_roundtrip(self, attack_plan):
+        restored = AttackPlan.model_validate_json(attack_plan.model_dump_json())
+        assert restored.programme_handle == attack_plan.programme_handle
+        assert restored.items[0].expected_ceiling == Severity.CRITICAL
+
+
+class TestAttackPlanItem:
+    def test_accepts_vulnerability_class_probe(self, victim_url):
+        # The fixture covers CVE-id probes; this variant exercises the
+        # vulnerability-class name shape (the second canonical probe form)
+        # with a recon-evidence list to confirm the model accepts it end to end.
+        item = AttackPlanItem(
+            probe="reflected XSS",
+            target=f"{victim_url}/?q=test",
+            expected_ceiling=Severity.MEDIUM,
+            rationale="parameterised endpoint reflects q into response without escaping",
+            recon_evidence=[f"{victim_url} hosts a Vue 2 SPA"],
+        )
+        assert item.probe == "reflected XSS"
+        assert item.expected_ceiling == Severity.MEDIUM
 
 
 class TestRawFinding:

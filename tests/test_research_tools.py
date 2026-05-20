@@ -12,16 +12,9 @@ research pass depends on:
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-
 import pytest
 
-from models import Severity
-from models.attack import (
-    AttackPlan,
-    AttackPlanFinalisationError,
-    AttackPlanItem,
-)
+from models.attack import AttackPlan, AttackPlanFinalisationError
 from tools.research_tools import (
     attack_plan_path,
     finalise_research,
@@ -136,24 +129,3 @@ class TestAttackPlanPath:
     def test_returns_attack_plan_json_under_run_dir(self, tmp_path, monkeypatch):
         monkeypatch.setattr("tools.research_tools.runtime.run_dir", lambda: tmp_path)
         assert attack_plan_path() == tmp_path / "attack_plan.json"
-
-
-# Round-trip
-
-
-class TestAttackPlanModel:
-    def test_serialises_round_trip(self, attack_plan):
-        again = AttackPlan.model_validate_json(attack_plan.model_dump_json())
-        assert again.programme_handle == attack_plan.programme_handle
-        assert again.items[0].expected_ceiling == Severity.CRITICAL
-
-    def test_attack_plan_item_accepts_all_required_fields(self):
-        item = AttackPlanItem(
-            probe="reflected XSS",
-            target="https://admin.example.com/?q=test",
-            expected_ceiling=Severity.MEDIUM,
-            rationale="parameterised endpoint reflects q into response without escaping",
-            recon_evidence=["admin.example.com hosts a Vue 2 SPA"],
-        )
-        assert item.expected_ceiling == Severity.MEDIUM
-        assert datetime.now(UTC)  # ensures the import is reachable in tests
