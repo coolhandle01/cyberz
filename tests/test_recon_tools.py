@@ -12,7 +12,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from models import Endpoint, Programme, ScopeType
+from models import Endpoint
+from models.h1 import Programme, ScopeType
 from tools.recon import (
     _ACTIVE_RECON_TYPES,
     _CODE_HOSTS,

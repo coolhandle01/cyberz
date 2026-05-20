@@ -10,7 +10,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from models import Endpoint, Programme, ReconResult, Severity
+from models import Endpoint, ReconResult, Severity
+from models.h1 import Programme
 from tools.cloud.aws import check_s3_buckets
 from tools.cloud.azure import check_azure_storage
 from tools.cloud.services import (

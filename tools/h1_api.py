@@ -28,14 +28,11 @@ from requests.auth import HTTPBasicAuth
 from config import config
 from models import (
     DisclosureReport,
-    Programme,
-    ProgrammePreview,
-    ScopeItem,
-    ScopeType,
     Severity,
     SubmissionResult,
     SubmissionStatus,
 )
+from models.h1 import Programme, ProgrammePreview, ScopeItem, ScopeType
 from tools import http
 
 logger = logging.getLogger(__name__)

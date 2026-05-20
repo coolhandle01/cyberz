@@ -18,14 +18,12 @@ import pytest  # noqa: E402
 from models import (  # noqa: E402
     DisclosureReport,
     Endpoint,
-    Programme,
     RawFinding,
     ReconResult,
-    ScopeItem,
-    ScopeType,
     Severity,
     VerifiedVulnerability,
 )
+from models.h1 import Programme, ScopeItem, ScopeType  # noqa: E402
 
 
 # Probe tools call tools._helpers.adaptive_sleep between requests for rate-limit

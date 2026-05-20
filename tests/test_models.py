@@ -10,16 +10,14 @@ from pydantic import ValidationError
 from models import (
     DisclosureReport,
     Endpoint,
-    Programme,
     RawFinding,
     ReconResult,
-    ScopeItem,
-    ScopeType,
     Severity,
     SubmissionResult,
     SubmissionStatus,
     VerifiedVulnerability,
 )
+from models.h1 import Programme, ScopeItem, ScopeType
 
 pytestmark = pytest.mark.unit
 

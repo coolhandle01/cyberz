@@ -20,7 +20,7 @@ pytestmark = pytest.mark.unit
 
 class TestBrowseProgrammesTool:
     def test_returns_preview_dicts_no_cache(self, tmp_path) -> None:
-        from models import ProgrammePreview
+        from models.h1 import ProgrammePreview
         from squad.programme_manager import browse_programmes_tool
 
         previews = [

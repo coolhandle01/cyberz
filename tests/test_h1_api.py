@@ -16,10 +16,10 @@ import pytest
 import requests
 
 from models import (
-    ScopeType,
     Severity,
     SubmissionStatus,
 )
+from models.h1 import ScopeType
 
 pytestmark = pytest.mark.unit
 
