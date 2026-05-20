@@ -10,6 +10,8 @@ they can be branch-covered by ordinary unit tests.
 
 from __future__ import annotations
 
+from crewai.agents.parser import AgentAction, AgentFinish
+
 
 def truncate(text: str, limit: int) -> str:
     """Return ``text`` truncated to ``limit`` characters.
@@ -63,26 +65,21 @@ def format_metrics_block(total_tokens: int, estimated_cost_usd: float, run_id: s
     )
 
 
-def format_step_message(step: object) -> str | None:
+def format_step_message(step: object) -> str:
     """Format a CrewAI step (AgentAction / AgentFinish / other) as rich-text.
 
-    Returns ``None`` when the crewai parser cannot be imported or when an
-    expected attribute on ``step`` is missing - the caller logs at debug.
+    AgentAction yields a Thought + tool-call line and an optional result block.
+    AgentFinish yields an Answer line. Anything else is rendered as its
+    truncated ``str()``. Trusts the crewai parser types - the caller's
+    callback is responsible for swallowing any unexpected exceptions, since
+    the step-callback contract is fire-and-forget telemetry.
     """
-    try:
-        from crewai.agents.parser import AgentAction, AgentFinish
-    except ImportError:
-        return None
-
-    try:
-        if isinstance(step, AgentAction):
-            tool_call = f"[cyan]> {step.tool}[/cyan]({truncate(step.tool_input, 120)})"
-            msg = f"[yellow]Thought:[/yellow] {step.thought}\n{tool_call}"
-            if step.result:
-                msg += f"\n[dim]{truncate(step.result, 300)}[/dim]"
-            return msg
-        if isinstance(step, AgentFinish):
-            return f"[bold green]Answer:[/bold green] {truncate(str(step.output), 500)}"
-        return truncate(str(step), 300)
-    except (AttributeError, TypeError):
-        return None
+    if isinstance(step, AgentAction):
+        tool_call = f"[cyan]> {step.tool}[/cyan]({truncate(step.tool_input, 120)})"
+        msg = f"[yellow]Thought:[/yellow] {step.thought}\n{tool_call}"
+        if step.result:
+            msg += f"\n[dim]{truncate(step.result, 300)}[/dim]"
+        return msg
+    if isinstance(step, AgentFinish):
+        return f"[bold green]Answer:[/bold green] {truncate(str(step.output), 500)}"
+    return truncate(str(step), 300)

@@ -137,9 +137,10 @@ class CrewAIPipelineTUI(App):
 
     def _make_step_callback(self) -> Callable[[object], None]:
         def _cb(step: object) -> None:
-            msg = format_step_message(step)
-            if msg is None:
-                logger.debug("step callback could not format step")
+            try:
+                msg = format_step_message(step)
+            except Exception as exc:  # noqa: BLE001 - fire-and-forget telemetry
+                logger.debug("step callback error: %s", exc)
                 return
             self.call_from_thread(self._write_agent, msg)
 

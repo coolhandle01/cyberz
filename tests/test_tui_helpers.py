@@ -9,10 +9,10 @@ functions so every conditional path can be exercised by ordinary unit tests.
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
+from crewai.agents.parser import AgentAction, AgentFinish
 
 from tools.tui._helpers import (
     format_metrics_block,
@@ -23,6 +23,17 @@ from tools.tui._helpers import (
 )
 
 pytestmark = pytest.mark.unit
+
+
+def _make_action(
+    tool: str = "recon",
+    tool_input: str = "example.com",
+    thought: str = "planning",
+    result: str | None = "found 2 hosts",
+) -> AgentAction:
+    """Construct a real AgentAction for tests - it's a Pydantic model, no
+    LLM call or token cost involved."""
+    return AgentAction(thought=thought, tool=tool, tool_input=tool_input, text="", result=result)
 
 
 class TestTruncate:
@@ -93,74 +104,32 @@ class TestFormatMetricsBlock:
 
 class TestFormatStepMessage:
     def test_agent_action_with_result_includes_thought_tool_call_and_result(self) -> None:
-        # AgentAction is duck-typed via SimpleNamespace because the real class
-        # would require constructing a full crewai agent stack just to check
-        # formatting. Patch isinstance() to recognise our stub.
-        action = SimpleNamespace(
-            thought="planning", tool="recon", tool_input="example.com", result="found 2 hosts"
-        )
-        with patch("tools.tui._helpers.isinstance", side_effect=lambda obj, cls: obj is action):
-            msg = format_step_message(action)
-        assert msg is not None
+        msg = format_step_message(_make_action())
         assert "[yellow]Thought:[/yellow] planning" in msg
         assert "[cyan]> recon[/cyan](example.com)" in msg
         assert "[dim]found 2 hosts[/dim]" in msg
 
     def test_agent_action_without_result_omits_result_block(self) -> None:
-        action = SimpleNamespace(thought="planning", tool="recon", tool_input="x", result="")
-        with patch("tools.tui._helpers.isinstance", side_effect=lambda obj, cls: obj is action):
-            msg = format_step_message(action)
-        assert msg is not None
+        msg = format_step_message(_make_action(result=""))
         assert "[dim]" not in msg
 
     def test_agent_action_long_inputs_are_truncated(self) -> None:
-        long_input = "x" * 500
-        long_result = "y" * 1000
-        action = SimpleNamespace(
-            thought="planning", tool="recon", tool_input=long_input, result=long_result
-        )
-        with patch("tools.tui._helpers.isinstance", side_effect=lambda obj, cls: obj is action):
-            msg = format_step_message(action)
-        assert msg is not None
+        msg = format_step_message(_make_action(tool_input="x" * 500, result="y" * 1000))
         # tool_input clipped to 120 chars inside the parens
         assert "[cyan]> recon[/cyan](" + "x" * 120 + ")" in msg
         # result clipped to 300 chars inside [dim]...[/dim]
         assert msg.endswith("[dim]" + "y" * 300 + "[/dim]")
 
     def test_agent_finish_returns_answer_prefixed_truncation(self) -> None:
-        from crewai.agents.parser import AgentFinish
-
         finish = AgentFinish(thought="done", output="y" * 700, text="t")
         msg = format_step_message(finish)
-        assert msg is not None
         assert msg.startswith("[bold green]Answer:[/bold green] ")
         assert msg.count("y") == 500
 
     def test_other_step_type_returns_truncated_repr(self) -> None:
         msg = format_step_message("random output " + "z" * 500)
-        assert msg is not None
         assert msg.startswith("random output ")
         assert len(msg) == 300
-
-    def test_returns_none_when_step_missing_expected_attribute(self) -> None:
-        broken = SimpleNamespace(thought="planning")  # no .tool, .tool_input etc.
-        with patch("tools.tui._helpers.isinstance", side_effect=lambda obj, cls: obj is broken):
-            assert format_step_message(broken) is None
-
-    def test_returns_none_when_crewai_parser_unavailable(self) -> None:
-        # Simulate the ImportError branch: the parser import inside the
-        # function fails, the function should return None silently.
-        import builtins
-
-        real_import = builtins.__import__
-
-        def fake_import(name, *args, **kwargs):
-            if name == "crewai.agents.parser":
-                raise ImportError("simulated")
-            return real_import(name, *args, **kwargs)
-
-        with patch("builtins.__import__", side_effect=fake_import):
-            assert format_step_message(SimpleNamespace()) is None
 
 
 class TestCybersquadTUIWrapper:
