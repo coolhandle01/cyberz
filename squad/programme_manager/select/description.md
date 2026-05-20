@@ -6,14 +6,26 @@ Step 0 - Access authorisation (operative invariant, applies to every candidate):
   find_programmes_tool returns only programmes accessible to the authenticated
   hacker. The HackerOne hacker API filters by account authorisation, so
   appearance in this list is the necessary precondition for any work the
-  squad will perform. Treat that as load-bearing. For each candidate, look
-  for any signal in the hydrated programme that contradicts the access
-  assumption - policy_text declaring the programme private, invitation-only,
-  confidential, or "do not share"; scope item instructions describing
-  out-of-band approval requirements; a programme name explicitly marked
-  confidential. Any such signal means reject the programme regardless of
-  bounty, scope, or policy permissiveness. You are the gate, not a Python
-  predicate downstream of you.
+  squad will perform. Treat that as load-bearing.
+
+  For each candidate, read the state field on the Programme dict:
+    - "public_mode" - publicly listed and openly accessible. Proceed.
+    - "soft_launched" / "sandboxed" / "private_mode" - invitation-only.
+      Appearance in find_programmes_tool's output is necessary but not
+      sufficient; you also require corroborating evidence of admission in
+      the hydrated programme (e.g. policy_text describing the invited
+      researcher's role, scope item instructions naming participating
+      researchers). Cannot find corroboration -> reject.
+    - Missing or unrecognised - treat as non-public and apply the same
+      evidence-of-admission requirement.
+
+  Independently, scan for any signal in the hydrated programme that
+  contradicts the access assumption - policy_text declaring the programme
+  private, invitation-only, confidential, or "do not share"; scope item
+  instructions describing out-of-band approval requirements; a programme
+  name explicitly marked confidential. Any such signal means reject the
+  programme regardless of bounty, scope, or policy permissiveness. You
+  are the gate, not a Python predicate downstream of you.
 
 Step 1 - Hard filters (discard immediately, do not score):
   - offers_bounties is false (VDP - no payment)

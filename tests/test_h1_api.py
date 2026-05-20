@@ -124,6 +124,19 @@ class TestParseProgramme:
         prog = h1_client.parse_programme(self._raw_programme(), self._raw_scope())
         assert prog.accepts_new_reports is True
 
+    def test_state_extracted_verbatim(self, h1_client):
+        # The PM agent reads state directly to reason about access; the value
+        # is surfaced raw so prompt updates do not have to chase a Python-side
+        # enum of accepted values.
+        raw = self._raw_programme()
+        raw["attributes"]["state"] = "soft_launched"
+        prog = h1_client.parse_programme(raw, self._raw_scope())
+        assert prog.state == "soft_launched"
+
+    def test_state_none_when_missing(self, h1_client):
+        prog = h1_client.parse_programme(self._raw_programme(), self._raw_scope())
+        assert prog.state is None
+
     def test_parses_response_efficiency_pct(self, h1_client):
         raw = self._raw_programme()
         raw["attributes"]["response_efficiency_percentage"] = 87.5

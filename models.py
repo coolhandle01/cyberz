@@ -79,6 +79,12 @@ class Programme(BaseModel):
     total_bounties_paid_usd: int | None = None
     triage_active: bool | None = None
     last_updated_at: datetime | None = None
+    # HackerOne's access-state attribute - "public_mode" means publicly listed
+    # and openly accessible; "soft_launched", "sandboxed", and "private_mode"
+    # all denote varying degrees of invitation-only access. Surfaced verbatim
+    # so the Programme Manager can reason about access authorisation without
+    # relying on a Python-side categorisation.
+    state: str | None = None
     policy_text: str = ""
     priority_score: float = 0.0
     selected_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

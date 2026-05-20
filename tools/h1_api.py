@@ -226,6 +226,7 @@ class H1Client:
         total_cents: int | None = attrs.get("total_bounties_paid_in_cents")
         total_bounties_paid_usd: int | None = total_cents // 100 if total_cents else None
         triage_active: bool | None = attrs.get("triage_active")
+        state: str | None = attrs.get("state")
         last_updated_str: str | None = attrs.get("updated_at")
         last_updated_at: datetime | None = (
             datetime.fromisoformat(last_updated_str.replace("Z", "+00:00"))
@@ -248,6 +249,7 @@ class H1Client:
             total_bounties_paid_usd=total_bounties_paid_usd,
             triage_active=triage_active,
             last_updated_at=last_updated_at,
+            state=state,
             policy_text=policy_text,
         )
 
