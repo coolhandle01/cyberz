@@ -13,12 +13,13 @@ python -m venv .venv
 .venv/bin/pip install -e ".[dev]"
 ```
 
-Then run the full CI stack locally, in this order. All five must pass before pushing - never "push and let CI tell me":
+Then run the full CI stack locally, in this order. All six must pass before pushing - never "push and let CI tell me":
 
 ```bash
 .venv/bin/ruff check .
 .venv/bin/ruff format --check .
 .venv/bin/mypy . --ignore-missing-imports
+.venv/bin/pylint squad tools config.py crew.py main.py models.py runtime.py tasks.py
 H1_API_USERNAME=ci-user H1_API_TOKEN=ci-token CYBERSQUAD_CONTACT_EMAIL=ci@example.invalid .venv/bin/pytest -m unit --cov --cov-report=term-missing
 .venv/bin/bandit -c pyproject.toml -r . -q
 ```
@@ -85,6 +86,16 @@ os.getenv("FOO", "/tmp/bar")  # nosec B108  # noqa: S108 - intentional dev defau
 # not acceptable
 result = something_dangerous()  # nosec
 ```
+
+### Pylint fails -> split the file you just touched
+
+Pylint is configured (in `pyproject.toml` under `[tool.pylint]`) with a narrow rule set whose purpose is one signal: *this code unit is getting monolithic, split it.* The enabled checks - `C0302` (too-many-lines), `R0915` (too-many-statements), `R0914` (too-many-locals), `R0912` (too-many-branches), `R0911` (too-many-return-statements), `R1702` (too-many-nested-blocks), `R0913`/`R0917` (too-many-arguments), `R0902` (too-many-instance-attributes), `R0904` (too-many-public-methods) - all fire when a file, function, or class has outgrown its single responsibility.
+
+If pylint fails on a file you edited, the default response is **split the file**, not suppress the rule. Pull the cohesive piece you can name into its own module; move the function family with a shared theme into its own file; extract the helper that the long function keeps reaching for. The 500-line module ceiling and pylint's default function/class thresholds are intentionally low - they fire early so the refactor is small.
+
+Suppression (`# pylint: disable=...`) is reserved for the rare case where the unit genuinely is one thing and the threshold is wrong for it. Same grammar as other linter suppressions: one-line comment explaining why, no bare disables.
+
+Existing files that already fail (`squad/penetration_tester/__init__.py`, `tools/report_tools.py`, `tools/triage_tools.py`, plus various functions across `tools/`) are tech debt visible in the pylint output. They get split when someone next edits them - not pre-emptively in unrelated PRs.
 
 ### FIXME and TODO grammar
 
