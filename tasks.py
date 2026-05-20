@@ -53,7 +53,7 @@ def build_tasks(agents: dict) -> list[Task]:
         "triage",
         VULNERABILITY_RESEARCHER,
         agents["vulnerability_researcher"],
-        context=[pentest, select],
+        context=[pentest, research, select],
         human_input=hi,
     )
 

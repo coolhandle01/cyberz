@@ -15,6 +15,9 @@ thinking; this module provides the supporting primitives:
 * ``finalise_research(plan)`` - validate, persist ``attack_plan.json`` for
   the Penetration Tester and re-read at triage time. Raises
   ``AttackPlanFinalisationError`` (from ``models.attack``) on hard errors.
+* ``load_attack_plan(path)`` - reverse direction. Deserialise
+  ``attack_plan.json`` into a typed ``AttackPlan`` so downstream agents
+  (PT, VR at triage) consume a Pydantic model rather than a raw blob.
 
 Mirrors the ``finalise_recon`` / ``finalise_triage`` pattern so the VR's
 research artefact is a first-class workspace file alongside ``recon.json``
@@ -134,8 +137,23 @@ def finalise_research(plan: AttackPlan) -> Path:
     return out_path
 
 
+def load_attack_plan(path: Path) -> AttackPlan:
+    """Deserialise ``attack_plan.json`` from ``path`` into a typed AttackPlan.
+
+    The reader half of the ``finalise_research`` contract: PT loads the plan
+    before running probes, and the VR re-loads it at triage time to map
+    findings back to the hypotheses that justified them. Raises
+    ``FileNotFoundError`` if the file is missing - the caller surfaces a
+    workflow error rather than silently reverting to a free-form briefing.
+    """
+    if not path.is_file():
+        raise FileNotFoundError(f"attack plan not found at {path}")
+    return AttackPlan.model_validate_json(path.read_text(encoding="utf-8"))
+
+
 __all__ = [
     "attack_plan_path",
     "finalise_research",
+    "load_attack_plan",
     "validate_attack_plan",
 ]
