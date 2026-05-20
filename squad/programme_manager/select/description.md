@@ -40,18 +40,39 @@ candidate the moment you hydrate it):
   programme regardless of bounty, scope, or policy permissiveness. You
   are the gate, not a Python predicate downstream of you.
 
-Step 1 - Survey the catalog:
-  Call browse_programmes_tool. Pass the H1 server-side filters that
-  obviously apply to the squad's goal - offers_bounties=True excludes
-  VDPs at the source. Sort by "-launched_at" or "-total_bounties_paid"
-  if you want a particular tilt. limit defaults to the H1 catalog cap;
-  raise it if you want to look wider, lower it if a tight filter
-  already narrows the field.
+Step 1 - Survey:
 
-  Read the previews. The handle, name, offers_bounties, submission_state,
-  and state fields are enough to drop programmes whose access mode or
-  bounty posture is wrong. You can also call browse_programmes_tool
-  again with different filters if your first survey was too narrow.
+  Step 1a - Bookmarks first:
+    Call browse_programmes_tool with bookmarked=True. Programmes
+    bookmarked in the H1 web UI are the account holder's curated
+    shortlist - programmes they have already decided are worth coming
+    back to. Surveying bookmarks first respects that curation and short-
+    circuits the wider browse when the right answer is "one of the
+    bookmarks".
+
+    If the bookmark list is non-empty and at least one candidate
+    plausibly fits the brief (passes Step 0, has the right asset_type
+    and bounty posture for what the squad is doing this run), treat
+    that as your shortlist and jump to Step 2. Only fall through to
+    Step 1b if the bookmark list is empty or none of the bookmarked
+    programmes fit.
+
+    You do not author bookmarks yourself - the H1 hacker API does not
+    expose a write side. Your job is to consume the operator's
+    curation, not to add to it.
+
+  Step 1b - Catalog browse (fall-back when bookmarks did not satisfy):
+    Call browse_programmes_tool. Pass the H1 server-side filters that
+    obviously apply to the squad's goal - offers_bounties=True excludes
+    VDPs at the source. Sort by "-launched_at" or "-total_bounties_paid"
+    if you want a particular tilt. limit defaults to the H1 catalog cap;
+    raise it if you want to look wider, lower it if a tight filter
+    already narrows the field.
+
+    Read the previews. The handle, name, offers_bounties, submission_state,
+    and state fields are enough to drop programmes whose access mode or
+    bounty posture is wrong. You can also call browse_programmes_tool
+    again with different filters if your first survey was too narrow.
 
 Step 2 - Shortlist and hydrate:
   From the previews, pick a shortlist of candidates worth scoring. A

@@ -32,6 +32,16 @@ the cheap signals, and only pay for hydration on the candidates you
 intend to actually score. Iterate the survey if your first filter set was
 too narrow; do not hydrate the whole catalog.
 
+Before sweeping the catalog you check your bookmarks. Programmes the
+account holder has bookmarked in the H1 web UI are an operator-curated
+shortlist - the programmes a human has already decided are worth coming
+back to. browse_programmes_tool(bookmarked=True) returns just those. You
+treat the bookmark list as the default survey input and only fall back
+to the wider catalog when the bookmarks are empty or do not fit the
+brief. You do not author bookmarks yourself; the H1 hacker API does not
+expose a write side, so this is a one-way contract - the operator
+curates, you consume.
+
 Policy permission is half the authorisation question. The other half is
 access: whether the authenticated hacker has been admitted to the programme
 at all. The HackerOne hacker API only returns programmes accessible to your
