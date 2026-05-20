@@ -84,6 +84,12 @@ Today `SquadMember.tools` is typed `list[Any]` because the local `_PentestTool` 
 
 ## Canonical examples
 
-- `squad/workspace_tools.py` `read_attack_plan_tool` - the typed-reader pattern (returns `AttackPlan`).
-- `squad/penetration_tester/__init__.py` `recon_endpoints_tool` - returns `EndpointPage`, the existing typed wrapper to mirror when retyping a `list[dict]` probe.
-- `tools/research_tools.py` `finalise_research` + `load_attack_plan` - the writer / reader pair as a unit.
+Cross-agent intent matters: this skill applies to every agent's `@tool` wrappers, not just the pentester's. The codebase is mid-migration (#139) so exemplary typed returns are still sparse - one canonical pydantic-return example today, plus the workspace-handle string family.
+
+- `squad/penetration_tester/__init__.py` `recon_endpoints_tool` returns `EndpointPage` - the only `@tool` in the codebase today that follows the pydantic-return rule end-to-end. The wrapper lives on PT but it reads OSINT's recon output, so the pattern is cross-agent.
+- The workspace-handle string family demonstrates the `str` exception (writer returns the filename, next agent passes it to a typed reader):
+  - `Finalise Recon` (`squad/osint_analyst/__init__.py`) -> `"recon.json"`
+  - `Finalise Research` (`squad/vulnerability_researcher/__init__.py`) -> `"attack_plan.json"`
+  - `Finalise Triage` (`squad/vulnerability_researcher/__init__.py`) -> `"verified.json"`
+  - `Finalise Reports` (`squad/technical_author/__init__.py`) -> the reports manifest filename
+- `squad/workspace_tools.py` `read_attack_plan_tool` is on the #139 backlog - it should return `AttackPlan` but currently returns a `dict` shape. Cite it as the *target* of the typed-reader pattern, not the example to mirror today.

@@ -2,13 +2,19 @@
 #
 # Claude Code PreToolUse hook for Write|Edit.
 #
-# Maps the target file path to a cybersquad skill and injects that skill's
-# SKILL.md content into the model context via hookSpecificOutput.additionalContext
-# - effectively auto-loading the relevant skill before each edit.
+# Maps the target file path to a stack of cybersquad skills and injects each
+# matched skill's SKILL.md content into the model context via
+# hookSpecificOutput.additionalContext - effectively auto-loading the relevant
+# skills before each edit.
+#
+# Stacking: a path may match more than one skill (e.g. a pentest probe wrapper
+# matches both the generic cybersquad-tool and the specialist
+# cybersquad-pentest-tool). Generic skills are matched first and specialists
+# layer on top, so the specialist appears later in the context window.
 #
 # Session-scoped sentinel: each skill is injected at most once per session, on
 # the first matching Edit/Write. Subsequent edits in the same session are silent
-# (the skill is already in context).
+# for skills that have already loaded.
 #
 # Wired via .claude/settings.json. Silently noops if jq is missing or the
 # expected stdin shape is absent - never blocks the edit.
@@ -33,47 +39,70 @@ skills_root="$repo_root/.claude/skills"
 state_dir="${TMPDIR:-/tmp}/cybersquad-skills-$session_id"
 mkdir -p "$state_dir"
 
-# Emit the skill content as additionalContext, once per session per skill.
-emit_skill() {
-    local skill_name="$1"
-    local sentinel="$state_dir/$skill_name"
-    [ -f "$sentinel" ] && exit 0  # already loaded this session
+# Build the matched-skill stack. Generic matchers come first; specialists
+# layer on top. Each branch is independent so a path can match more than one.
+matches=()
 
-    local skill_path="$skills_root/$skill_name/SKILL.md"
-    [ -f "$skill_path" ] || exit 0
-
-    touch "$sentinel"
-    local content
-    content=$(cat "$skill_path")
-
-    jq -n --arg skill "$skill_name" --arg content "$content" '
-        {
-            hookSpecificOutput: {
-                hookEventName: "PreToolUse",
-                additionalContext: ("Auto-loading skill \($skill) (matched on file path; this is its first edit this session).\n\n" + $content)
-            }
-        }
-    '
-    exit 0
-}
-
-# Most specific match wins (case statement evaluates top-down).
 case "$file_path" in
-    */tools/pentest/*|*/squad/penetration_tester/__init__.py)
-        emit_skill cybersquad-pentest-tool
-        ;;
-    */tests/features/*|*/tests/bdd/*)
-        emit_skill cybersquad-bdd
-        ;;
-    */tests/*)
-        emit_skill cybersquad-test-fixtures
-        ;;
-    */crew.py)
-        emit_skill cybersquad-agent-llm
-        ;;
     */squad/__init__.py|*/squad/workspace_tools.py|*/squad/*/__init__.py)
-        emit_skill cybersquad-tool
+        matches+=(cybersquad-tool)
         ;;
 esac
+
+case "$file_path" in
+    */tools/pentest/*|*/squad/penetration_tester/__init__.py)
+        matches+=(cybersquad-pentest-tool)
+        ;;
+esac
+
+case "$file_path" in
+    */tests/*)
+        matches+=(cybersquad-test-fixtures)
+        ;;
+esac
+
+case "$file_path" in
+    */tests/features/*|*/tests/bdd/*)
+        matches+=(cybersquad-bdd)
+        ;;
+esac
+
+case "$file_path" in
+    */crew.py)
+        matches+=(cybersquad-agent-llm)
+        ;;
+esac
+
+[ "${#matches[@]}" -eq 0 ] && exit 0
+
+# Emit each matched skill once per session, joined into a single
+# additionalContext blob in stack order (generic first, specialist on top).
+combined=""
+for skill_name in "${matches[@]}"; do
+    sentinel="$state_dir/$skill_name"
+    [ -f "$sentinel" ] && continue
+
+    skill_path="$skills_root/$skill_name/SKILL.md"
+    [ -f "$skill_path" ] || continue
+
+    touch "$sentinel"
+    content=$(cat "$skill_path")
+    header="Auto-loading skill $skill_name (matched on file path; this is its first edit this session)."
+    if [ -n "$combined" ]; then
+        combined="$combined"$'\n\n---\n\n'
+    fi
+    combined="${combined}${header}"$'\n\n'"${content}"
+done
+
+[ -z "$combined" ] && exit 0
+
+jq -n --arg content "$combined" '
+    {
+        hookSpecificOutput: {
+            hookEventName: "PreToolUse",
+            additionalContext: $content
+        }
+    }
+'
 
 exit 0
