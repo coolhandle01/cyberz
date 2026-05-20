@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from models import Severity
 
@@ -34,4 +34,29 @@ class AttackPlan(BaseModel):
     items: list[AttackPlanItem]
 
 
-__all__ = ["AttackPlan", "AttackPlanItem"]
+class AttackPlanValidationIssue(BaseModel):
+    """One issue produced by attack-plan validation."""
+
+    section: str
+    severity: str  # "error" (blocks finalise) or "warning" (advisory)
+    message: str
+
+
+class AttackPlanValidationReport(BaseModel):
+    """Result of validating an AttackPlan."""
+
+    ok: bool
+    issues: list[AttackPlanValidationIssue] = Field(default_factory=list)
+
+
+class AttackPlanFinalisationError(RuntimeError):
+    """Raised when an AttackPlan cannot be persisted to attack_plan.json."""
+
+
+__all__ = [
+    "AttackPlan",
+    "AttackPlanFinalisationError",
+    "AttackPlanItem",
+    "AttackPlanValidationIssue",
+    "AttackPlanValidationReport",
+]

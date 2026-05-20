@@ -7,13 +7,14 @@ attack plan: a list of probe-target hypotheses with expected severity
 ceilings and the recon signals that justified each one. The agent does the
 thinking; this module provides the supporting primitives:
 
-* ``AttackPlan`` / ``AttackPlanItem`` (from ``models``) - the artefact the
-  agent composes.
-* ``validate_attack_plan(plan)`` - quality gate. Returns the issue list.
-  Hard errors block ``finalise_research``.
+* ``AttackPlan`` / ``AttackPlanItem`` (from ``models.attack``) - the
+  artefact the agent composes.
+* ``validate_attack_plan(plan)`` - quality gate. Returns the issue list
+  (``AttackPlanValidationReport`` from ``models.attack``). Hard errors
+  block ``finalise_research``.
 * ``finalise_research(plan)`` - validate, persist ``attack_plan.json`` for
-  the Penetration Tester and re-read at triage time. Refuses on hard
-  errors.
+  the Penetration Tester and re-read at triage time. Raises
+  ``AttackPlanFinalisationError`` (from ``models.attack``) on hard errors.
 
 Mirrors the ``finalise_recon`` / ``finalise_triage`` pattern so the VR's
 research artefact is a first-class workspace file alongside ``recon.json``
@@ -24,30 +25,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import BaseModel, Field
-
 import runtime
-from models.attack import AttackPlan
+from models.attack import (
+    AttackPlan,
+    AttackPlanFinalisationError,
+    AttackPlanValidationIssue,
+    AttackPlanValidationReport,
+)
 
 _ATTACK_PLAN_FILENAME = "attack_plan.json"
 
 
 # Validation
-
-
-class AttackPlanValidationIssue(BaseModel):
-    """One issue produced by validate_attack_plan."""
-
-    section: str
-    severity: str  # "error" (blocks finalise) or "warning" (advisory)
-    message: str
-
-
-class AttackPlanValidationReport(BaseModel):
-    """Result of validating an AttackPlan."""
-
-    ok: bool
-    issues: list[AttackPlanValidationIssue] = Field(default_factory=list)
 
 
 def validate_attack_plan(plan: AttackPlan) -> AttackPlanValidationReport:
@@ -119,10 +108,6 @@ def validate_attack_plan(plan: AttackPlan) -> AttackPlanValidationReport:
 # Persistence / finalisation
 
 
-class AttackPlanFinalisationError(RuntimeError):
-    """Raised when finalise_research cannot persist attack_plan.json."""
-
-
 def attack_plan_path() -> Path:
     """Return the on-disk path of attack_plan.json for the current run."""
     return runtime.run_dir() / _ATTACK_PLAN_FILENAME
@@ -150,9 +135,6 @@ def finalise_research(plan: AttackPlan) -> Path:
 
 
 __all__ = [
-    "AttackPlanFinalisationError",
-    "AttackPlanValidationIssue",
-    "AttackPlanValidationReport",
     "attack_plan_path",
     "finalise_research",
     "validate_attack_plan",

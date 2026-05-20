@@ -17,9 +17,12 @@ from datetime import UTC, datetime
 import pytest
 
 from models import Severity
-from models.attack import AttackPlan, AttackPlanItem
-from tools.research_tools import (
+from models.attack import (
+    AttackPlan,
     AttackPlanFinalisationError,
+    AttackPlanItem,
+)
+from tools.research_tools import (
     attack_plan_path,
     finalise_research,
     validate_attack_plan,
