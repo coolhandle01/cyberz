@@ -78,27 +78,15 @@ class TestParseProgramme:
         assert prog.bounty_table[Severity.HIGH] == 2000
         assert prog.bounty_table[Severity.CRITICAL] == 5000
 
-    def test_allows_automated_scanning_true(self, h1_client):
+    def test_policy_text_preserved(self, h1_client):
         prog = h1_client.parse_programme(self._raw_programme(), self._raw_scope())
-        assert prog.allows_automated_scanning is True
+        assert "automated scanning" in prog.policy_text.lower()
 
-    def test_allows_automated_scanning_false_when_prohibited(self, h1_client):
-        raw = self._raw_programme()
-        raw["attributes"]["policy"] = "No automated scanning is permitted on this programme."
-        prog = h1_client.parse_programme(raw, self._raw_scope())
-        assert prog.allows_automated_scanning is False
-
-    def test_allows_automated_scanning_false_when_scanning_prohibited_phrase(self, h1_client):
-        raw = self._raw_programme()
-        raw["attributes"]["policy"] = "Automated scanning prohibited on all assets."
-        prog = h1_client.parse_programme(raw, self._raw_scope())
-        assert prog.allows_automated_scanning is False
-
-    def test_allows_automated_scanning_false_when_no_scanners_phrase(self, h1_client):
-        raw = self._raw_programme()
-        raw["attributes"]["policy"] = "No scanners or automated tools may be used."
-        prog = h1_client.parse_programme(raw, self._raw_scope())
-        assert prog.allows_automated_scanning is False
+    def test_no_automated_scanning_shortcut_field(self, h1_client):
+        # The PM reads policy_text directly; the boolean shortcut was removed
+        # because the keyword heuristic missed real prohibitions.
+        prog = h1_client.parse_programme(self._raw_programme(), self._raw_scope())
+        assert not hasattr(prog, "allows_automated_scanning")
 
     def test_in_scope_items_parsed(self, h1_client):
         prog = h1_client.parse_programme(self._raw_programme(), self._raw_scope(eligible=True))
@@ -302,6 +290,103 @@ class TestListProgrammes:
 
         assert result == {"data": []}
         assert "/hackers/programs/acme/structured_scopes" in mock_get.call_args[0][0]
+
+    def test_get_programme_detail_uses_include_params(self, h1_client):
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"data": {}, "included": []}
+        mock_response.raise_for_status = MagicMock()
+
+        with patch.object(h1_client._session, "get", return_value=mock_response) as mock_get:
+            h1_client.get_programme_detail("acme")
+
+        assert "/hackers/programs/acme" in mock_get.call_args[0][0]
+        params = mock_get.call_args[1]["params"]
+        assert params == {"include": "bounty_table,structured_scopes"}
+
+
+class TestFindProgrammes:
+    """find_programmes batches list + detail and filters early."""
+
+    def _list_resp(self, programmes):
+        return {
+            "data": [
+                {
+                    "id": handle,
+                    "attributes": {
+                        "handle": handle,
+                        "offers_bounties": offers,
+                        "submission_state": state,
+                    },
+                }
+                for handle, offers, state in programmes
+            ],
+            "links": {},
+        }
+
+    def _detail_resp(self, handle):
+        return {
+            "data": {
+                "attributes": {
+                    "handle": handle,
+                    "name": handle.upper(),
+                    "policy": "We allow automated scanning.",
+                    "bounty_table": {"data": []},
+                }
+            },
+            "included": [],
+        }
+
+    def test_returns_one_programme_per_handle(self, h1_client):
+        list_payload = self._list_resp([("acme", True, "open"), ("beta", True, "open")])
+        responses = [list_payload, self._detail_resp("acme"), self._detail_resp("beta")]
+        with patch.object(h1_client, "_get", side_effect=responses):
+            programmes = h1_client.find_programmes()
+        assert [p.handle for p in programmes] == ["acme", "beta"]
+
+    def test_filters_out_vdp_when_bounty_only(self, h1_client):
+        list_payload = self._list_resp([("acme", True, "open"), ("vdp", False, "open")])
+        # Only acme should trigger a detail fetch
+        responses = [list_payload, self._detail_resp("acme")]
+        with patch.object(h1_client, "_get", side_effect=responses) as m:
+            programmes = h1_client.find_programmes(bounty_only=True)
+        assert [p.handle for p in programmes] == ["acme"]
+        # 1 list call + 1 detail call = 2 total
+        assert m.call_count == 2
+
+    def test_filters_out_closed_when_open_only(self, h1_client):
+        list_payload = self._list_resp([("acme", True, "open"), ("closed", True, "disabled")])
+        responses = [list_payload, self._detail_resp("acme")]
+        with patch.object(h1_client, "_get", side_effect=responses) as m:
+            programmes = h1_client.find_programmes(open_only=True)
+        assert [p.handle for p in programmes] == ["acme"]
+        assert m.call_count == 2
+
+    def test_includes_structured_scope_from_detail(self, h1_client):
+        detail = {
+            "data": {
+                "attributes": {
+                    "handle": "acme",
+                    "name": "Acme",
+                    "policy": "Allowed.",
+                    "bounty_table": {"data": []},
+                }
+            },
+            "included": [
+                {
+                    "type": "structured-scope",
+                    "attributes": {
+                        "asset_identifier": "*.acme.com",
+                        "asset_type": "WILDCARD",
+                        "eligible_for_bounty": True,
+                        "eligible_for_submission": True,
+                    },
+                }
+            ],
+        }
+        list_payload = self._list_resp([("acme", True, "open")])
+        with patch.object(h1_client, "_get", side_effect=[list_payload, detail]):
+            programmes = h1_client.find_programmes()
+        assert programmes[0].in_scope[0].asset_identifier == "*.acme.com"
 
 
 class TestGetProgrammeStats:

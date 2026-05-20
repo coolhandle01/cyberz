@@ -1,5 +1,6 @@
-Query the HackerOne API to retrieve available bug bounty programmes.
-For each programme, fetch its structured scope, policy, and stats.
+Call find_programmes_tool once. It returns every accessible programme
+fully hydrated with structured scope, bounty table, response stats, and
+policy text - no second per-programme lookups needed.
 
 Step 1 - Hard filters (discard immediately, do not score):
   - offers_bounties is false (VDP - no payment)
@@ -21,8 +22,12 @@ Step 3 - Score remaining candidates on:
   3. Programme financial health (weight: 20%)
      total_bounties_paid_usd signals an active, well-funded programme.
   4. Response efficiency and speed (weight: 20%)
-     response_efficiency_pct and avg_time_to_bounty_days combined.
-     A programme that ignores reports for months scores poorly here.
+     response_efficiency_pct, avg_time_to_first_response_days, and
+     avg_time_to_bounty_days combined. A programme that ignores reports
+     for months scores poorly here. triage_active=true is a strong
+     positive signal.
 
 Select the single highest-scoring programme that passed all filters.
+Call save_programme_tool with the chosen handle to record the selection
+and create the run directory the downstream agents will write into.
 Document your policy reading and scoring in selection_rationale.

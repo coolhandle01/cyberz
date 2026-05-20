@@ -79,9 +79,9 @@ scenarios("programme_manager.feature")
     target_fixture="h1_programmes",
 )
 def h1_programmes(programme):
-    allowed = programme.model_copy(update={"allows_automated_scanning": True})
-    blocked = programme.model_copy(update={"allows_automated_scanning": False, "handle": "blocked"})
-    return [allowed, blocked]
+    open_pgm = programme.model_copy(update={"accepts_new_reports": True})
+    closed = programme.model_copy(update={"accepts_new_reports": False, "handle": "closed"})
+    return [open_pgm, closed]
 ```
 
 Use `target_fixture` on `@given` and `@when` steps to name the fixture the step produces; downstream steps receive those fixtures by parameter name.
