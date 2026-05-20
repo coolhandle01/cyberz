@@ -3,6 +3,7 @@
 import json
 from collections.abc import Callable
 from pathlib import Path
+from typing import Protocol, cast
 
 from crewai.tools import tool
 
@@ -61,16 +62,24 @@ from tools.recon.query import recon_endpoints, recon_open_ports, recon_subdomain
 _PentestFn = Callable[..., list[dict]]
 
 
-def pentest_tool(name: str, *, check_fn: object = None) -> Callable[[_PentestFn], _PentestFn]:
+class _PentestTool(Protocol):
+    """Runtime shape of a CrewAI @tool: callable that also exposes .func."""
+
+    func: _PentestFn
+
+    def __call__(self, *args: object, **kwargs: object) -> list[dict]: ...
+
+
+def pentest_tool(name: str, *, check_fn: object = None) -> Callable[[_PentestFn], _PentestTool]:
     """Drop-in replacement for @tool that auto-appends OWASP categories from check_fn."""
 
-    def decorator(fn: _PentestFn) -> _PentestFn:
+    def decorator(fn: _PentestFn) -> _PentestTool:
         if check_fn is not None:
             cats = getattr(check_fn, "owasp_categories", ())
             if cats:
                 lines = "\n".join(f"  - {c}" for c in cats)
                 fn.__doc__ = (fn.__doc__ or "").rstrip() + f"\n\nOWASP Top 10:\n{lines}\n"
-        return tool(name)(fn)  # type: ignore[return-value]
+        return cast(_PentestTool, tool(name)(fn))
 
     return decorator
 

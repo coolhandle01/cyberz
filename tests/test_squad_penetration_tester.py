@@ -28,7 +28,7 @@ class TestPenetrationTesterTools:
             "squad.penetration_tester.run_nuclei",
             return_value=[raw_finding_low],
         ):
-            result = nuclei_scan_tool.func(endpoints_json, '["wordpress"]')  # type: ignore[attr-defined]
+            result = nuclei_scan_tool.func(endpoints_json, '["wordpress"]')
 
         assert result == [raw_finding_low.model_dump()]
 
@@ -40,7 +40,7 @@ class TestPenetrationTesterTools:
             "squad.penetration_tester.run_sqlmap",
             return_value=[raw_finding_low],
         ):
-            result = sqlmap_tool.func(endpoints_json)  # type: ignore[attr-defined]
+            result = sqlmap_tool.func(endpoints_json)
 
         assert result == [raw_finding_low.model_dump()]
 
@@ -57,7 +57,7 @@ class TestPenetrationTesterTools:
                 return_value=[raw_finding_low],
             ),
         ):
-            result = cookie_check_tool.func("recon.json")  # type: ignore[attr-defined]
+            result = cookie_check_tool.func("recon.json")
 
         assert result == [raw_finding_low.model_dump()]
         mhttp.assert_called_once_with(recon_result.programme.handle)
@@ -75,7 +75,7 @@ class TestPenetrationTesterTools:
                 return_value=[raw_finding_low],
             ),
         ):
-            result = cors_check_tool.func("recon.json")  # type: ignore[attr-defined]
+            result = cors_check_tool.func("recon.json")
 
         assert result == [raw_finding_low.model_dump()]
 
@@ -92,7 +92,7 @@ class TestPenetrationTesterTools:
                 return_value=[raw_finding_low],
             ),
         ):
-            result = csrf_check_tool.func("recon.json")  # type: ignore[attr-defined]
+            result = csrf_check_tool.func("recon.json")
 
         assert result == [raw_finding_low.model_dump()]
 
@@ -104,7 +104,7 @@ class TestPenetrationTesterTools:
             "squad.penetration_tester.check_ssrf",
             return_value=[raw_finding_low],
         ):
-            result = ssrf_probe_tool.func(endpoints_json, None)  # type: ignore[attr-defined]
+            result = ssrf_probe_tool.func(endpoints_json, None)
 
         assert result == [raw_finding_low.model_dump()]
 
@@ -121,7 +121,7 @@ class TestPenetrationTesterTools:
                 return_value=[raw_finding_low],
             ),
         ):
-            result = header_injection_tool.func("recon.json")  # type: ignore[attr-defined]
+            result = header_injection_tool.func("recon.json")
 
         assert result == [raw_finding_low.model_dump()]
 
@@ -138,7 +138,7 @@ class TestPenetrationTesterTools:
                 return_value=[raw_finding_low],
             ),
         ):
-            result = host_header_tool.func("recon.json")  # type: ignore[attr-defined]
+            result = host_header_tool.func("recon.json")
 
         assert result == [raw_finding_low.model_dump()]
 
