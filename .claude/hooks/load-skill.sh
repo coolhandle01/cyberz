@@ -71,6 +71,9 @@ case "$file_path" in
     */crew.py)
         emit_skill cybersquad-agent-llm
         ;;
+    */squad/__init__.py|*/squad/workspace_tools.py|*/squad/*/__init__.py)
+        emit_skill cybersquad-tool
+        ;;
 esac
 
 exit 0

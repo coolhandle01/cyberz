@@ -87,6 +87,8 @@ os.getenv("FOO", "/tmp/bar")  # nosec B108  # noqa: S108 - intentional dev defau
 result = something_dangerous()  # nosec
 ```
 
+The flip side: when you encounter a suppression in unfamiliar code, the suppressions are the codebase telling you where the load-bearing assumptions live. The one-line `why` is the original author handing you context the type system or scanner could not encode - read it before you change anything that depends on it.
+
 ### Pylint says split, not suppress
 
 Pylint is scoped (see `[tool.pylint]` in `pyproject.toml`) to the design rules that fire when a module, function, or class outgrows its single responsibility. When it fails on code you edited, split the unit - pull a cohesive piece into its own module, extract a helper. Suppression (`# pylint: disable=...`) is reserved for cases where the unit genuinely is one thing; same grammar as other suppressions, one-line comment explaining why.
