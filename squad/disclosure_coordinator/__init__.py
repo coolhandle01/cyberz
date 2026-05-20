@@ -6,7 +6,7 @@ from pathlib import Path
 
 from crewai.tools import tool
 
-from squad import SquadMember
+from squad import SquadMember, read_run_file_tool, read_run_filelist_tool
 from tools import http
 from tools.h1_api import h1
 from tools.report_tools import save_report
@@ -48,6 +48,11 @@ def check_duplicate_tool(programme_handle: str, title: str) -> list[dict]:
 MEMBER = SquadMember(
     slug="disclosure_coordinator",
     dir=Path(__file__).parent,
-    tools=[submit_report_tool, check_duplicate_tool],
+    tools=[
+        submit_report_tool,
+        check_duplicate_tool,
+        read_run_filelist_tool,
+        read_run_file_tool,
+    ],
     task="Disclosure",
 )

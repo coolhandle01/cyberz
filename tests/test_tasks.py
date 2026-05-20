@@ -51,7 +51,7 @@ class _FakeTask:
 class TestSquadMemberRead:
     def test_all_members_load_prose(self) -> None:
         for member in _ALL_MEMBERS:
-            for name in ("role", "goal", "backstory", "description", "expected_output"):
+            for name in ("role", "goal", "backstory"):
                 value = member.read(name)
                 assert value, f"{member.slug}/{name}.md is empty"
                 assert "---" not in value, f"{member.slug}/{name}.md still contains '---'"
@@ -74,10 +74,10 @@ class TestBuildTasks:
         ]
         return {role: MagicMock(name=role) for role in roles}
 
-    def test_returns_six_tasks_in_order(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_returns_seven_tasks_in_order(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(squad, "Task", _FakeTask)
         tasks = build_tasks(self._agents())
-        assert len(tasks) == 6
+        assert len(tasks) == 7
 
     def test_each_task_has_description_and_output(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(squad, "Task", _FakeTask)
@@ -89,10 +89,11 @@ class TestBuildTasks:
     def test_context_chaining_wired(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(squad, "Task", _FakeTask)
         tasks = build_tasks(self._agents())
-        select, recon, pentest, triage, write, submit = tasks
+        select, recon, research, pentest, triage, write, submit = tasks
         assert recon.context == [select]
-        assert pentest.context == [recon]
-        assert triage.context == [pentest, recon, select]
+        assert research.context == [recon, select]
+        assert pentest.context == [research, recon, select]
+        assert triage.context == [pentest, select]
         assert write.context == [triage, select]
         assert submit.context == [write]
 

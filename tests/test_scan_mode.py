@@ -102,12 +102,10 @@ class TestScanMode:
 
 
 class TestAdaptiveSleep:
-    def test_sleeps_for_given_delay(self, monkeypatch):
-        import importlib
-
+    def test_sleeps_for_given_delay(self, monkeypatch, reload_module):
         import config as cfg_module
 
-        importlib.reload(cfg_module)
+        reload_module(cfg_module)
         from tools._helpers import adaptive_sleep
 
         with patch("time.sleep") as mock_sleep:
@@ -130,14 +128,12 @@ class TestAdaptiveSleep:
             new_delay = adaptive_sleep(50.0, 429)
         assert new_delay == 60.0
 
-    def test_200_recovers_elevated_delay(self, monkeypatch):
+    def test_200_recovers_elevated_delay(self, monkeypatch, reload_module):
         monkeypatch.delenv("SCAN_MODE", raising=False)
         monkeypatch.setenv("SCAN_DELAY", "0.5")
-        import importlib
-
         import config as cfg_module
 
-        importlib.reload(cfg_module)
+        reload_module(cfg_module)
         from tools._helpers import adaptive_sleep
 
         with patch("time.sleep"):
@@ -145,26 +141,22 @@ class TestAdaptiveSleep:
         # should recover towards base (0.5) by 10%
         assert new_delay == pytest.approx(9.0, rel=0.01)
 
-    def test_200_at_base_delay_stays_constant(self, monkeypatch):
+    def test_200_at_base_delay_stays_constant(self, monkeypatch, reload_module):
         monkeypatch.setenv("SCAN_DELAY", "0.5")
-        import importlib
-
         import config as cfg_module
 
-        importlib.reload(cfg_module)
+        reload_module(cfg_module)
         from tools._helpers import adaptive_sleep
 
         with patch("time.sleep"):
             new_delay = adaptive_sleep(0.5, 200)
         assert new_delay == 0.5
 
-    def test_recovery_does_not_go_below_base(self, monkeypatch):
+    def test_recovery_does_not_go_below_base(self, monkeypatch, reload_module):
         monkeypatch.setenv("SCAN_DELAY", "0.5")
-        import importlib
-
         import config as cfg_module
 
-        importlib.reload(cfg_module)
+        reload_module(cfg_module)
         from tools._helpers import adaptive_sleep
 
         # elevated by only a hair above base
