@@ -96,9 +96,29 @@ Cross-agent intent matters: this skill applies to every agent's `@tool` wrappers
 
 ## Upstream alignment
 
-CrewAI's [crewAIInc/skills](https://github.com/crewAIInc/skills) repository publishes three skills today: `getting-started`, `design-agent`, `design-task`. None of them cover `@tool` conventions at the project level; the closest upstream document is [`design-agent/references/custom-tools.md`](https://github.com/crewAIInc/skills/blob/main/skills/design-agent/references/custom-tools.md), which covers `@tool` vs `BaseTool` decoration mechanics. This skill is a project layer on top of those mechanics, not a replacement.
+CrewAI's [crewAIInc/skills](https://github.com/crewAIInc/skills) repository publishes three skills today: `getting-started`, `design-agent`, `design-task`. None covers tool conventions at the project level; the closest upstream document is [`design-agent/references/custom-tools.md`](https://github.com/crewAIInc/skills/blob/main/skills/design-agent/references/custom-tools.md), which covers `@tool` vs `BaseTool` mechanics.
 
-Two relationship points to know:
+This skill *deliberately diverges* from upstream in two places. Being honest about that matters more than pretending compatibility.
 
-- **"Return pydantic" vs upstream "return strings".** Upstream advises tool functions return strings because the LLM sees text. CrewAI serialises any return value to JSON for the LLM, so a pydantic-model return delivers the same text to the LLM *and* preserves the schema at the Python level (downstream code calling `tool.func(...)` directly gets a typed model; `mypy` can verify wiring; the contract test in #139 has something to introspect). Returning `dict` keeps the LLM side and strips the Python side.
-- **`@tool` vs `BaseTool`.** This skill assumes `@tool` because that is what cybersquad uses today. If you reach for `BaseTool` (when you need `args_schema`, async via `_arun`, or per-tool state), defer to the upstream reference for mechanics - the pydantic-return rule still applies.
+### Divergence 1: structured returns from tools (chosen)
+
+Upstream's architectural take is that structured data belongs on the *task* (`output_pydantic` / `output_json`), and tools just return text-fodder for the LLM's reasoning. We put pydantic on tools because:
+
+- The #139 contract test needs introspectable return annotations to enforce the rule.
+- Tests call `tool.func(...)` directly and want a typed return.
+- `mypy` verifies cross-tool wiring (e.g. that `read_attack_plan_tool` actually returns what `Finalise Research` wrote).
+- Probe tools return small, structured `RawFinding` lists - flattening them to text loses the structure agents reason over.
+
+Wire-format equivalence: CrewAI serialises any return value to JSON-text for the LLM, so the agent sees the same text upstream wants *and* we get the Python-side discipline upstream does not.
+
+### Divergence 2: inter-agent handoff via workspace files (forced)
+
+Upstream's task model expects the next task to receive the previous task's structured output via `context=`. Cybersquad uses workspace files instead: a typed `finalise_X` writes the artefact, the task's textual output is the filename, the next agent uses a typed `load_X` reader.
+
+This divergence is forced, not chosen. ReconResult artefacts are routinely ~115KB / ~30K tokens (Cloudflare runs); threading every downstream `context=` through that would torch the LLM window. Workspace files + typed slicers (`Recon Endpoints`, `Recon Open Ports`, `Recon Subdomains`) let agents pull narrow views on demand without loading the whole artefact.
+
+The hybrid we have not adopted yet: small inter-task briefings (e.g. VR's freeform paragraph for PT) could move to `output_pydantic=AttackBriefing` while the large typed artefact stays in the workspace. Worth its own conversation; not in scope for this skill.
+
+### When to revisit
+
+If you find yourself wanting to relax either rule - "this tool's return is small, can it be a string?", "this task's handoff is small, can it use `output_pydantic`?" - re-derive from first principles rather than appealing to the rule. The divergences are intentional but not load-bearing forever.
