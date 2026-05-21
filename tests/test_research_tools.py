@@ -18,6 +18,7 @@ from models.attack import AttackPlan, AttackPlanFinalisationError
 from tools.research_tools import (
     attack_plan_path,
     finalise_research,
+    load_attack_plan,
     validate_attack_plan,
 )
 
@@ -129,3 +130,21 @@ class TestAttackPlanPath:
     def test_returns_attack_plan_json_under_run_dir(self, tmp_path, monkeypatch):
         monkeypatch.setattr("tools.research_tools.runtime.run_dir", lambda: tmp_path)
         assert attack_plan_path() == tmp_path / "attack_plan.json"
+
+
+# Loading
+
+
+class TestLoadAttackPlan:
+    def test_round_trips_a_persisted_plan(self, attack_plan, tmp_path, monkeypatch):
+        monkeypatch.setattr("tools.research_tools.runtime.run_dir", lambda: tmp_path)
+        path = finalise_research(attack_plan)
+        loaded = load_attack_plan(path)
+        assert isinstance(loaded, AttackPlan)
+        assert loaded.programme_handle == attack_plan.programme_handle
+        assert len(loaded.items) == len(attack_plan.items)
+        assert loaded.items[0].probe == attack_plan.items[0].probe
+
+    def test_raises_when_file_missing(self, tmp_path):
+        with pytest.raises(FileNotFoundError, match="attack plan not found"):
+            load_attack_plan(tmp_path / "attack_plan.json")

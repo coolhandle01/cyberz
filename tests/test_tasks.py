@@ -62,6 +62,21 @@ class TestSquadMemberRead:
             member.read("role")
 
 
+class TestAttackPlanWiring:
+    """The typed attack plan is the contract between VR research, PT, and VR
+    triage. Both consumers must expose Read Attack Plan."""
+
+    def test_penetration_tester_has_read_attack_plan_tool(self) -> None:
+        from squad import read_attack_plan_tool
+
+        assert read_attack_plan_tool in PENETRATION_TESTER.tools
+
+    def test_vulnerability_researcher_has_read_attack_plan_tool(self) -> None:
+        from squad import read_attack_plan_tool
+
+        assert read_attack_plan_tool in VULNERABILITY_RESEARCHER.tools
+
+
 class TestBuildTasks:
     def _agents(self) -> dict:
         roles = [
@@ -93,7 +108,7 @@ class TestBuildTasks:
         assert recon.context == [select]
         assert research.context == [recon, select]
         assert pentest.context == [research, recon, select]
-        assert triage.context == [pentest, select]
+        assert triage.context == [pentest, research, select]
         assert write.context == [triage, select]
         assert submit.context == [write]
 
