@@ -15,7 +15,7 @@ from tools.report_tools import save_report
 @tool("Submit Report")
 def submit_report_tool(report_json: str) -> dict:
     """Submit a serialised DisclosureReport to HackerOne."""
-    from models import DisclosureReport
+    from models.h1 import DisclosureReport
 
     report = DisclosureReport.model_validate_json(report_json)
     http.set_programme(report.programme_handle)

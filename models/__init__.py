@@ -1,7 +1,16 @@
 """
-models.py - Pydantic data models shared across the entire pipeline.
+models - Pydantic data models shared across the entire pipeline.
 
 Each model represents a discrete artefact that agents pass to one another.
+H1-specific shapes (programme catalog, scope, submission payloads) live in
+models.h1; everything else stays here until a similar size/concern split is
+warranted.
+
+Declaration order is tweaked from the natural pipeline order (recon ->
+findings -> report) so that the types models.h1 depends on (Severity,
+VerifiedVulnerability) are defined before the `from models.h1 import ...`
+line. Without this, h1 hits a partially-initialised package and the import
+fails.
 """
 
 from __future__ import annotations
@@ -22,67 +31,46 @@ class Severity(StrEnum):
     CRITICAL = "critical"
 
 
-class ScopeType(StrEnum):
-    URL = "url"
-    WILDCARD = "wildcard"
-    IP_ADDRESS = "ip_address"
-    CIDR = "cidr"
-    SOURCE_CODE = "source_code"
-    HARDWARE = "hardware"
-    DOWNLOADABLE_EXECUTABLES = "downloadable_executables"
-    GOOGLE_PLAY_APP_ID = "google_play_app_id"
-    APPLE_STORE_APP_ID = "apple_store_app_id"
-    WINDOWS_APP_STORE_APP_ID = "windows_app_store_app_id"
-    OTHER_APK = "other_apk"
-    OTHER_IPA = "other_ipa"
-    TESTFLIGHT = "testflight"
-    OTHER = "other"
+# Vulnerability findings (Penetration Tester -> Vulnerability Researcher)
+#
+# Defined ahead of the H1 import below because models.h1 needs
+# VerifiedVulnerability for DisclosureReport.vulnerability, and RawFinding is
+# referenced by ReconResult further down.
 
 
-class SubmissionStatus(StrEnum):
-    PENDING = "pending"
-    SUBMITTED = "submitted"
-    TRIAGED = "triaged"
-    RESOLVED = "resolved"
-    DUPLICATE = "duplicate"
-    NOT_APPLICABLE = "not_applicable"
-    INFORMATIVE = "informative"
+class RawFinding(BaseModel):
+    """An unverified potential vulnerability from automated tooling."""
+
+    title: str
+    vuln_class: str
+    target: str
+    evidence: str
+    tool: str
+    severity_hint: Severity = Severity.MEDIUM
 
 
-# Programme selection (Programme Manager -> everyone)
+class VerifiedVulnerability(BaseModel):
+    """A confirmed, in-scope vulnerability after Vulnerability Researcher triage."""
+
+    title: str
+    vuln_class: str
+    target: str
+    severity: Severity
+    cvss_score: float
+    cvss_vector: str
+    description: str
+    steps_to_reproduce: list[str]
+    evidence: str
+    impact: str
+    remediation: str
+    in_scope: bool = True
+    confirmed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
-class ScopeItem(BaseModel):
-    """A single in-scope or out-of-scope asset."""
-
-    asset_identifier: str
-    asset_type: ScopeType
-    eligible_for_bounty: bool = True
-    instruction: str | None = None
-    max_severity: Severity | None = None
-
-
-class Programme(BaseModel):
-    """A HackerOne bug bounty programme selected by the Programme Manager."""
-
-    handle: str
-    name: str
-    url: str
-    bounty_table: dict[Severity, int]
-    in_scope: list[ScopeItem]
-    out_of_scope: list[ScopeItem]
-    offers_bounties: bool = True
-    accepts_new_reports: bool = True
-    response_efficiency_pct: float | None = None
-    avg_time_to_bounty_days: float | None = None
-    avg_time_to_first_response_days: float | None = None
-    total_bounties_paid_usd: int | None = None
-    triage_active: bool | None = None
-    last_updated_at: datetime | None = None
-    policy_text: str = ""
-    priority_score: float = 0.0
-    selected_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-
+# H1 import - models.h1 imports Severity and VerifiedVulnerability from above;
+# Programme is referenced by ReconResult below as a pydantic field type, which
+# pydantic resolves against this module's globals at class-definition time.
+from models.h1 import Programme  # noqa: E402
 
 # Recon (OSINT Analyst -> Penetration Tester)
 
@@ -175,69 +163,6 @@ class ReconResult(BaseModel):
     # the OA's internal sweep.json; populated on the final recon.json.
     host_insights: list[HostInsight] = Field(default_factory=list)
     completed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-
-
-# Vulnerability findings (Penetration Tester -> Vulnerability Researcher)
-
-
-class RawFinding(BaseModel):
-    """An unverified potential vulnerability from automated tooling."""
-
-    title: str
-    vuln_class: str
-    target: str
-    evidence: str
-    tool: str
-    severity_hint: Severity = Severity.MEDIUM
-
-
-class VerifiedVulnerability(BaseModel):
-    """A confirmed, in-scope vulnerability after Vulnerability Researcher triage."""
-
-    title: str
-    vuln_class: str
-    target: str
-    severity: Severity
-    cvss_score: float
-    cvss_vector: str
-    description: str
-    steps_to_reproduce: list[str]
-    evidence: str
-    impact: str
-    remediation: str
-    in_scope: bool = True
-    confirmed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-
-
-# Report (Technical Author -> Disclosure Coordinator)
-
-
-class DisclosureReport(BaseModel):
-    """A complete, submission-ready vulnerability report in H1 format."""
-
-    programme_handle: str
-    title: str
-    vulnerability: VerifiedVulnerability
-    summary: str
-    body_markdown: str
-    weakness_id: int | None = None
-    structured_scope_id: str | None = None
-    impact_statement: str
-    attachments: list[str] = Field(default_factory=list)
-    authored_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-
-
-# Submission (Disclosure Coordinator)
-
-
-class SubmissionResult(BaseModel):
-    """Result of a HackerOne report submission."""
-
-    report_id: str | None = None
-    status: SubmissionStatus = SubmissionStatus.PENDING
-    h1_url: str | None = None
-    submitted_at: datetime | None = None
-    error: str | None = None
 
 
 # Operational metrics (emitted after every pipeline run)

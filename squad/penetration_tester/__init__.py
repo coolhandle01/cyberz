@@ -8,7 +8,12 @@ from typing import Protocol, cast
 from crewai.tools import tool
 
 from models import Endpoint, EndpointPage, ReconResult
-from squad import SquadMember, read_run_file_tool, read_run_filelist_tool
+from squad import (
+    SquadMember,
+    read_attack_plan_tool,
+    read_run_file_tool,
+    read_run_filelist_tool,
+)
 from tools import http
 from tools.cloud import (
     check_admin_panels,
@@ -1118,6 +1123,7 @@ MEMBER = SquadMember(
         recon_endpoints_tool,
         recon_open_ports_tool,
         save_findings_tool,
+        read_attack_plan_tool,
         read_run_filelist_tool,
         read_run_file_tool,
     ],

@@ -27,7 +27,11 @@ from typing import Any
 
 from crewai import Agent, Task
 
-from squad.workspace_tools import read_run_file_tool, read_run_filelist_tool
+from squad.workspace_tools import (
+    read_attack_plan_tool,
+    read_run_file_tool,
+    read_run_filelist_tool,
+)
 
 
 @dataclass(frozen=True)
@@ -85,6 +89,7 @@ __all__ = [
     "SquadMember",
     "build_agent",
     "build_task",
+    "read_attack_plan_tool",
     "read_run_filelist_tool",
     "read_run_file_tool",
 ]
