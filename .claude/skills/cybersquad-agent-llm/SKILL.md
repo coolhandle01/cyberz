@@ -39,3 +39,9 @@ If you change the default model in `config.py`, keep the `anthropic/` (or other 
 - Editing anything that imports `crewai.Agent`
 - Changing `config.llm.model`, `config.llm.temperature`, or `config.llm.max_tokens`
 - Writing a test that instantiates an `LLM` or `Agent`
+
+## Upstream alignment
+
+This skill is a narrow footgun overlay - the footgun is that `Agent(llm="bare-model-string")` silently drops `temperature` and `max_tokens`. The fix is mechanical.
+
+For general agent design (role-goal-backstory framework, when to use one vs many agents, `max_iter` / `max_rpm` tuning, `function_calling_llm` split for tool-call cost, code execution, planning configs with `reasoning_effort`, knowledge sources, agent guardrails), see [crewAIInc/skills `design-agent`](https://github.com/crewAIInc/skills/blob/main/skills/design-agent/SKILL.md). That is the canonical upstream best-practice; this skill complements it, does not replace it. If you are doing anything more than wiring the `LLM` instance, read upstream first.
