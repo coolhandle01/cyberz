@@ -94,7 +94,6 @@ def save_programme_tool(handle: str) -> str:
 
 
 MEMBER = SquadMember(
-    slug="programme_manager",
     dir=Path(__file__).parent,
     tools=[browse_programmes_tool, hydrate_programme_tool, save_programme_tool],
 )

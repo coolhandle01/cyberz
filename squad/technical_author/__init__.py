@@ -205,7 +205,6 @@ def finalise_reports_tool(
 
 
 MEMBER = SquadMember(
-    slug="technical_author",
     dir=Path(__file__).parent,
     tools=[
         draft_report_tool,

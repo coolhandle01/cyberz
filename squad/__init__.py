@@ -43,11 +43,20 @@ SQUAD_SKILLS_DIR = Path(__file__).parent / "skills"
 
 @dataclass(frozen=True)
 class SquadMember:
-    """A single Bounty Squad member: identity, tools, and prose location."""
+    """A single Bounty Squad member: identity, tools, and prose location.
 
-    slug: str
+    ``slug`` is derived from ``dir.name`` rather than stored separately - the
+    two were always required to match (the dir name is the package path on
+    disk) so the explicit field was just a place to introduce inconsistency.
+    """
+
     dir: Path
     tools: list[Any] = field(default_factory=list)
+
+    @property
+    def slug(self) -> str:
+        """Snake-case identifier (the on-disk package name)."""
+        return self.dir.name
 
     def read(self, *parts: str) -> str:
         """Read a markdown file under this member's directory.
