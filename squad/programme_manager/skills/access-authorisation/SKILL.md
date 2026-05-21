@@ -56,4 +56,4 @@ that contradicts the access assumption:
 
 Any such signal means reject the programme regardless of bounty,
 scope, or how permissive other policy language is. You are the gate.
-If you do not stop here, nothing further down the pipeline will.
+No other squad member will catch this if you miss it.

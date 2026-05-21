@@ -19,8 +19,7 @@ candidate the moment you hydrate it):
   Activate the access-authorisation skill. It carries the access
   signal, the state-field handling, the corroboration requirements for
   non-public programmes, and the contradicting-signal check. You are
-  the gate. If you do not stop here, nothing further down the pipeline
-  will.
+  the gate. No other squad member will catch this if you miss it.
 
 Step 1 - Survey:
 
