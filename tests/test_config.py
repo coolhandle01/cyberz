@@ -9,6 +9,29 @@ import pytest
 pytestmark = pytest.mark.unit
 
 
+class TestMemoryConfig:
+    def test_long_term_disabled_by_default(self, monkeypatch):
+        monkeypatch.delenv("CREWAI_MEMORY_LONG_TERM_ENABLED", raising=False)
+        from config import MemoryConfig
+
+        c = MemoryConfig()
+        assert c.long_term_enabled is False
+
+    def test_long_term_enabled_via_env(self, monkeypatch):
+        monkeypatch.setenv("CREWAI_MEMORY_LONG_TERM_ENABLED", "true")
+        from config import MemoryConfig
+
+        c = MemoryConfig()
+        assert c.long_term_enabled is True
+
+    def test_storage_path_default_is_project_scoped(self, monkeypatch):
+        monkeypatch.delenv("CREWAI_MEMORY_STORAGE", raising=False)
+        from config import MemoryConfig
+
+        c = MemoryConfig()
+        assert c.storage_path == ".cybersquad/memory"
+
+
 class TestH1Config:
     def test_reads_api_credentials_from_env(self, monkeypatch):
         monkeypatch.setenv("H1_API_USERNAME", "testuser")
@@ -56,6 +79,36 @@ class TestLLMConfig:
 
         c = LLMConfig()
         assert c.temperature == 0.7
+
+    def test_reasoning_enabled_default_on(self, monkeypatch):
+        monkeypatch.delenv("CREWAI_REASONING_ENABLED", raising=False)
+        monkeypatch.delenv("CREWAI_REASONING_EFFORT", raising=False)
+        from config import LLMConfig
+
+        c = LLMConfig()
+        assert c.reasoning_enabled is True
+        assert c.reasoning_effort == "medium"
+
+    def test_reasoning_disabled_via_env(self, monkeypatch):
+        monkeypatch.setenv("CREWAI_REASONING_ENABLED", "false")
+        from config import LLMConfig
+
+        c = LLMConfig()
+        assert c.reasoning_enabled is False
+
+    def test_reasoning_effort_override(self, monkeypatch):
+        monkeypatch.setenv("CREWAI_REASONING_EFFORT", "high")
+        from config import LLMConfig
+
+        c = LLMConfig()
+        assert c.reasoning_effort == "high"
+
+    def test_reasoning_effort_rejects_unknown_value(self, monkeypatch):
+        monkeypatch.setenv("CREWAI_REASONING_EFFORT", "extreme")
+        from config import LLMConfig
+
+        with pytest.raises(ValueError, match="CREWAI_REASONING_EFFORT must be one of"):
+            LLMConfig()
 
 
 class TestScanConfig:

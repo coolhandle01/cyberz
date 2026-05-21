@@ -334,7 +334,6 @@ def _load_programme(programme_handle: str | None) -> Programme:
 
 
 MEMBER = SquadMember(
-    slug="osint_analyst",
     dir=Path(__file__).parent,
     tools=[
         # Sweep

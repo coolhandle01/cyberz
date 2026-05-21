@@ -7,6 +7,21 @@ import os
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
+from typing import Literal, cast
+
+# crewai.LLM accepts reasoning_effort as one of these four strings (or None).
+# Mirroring the Literal here lets mypy verify the value end-to-end at the
+# LLM call site, instead of widening to str and casting later.
+ReasoningEffort = Literal["none", "low", "medium", "high"]
+_REASONING_EFFORT_VALUES: frozenset[str] = frozenset(("none", "low", "medium", "high"))
+
+
+def _read_reasoning_effort() -> ReasoningEffort:
+    raw = os.getenv("CREWAI_REASONING_EFFORT", "medium")
+    if raw not in _REASONING_EFFORT_VALUES:
+        valid = sorted(_REASONING_EFFORT_VALUES)
+        raise ValueError(f"CREWAI_REASONING_EFFORT must be one of {valid}; got {raw!r}")
+    return cast(ReasoningEffort, raw)
 
 
 class ScanMode(StrEnum):
@@ -44,6 +59,37 @@ class LLMConfig:
         default_factory=lambda: float(os.getenv("CREWAI_TEMPERATURE", "0.2"))
     )
     max_tokens: int = field(default_factory=lambda: int(os.getenv("CREWAI_MAX_TOKENS", "4096")))
+    # Extended thinking via litellm. CrewAI maps reasoning_effort -> the
+    # provider's native thinking budget; "none" disables, the others scale
+    # thinking tokens. Off via env by setting CREWAI_REASONING_ENABLED=false.
+    reasoning_enabled: bool = field(
+        default_factory=lambda: os.getenv("CREWAI_REASONING_ENABLED", "true").lower() == "true"
+    )
+    reasoning_effort: ReasoningEffort = field(default_factory=_read_reasoning_effort)
+
+
+@dataclass
+class MemoryConfig:
+    """CrewAI memory configuration.
+
+    Long-term memory persists task outcomes across pipeline runs so the squad
+    can learn (e.g. PM avoiding programmes the squad has recently exhausted,
+    DC tracking submission status post-handover). Off by default - flipping
+    it on requires an embedder, writes a LanceDB store to disk, and
+    introduces non-determinism into agent reasoning. Operator override is to
+    delete the storage path and set CREWAI_MEMORY_LONG_TERM_ENABLED=false.
+    """
+
+    long_term_enabled: bool = field(
+        default_factory=lambda: (
+            os.getenv("CREWAI_MEMORY_LONG_TERM_ENABLED", "false").lower() == "true"
+        )
+    )
+    # Project-scoped storage so different cybersquad checkouts do not bleed
+    # into each other (CrewAI's default is user-global at ~/.crewai/...).
+    storage_path: str = field(
+        default_factory=lambda: os.getenv("CREWAI_MEMORY_STORAGE", ".cybersquad/memory")
+    )
 
 
 @dataclass
@@ -150,6 +196,7 @@ class AppConfig:
 
     h1: H1Config = field(default_factory=H1Config)
     llm: LLMConfig = field(default_factory=LLMConfig)
+    memory: MemoryConfig = field(default_factory=MemoryConfig)
     recon: ReconConfig = field(default_factory=ReconConfig)
     scan: ScanConfig = field(default_factory=ScanConfig)
     # Operator contact email surfaced in the outbound User-Agent so SOC teams

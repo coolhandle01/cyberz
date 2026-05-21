@@ -16,29 +16,10 @@ The catalog tools:
 
 Step 0 - Access authorisation (operative invariant, applies to every
 candidate the moment you hydrate it):
-  browse_programmes_tool returns only programmes accessible to the
-  authenticated hacker. The HackerOne hacker API filters by account
-  authorisation, so appearance in the catalog is the necessary
-  precondition for any work the squad will perform. Treat that as
-  load-bearing.
-
-  Read the state field on each preview and again on each hydrated
-  programme:
-    - "public_mode" - publicly listed and openly accessible. Proceed.
-    - Anything else (e.g. "private_mode"), or missing - treat as non-public.
-      Appearance in the catalog is necessary but not sufficient; you also
-      require corroborating evidence of admission in the hydrated
-      programme (e.g. policy_text describing the invited researcher's
-      role, scope item instructions naming participating researchers).
-      Cannot find corroboration -> reject.
-
-  Independently, scan for any signal in the hydrated programme that
-  contradicts the access assumption - policy_text declaring the programme
-  private, invitation-only, confidential, or "do not share"; scope item
-  instructions describing out-of-band approval requirements; a programme
-  name explicitly marked confidential. Any such signal means reject the
-  programme regardless of bounty, scope, or policy permissiveness. You
-  are the gate, not a Python predicate downstream of you.
+  Activate the access-authorisation skill. It carries the access
+  signal, the state-field handling, the corroboration requirements for
+  non-public programmes, and the contradicting-signal check. You are
+  the gate. No other squad member will catch this if you miss it.
 
 Step 1 - Survey:
 
@@ -93,25 +74,15 @@ not score):
     fuzzing, brute force, or rate testing
   - Access authorisation fails per Step 0
 
-Step 4 - Policy review (read policy_text in full for each remaining
-candidate):
-  Read carefully. You are not looking for reasons to proceed - you are
-  looking for clear permission or clear silence. If the policy is
-  ambiguous about whether automated testing is allowed, discard the
-  programme. Note any per-asset restrictions in scope item instructions
-  as well.
+Step 4 - Policy review:
+  Activate the policy-reading-discipline skill and apply it to every
+  candidate that survived Step 3. Note any per-asset restrictions in
+  scope item instructions as well.
 
-Step 5 - Score remaining candidates on:
-  1. Maximum bounty for critical/high severity (weight: 40%)
-     Adjust downward for assets whose max_severity cap is below critical.
-  2. Attack surface breadth (weight: 20%)
-     Count in-scope URL and WILDCARD assets.
-  3. Programme financial health (weight: 20%)
-     total_bounties_paid_usd signals an active, well-funded programme.
-  4. Response efficiency and speed (weight: 20%)
-     response_efficiency_pct, avg_time_to_first_response_days, and
-     avg_time_to_bounty_days combined. A programme that ignores reports
-     for months scores poorly here.
+Step 5 - Score remaining candidates:
+  Activate the programme-selection-scoring skill. It carries the
+  four-factor weighted rubric, the cap adjustment for per-asset
+  max_severity, and the tiebreak rules.
 
 Select the single highest-scoring programme that passed all filters.
 Call save_programme_tool with the chosen handle to record the selection

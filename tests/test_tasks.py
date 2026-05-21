@@ -57,7 +57,7 @@ class TestSquadMemberRead:
                 assert "---" not in value, f"{member.slug}/{name}.md still contains '---'"
 
     def test_missing_file_raises(self, tmp_path) -> None:
-        member = SquadMember(slug="missing", dir=tmp_path, tools=[])
+        member = SquadMember(dir=tmp_path, tools=[])
         with pytest.raises(FileNotFoundError):
             member.read("role")
 
