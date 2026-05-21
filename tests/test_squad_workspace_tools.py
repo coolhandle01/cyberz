@@ -43,16 +43,17 @@ class TestSharedWorkspaceTools:
                 read_run_file_tool.func("../etc/passwd")
 
     def test_read_attack_plan_tool_returns_typed_plan(self, attack_plan, tmp_path) -> None:
+        from models.attack import AttackPlan
         from squad import read_attack_plan_tool
 
         (tmp_path / "attack_plan.json").write_text(attack_plan.model_dump_json(), encoding="utf-8")
         with patch("tools.research_tools.runtime.run_dir", return_value=tmp_path):
             result = read_attack_plan_tool.func()
-        assert isinstance(result, dict)
-        assert result["programme_handle"] == attack_plan.programme_handle
-        assert len(result["items"]) == len(attack_plan.items)
-        assert result["items"][0]["probe"] == attack_plan.items[0].probe
-        assert result["items"][0]["expected_ceiling"] == attack_plan.items[0].expected_ceiling.value
+        assert isinstance(result, AttackPlan)
+        assert result.programme_handle == attack_plan.programme_handle
+        assert len(result.items) == len(attack_plan.items)
+        assert result.items[0].probe == attack_plan.items[0].probe
+        assert result.items[0].expected_ceiling == attack_plan.items[0].expected_ceiling
 
     def test_read_attack_plan_tool_raises_when_missing(self, tmp_path) -> None:
         from squad import read_attack_plan_tool
