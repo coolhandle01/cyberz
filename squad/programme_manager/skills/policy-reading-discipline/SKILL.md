@@ -60,11 +60,3 @@ Read every shortlisted programme's per-asset instructions in addition
 to the top-level policy. A programme where the global policy is
 permissive but most assets have restrictive instructions is in
 practice a restrictive programme.
-
-## Recording the reading
-
-The `selection_rationale` must state, in 1-2 sentences, the policy
-posture of the selected programme - whether permission was explicit,
-silent-with-no-restrictions, or "policy permits X but per-asset
-instructions on Y override". A reviewer must be able to read the
-rationale and reproduce your reading without re-fetching the policy.

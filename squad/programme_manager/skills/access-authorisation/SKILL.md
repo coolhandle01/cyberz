@@ -57,14 +57,3 @@ that contradicts the access assumption:
 Any such signal means reject the programme regardless of bounty,
 scope, or how permissive other policy language is. You are the gate.
 If you do not stop here, nothing further down the pipeline will.
-
-## Recording the basis
-
-The selected programme's `authorisation_basis` (1-2 sentences) must:
-
-1. Cite the access signal (programme returned by
-   `browse_programmes_tool`, i.e. accessible to this hacker account).
-2. Name the value of `state` and how you handled it - public_mode
-   proceeds, non-public names the corroborating evidence of admission.
-3. Confirm `policy_text` contains no contradicting private /
-   invite-only / confidential restriction.

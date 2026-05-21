@@ -41,13 +41,3 @@ If two candidates land within 5 points, prefer:
   the squad spends less attention budget triaging out-of-scope noise.
 - The one with the more recent `last_updated_at` - active maintenance
   beats stale-but-historically-rich.
-
-## What the rationale must record
-
-`selection_rationale` is the audit trail. It must state, in order:
-- Survey filters passed to `browse_programmes_tool` and the total
-  preview count.
-- Shortlisted handles and why each was hydrated.
-- The factor scores for the winning programme and at least one
-  runner-up, so a reviewer can replay the decision.
-- The cap adjustment if any was applied.
