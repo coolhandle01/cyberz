@@ -79,6 +79,12 @@ case "$file_path" in
         ;;
 esac
 
+case "$file_path" in
+    */squad/skills/*/SKILL.md|*/squad/*/skills/*/SKILL.md)
+        matches+=(cybersquad-skill)
+        ;;
+esac
+
 [ "${#matches[@]}" -eq 0 ] && exit 0
 
 # Emit each matched skill once per session, joined into a single

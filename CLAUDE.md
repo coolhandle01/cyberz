@@ -18,23 +18,26 @@ Skills under `.claude/skills/` auto-load via a `PreToolUse` hook on `Write`/`Edi
 
 | Skill | Triggers on |
 |---|---|
-| `cybersquad-test-fixtures` | Any file under `tests/` (except the two below) |
+| `cybersquad-tool` | `squad/__init__.py`, `squad/workspace_tools.py`, `squad/<member>/__init__.py` |
 | `cybersquad-pentest-tool` | `tools/pentest/**` or `squad/penetration_tester/__init__.py` |
-| `cybersquad-bdd` | `tests/features/**` or `tests/bdd/**` |
 | `cybersquad-agent-llm` | `crew.py` |
+| `cybersquad-task` | `tasks.py` |
+| `cybersquad-skill` | `squad/skills/<name>/SKILL.md` or `squad/<member>/skills/<name>/SKILL.md` |
+| `cybersquad-test-fixtures` | Any file under `tests/` |
+| `cybersquad-bdd` | `tests/features/**` or `tests/bdd/**` |
 
 The hook is wired in `.claude/settings.json`; the matching logic lives in `.claude/hooks/load-skill.sh`. If a hook fails to fire in your session, run `/hooks` once (or restart) - the watcher only sees `.claude/settings.json` if it existed at session start. You can always also load a skill manually via the `Skill` tool.
 
 ### Runtime crew skills (CrewAI)
 
-Skills the CrewAI agents see at execution time live next to the squad packages and are loaded via `crewai.skills` (METADATA disclosure by default; the agent activates a skill to promote its body into the next system prompt).
+Skills the CrewAI agents see at execution time live next to the squad packages and are loaded via `crewai.skills`.
 
 | Layout | Loaded by | Visible to |
 |---|---|---|
 | `squad/skills/<name>/SKILL.md` | `Crew(skills=[SQUAD_SKILLS_DIR])` in `crew.py` | every agent |
 | `squad/<member>/skills/<name>/SKILL.md` | `Agent(skills=[member.skills_dir])` in `squad/__init__.py:build_agent` | that member only |
 
-Each skill is a directory containing a `SKILL.md` with frontmatter (`name`, `description`); the loader contract is the same one used by `skill-creator` upstream. Skills restate safety invariants enforced in code - they never relax them.
+Authoring conventions (audience, voice, METADATA/INSTRUCTIONS layering, common contributor-perspective leaks): see the `cybersquad-skill` contributor skill, which auto-loads on edits to either path.
 
 ## Required MCP
 
