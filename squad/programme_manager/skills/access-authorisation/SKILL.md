@@ -55,8 +55,8 @@ that contradicts the access assumption:
 - A programme name explicitly marked confidential.
 
 Any such signal means reject the programme regardless of bounty,
-scope, or how permissive other policy language is. You are the gate,
-not a Python predicate downstream of you.
+scope, or how permissive other policy language is. You are the gate.
+If you do not stop here, nothing further down the pipeline will.
 
 ## Recording the basis
 
