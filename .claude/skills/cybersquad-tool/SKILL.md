@@ -63,7 +63,7 @@ Any file an agent writes for the next agent to read needs both halves of the con
 | `finalise_research(plan)` -> `attack_plan.json` | `read_attack_plan_tool` -> `AttackPlan` |
 | `finalise_triage(...)` -> `verified.json` | (Technical Author's typed reader) |
 
-The reader returns the typed model; downstream agents work against the schema, not raw bytes. A writer landing without a typed reader is the bug PR #138 fixed - do not repeat it.
+The reader returns the typed model; downstream agents work against the schema, not raw bytes. A writer landing without a typed reader is the gap PR #138 addresses - do not repeat it.
 
 ## Where tools live
 
