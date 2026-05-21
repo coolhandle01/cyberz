@@ -12,7 +12,7 @@ Set CYBERSQUAD_HUMAN_INPUT=false to disable all gates for unattended runs.
 
 from __future__ import annotations
 
-from crewai import Task
+from crewai import Agent, Task
 
 from config import config
 from squad import build_task
@@ -24,7 +24,7 @@ from squad.technical_author import MEMBER as TECHNICAL_AUTHOR
 from squad.vulnerability_researcher import MEMBER as VULNERABILITY_RESEARCHER
 
 
-def build_tasks(agents: dict) -> list[Task]:
+def build_tasks(agents: dict[str, Agent]) -> list[Task]:
     hi = config.human_input
 
     select = build_task("select", PROGRAMME_MANAGER, agents["programme_manager"], human_input=hi)

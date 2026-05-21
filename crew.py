@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from crewai import LLM, Crew, Process
+from crewai import LLM, Agent, Crew, Process, Task
 from crewai.memory.memory import Memory
 
 from config import config
@@ -66,14 +66,14 @@ def build_crew(verbose: bool | None = None) -> Crew:
     """
     be_verbose = verbose if verbose is not None else config.verbose
 
-    llm = _build_llm()
-    agents = {m.slug: build_agent(m, llm, be_verbose) for m in _SQUAD}
-    tasks = build_tasks(agents)
-
-    memory = _build_long_term_memory()
+    llm: LLM = _build_llm()
+    agents_by_slug: dict[str, Agent] = {m.slug: build_agent(m, llm, be_verbose) for m in _SQUAD}
+    agents: list[Agent] = list(agents_by_slug.values())
+    tasks: list[Task] = build_tasks(agents_by_slug)
+    memory: Memory | None = _build_long_term_memory()
 
     return Crew(
-        agents=list(agents.values()),
+        agents=agents,
         tasks=tasks,
         process=Process.sequential,
         verbose=be_verbose,
