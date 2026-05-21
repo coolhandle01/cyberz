@@ -111,13 +111,17 @@ Upstream's architectural take is that structured data belongs on the *task* (`ou
 
 Wire-format equivalence: CrewAI serialises any return value to JSON-text for the LLM, so the agent sees the same text upstream wants *and* we get the Python-side discipline upstream does not.
 
-### Divergence 2: inter-agent handoff via workspace files (forced)
+### Divergence 2: inter-agent handoff via workspace files
 
-Upstream's task model expects the next task to receive the previous task's structured output via `context=`. Cybersquad uses workspace files instead: a typed `finalise_X` writes the artefact, the task's textual output is the filename, the next agent uses a typed `load_X` reader.
+A CrewAI task emits exactly one thing - the agent's text response, parked at `task.output.raw`. `output_pydantic` and `output_json` do not add a second channel; they constrain that text to JSON-shape and parse it for orchestration code. The next agent in the pipeline still receives raw text in its context (CrewAI's `aggregate_raw_outputs_from_tasks` joins `output.raw` from prior tasks with dividers), whether that text is freeform Markdown or schema-shaped JSON.
 
-This divergence is forced, not chosen. ReconResult artefacts are routinely ~115KB / ~30K tokens (Cloudflare runs); threading every downstream `context=` through that would torch the LLM window. Workspace files + typed slicers (`Recon Endpoints`, `Recon Open Ports`, `Recon Subdomains`) let agents pull narrow views on demand without loading the whole artefact.
+Two reasons we use workspace files for inter-agent structured data instead of `output_pydantic`:
 
-The hybrid we have not adopted yet: small inter-task briefings (e.g. VR's freeform paragraph for PT) could move to `output_pydantic=AttackBriefing` while the large typed artefact stays in the workspace. Worth its own conversation; not in scope for this skill.
+1. **Size (forced).** ReconResult artefacts run ~115KB / ~30K tokens on real targets. `output_pydantic=ReconResult` would put that JSON in every downstream `context=` and torch the LLM window. Workspace files + typed slicers (`Recon Endpoints`, `Recon Open Ports`, `Recon Subdomains`) let agents pull narrow views on demand.
+
+2. **The both-and (chosen).** With workspace files, the task's textual output is reasoning-narrative (a freeform briefing the next agent uses to orient) *and* the typed artefact is produced separately by a `Finalise X` tool call. We get narrative reasoning AND schema-enforced structure. `output_pydantic` collapses these into one - the agent must produce JSON-only output, and any reasoning prose it would naturally produce has to be suppressed via non-trivial prompt engineering. Many CrewAI users hit "agent said 'here is my analysis: { ... }' and the JSON parser broke."
+
+The pair pattern (typed `finalise_X` writer + typed `load_X` reader) is the wedge that makes this work. The task-side conventions live in the `cybersquad-task` skill.
 
 ### When to revisit
 

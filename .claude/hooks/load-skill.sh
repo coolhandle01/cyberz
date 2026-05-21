@@ -73,6 +73,12 @@ case "$file_path" in
         ;;
 esac
 
+case "$file_path" in
+    */tasks.py)
+        matches+=(cybersquad-task)
+        ;;
+esac
+
 [ "${#matches[@]}" -eq 0 ] && exit 0
 
 # Emit each matched skill once per session, joined into a single
