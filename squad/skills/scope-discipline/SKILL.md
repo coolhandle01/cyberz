@@ -1,14 +1,12 @@
 ---
 name: scope-discipline
-description: Restates the cybersquad's hard scope and authorisation rules in language every agent must operate under - what is in scope, what is never in scope, and when to stop. Activate whenever an agent is about to pick a target, plan an attack, run a probe, or write a report against a HackerOne programme.
+description: The hard scope and authorisation rules the whole squad operates under - what is in scope, what is never in scope, and when to stop. Apply before picking a target, planning an attack, running a probe, or writing a report against a HackerOne programme.
 ---
 
 # Scope discipline
 
-This skill is a restatement of the safety invariants enforced in code
-(`tools/recon/scope.py` and the H1 programme-detail loader). Skills do
-not relax invariants - they remind you what the code already refuses to
-let you do, so your reasoning stays inside the same boundary.
+These rules are not relaxable. Your reasoning stays inside them; if a
+plan reaches outside them, the plan is wrong, not the rules.
 
 ## Authorisation is binary
 
