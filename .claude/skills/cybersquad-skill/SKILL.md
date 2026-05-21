@@ -1,6 +1,6 @@
 ---
 name: cybersquad-skill
-description: How to write SKILL.md files under `squad/skills/` and `squad/<member>/skills/` for the CrewAI agent that will read them at runtime. Covers METADATA vs INSTRUCTIONS layers, audience (the agent, not you), voice (operational HackerOne vocabulary, second person), and the common contributor-perspective leaks - codebase paths, programming concepts, framework names, meta-commentary about enforcement code - that waste the agent's context or mislead it. Load before editing any SKILL.md under squad/.
+description: SKILL.md under squad/ is for the runtime CrewAI agent, not you. No codebase paths, no Python vocabulary, no framework meta. Load before editing.
 ---
 
 # Runtime crew skills
@@ -98,9 +98,18 @@ apply, even though this skill does not auto-load on those today.
 
 ## Upstream alignment
 
-SKILL.md frontmatter follows the `skill-creator` pattern (`name`,
-`description`, lowercase alphanumeric + hyphens). See
-[anthropics/skills `skill-creator`](https://github.com/anthropics/skills/blob/main/skills/skill-creator/SKILL.md)
-for the authoring contract. cybersquad runtime skills are
-progressive-disclosure markdown only; the `scripts/` layer is out of
-scope per #62.
+Frontmatter mechanics (`name`, `description`, lowercase alphanumeric
++ hyphens, description-as-trigger) follow Anthropic's `skill-creator`
+contract. See [anthropics/skills `skill-creator`](https://github.com/anthropics/skills/blob/main/skills/skill-creator/SKILL.md).
+
+For CrewAI's own framework on the prose layer the runtime SKILL.md
+complements - role-goal-backstory construction, task descriptions
+and expected outputs, agent capability tuning - see
+[crewAIInc/skills `design-agent`](https://github.com/crewAIInc/skills/blob/main/skills/design-agent/SKILL.md)
+and [`design-task`](https://github.com/crewAIInc/skills/blob/main/skills/design-task/SKILL.md).
+Those are the upstream canonicals. This skill is the cybersquad-
+specific overlay - the leaks named above are the ones we have
+actually shipped, not theoretical risks.
+
+cybersquad runtime skills are progressive-disclosure markdown only;
+the `scripts/` layer is out of scope per #62.
