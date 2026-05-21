@@ -7,6 +7,21 @@ import os
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
+from typing import Literal, cast
+
+# crewai.LLM accepts reasoning_effort as one of these four strings (or None).
+# Mirroring the Literal here lets mypy verify the value end-to-end at the
+# LLM call site, instead of widening to str and casting later.
+ReasoningEffort = Literal["none", "low", "medium", "high"]
+_REASONING_EFFORT_VALUES: frozenset[str] = frozenset(("none", "low", "medium", "high"))
+
+
+def _read_reasoning_effort() -> ReasoningEffort:
+    raw = os.getenv("CREWAI_REASONING_EFFORT", "medium")
+    if raw not in _REASONING_EFFORT_VALUES:
+        valid = sorted(_REASONING_EFFORT_VALUES)
+        raise ValueError(f"CREWAI_REASONING_EFFORT must be one of {valid}; got {raw!r}")
+    return cast(ReasoningEffort, raw)
 
 
 class ScanMode(StrEnum):
@@ -50,9 +65,7 @@ class LLMConfig:
     reasoning_enabled: bool = field(
         default_factory=lambda: os.getenv("CREWAI_REASONING_ENABLED", "true").lower() == "true"
     )
-    reasoning_effort: str = field(
-        default_factory=lambda: os.getenv("CREWAI_REASONING_EFFORT", "medium")
-    )
+    reasoning_effort: ReasoningEffort = field(default_factory=_read_reasoning_effort)
 
 
 @dataclass

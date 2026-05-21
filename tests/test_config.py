@@ -103,6 +103,13 @@ class TestLLMConfig:
         c = LLMConfig()
         assert c.reasoning_effort == "high"
 
+    def test_reasoning_effort_rejects_unknown_value(self, monkeypatch):
+        monkeypatch.setenv("CREWAI_REASONING_EFFORT", "extreme")
+        from config import LLMConfig
+
+        with pytest.raises(ValueError, match="CREWAI_REASONING_EFFORT must be one of"):
+            LLMConfig()
+
 
 class TestScanConfig:
     def test_defaults(self, monkeypatch):

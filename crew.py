@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from crewai import LLM, Agent, Crew, Process, Task
+from crewai.agents.agent_builder.base_agent import BaseAgent
 from crewai.memory.memory import Memory
 
 from config import config
@@ -32,15 +33,25 @@ _SQUAD: list[SquadMember] = [
 
 
 def _build_llm() -> LLM:
-    """Construct the squad LLM, honouring extended-thinking config."""
-    kwargs: dict[str, object] = {
-        "model": config.llm.model,
-        "temperature": config.llm.temperature,
-        "max_tokens": config.llm.max_tokens,
-    }
+    """Construct the squad LLM, honouring extended-thinking config.
+
+    Per the cybersquad-agent-llm skill, model / temperature / max_tokens
+    are passed explicitly. reasoning_effort is also passed explicitly when
+    enabled so litellm forwards Anthropic extended thinking; when disabled
+    we omit it so the default path is unchanged.
+    """
     if config.llm.reasoning_enabled:
-        kwargs["reasoning_effort"] = config.llm.reasoning_effort
-    return LLM(**kwargs)
+        return LLM(
+            model=config.llm.model,
+            temperature=config.llm.temperature,
+            max_tokens=config.llm.max_tokens,
+            reasoning_effort=config.llm.reasoning_effort,
+        )
+    return LLM(
+        model=config.llm.model,
+        temperature=config.llm.temperature,
+        max_tokens=config.llm.max_tokens,
+    )
 
 
 def _build_long_term_memory() -> Memory | None:
@@ -68,7 +79,9 @@ def build_crew(verbose: bool | None = None) -> Crew:
 
     llm: LLM = _build_llm()
     agents_by_slug: dict[str, Agent] = {m.slug: build_agent(m, llm, be_verbose) for m in _SQUAD}
-    agents: list[Agent] = list(agents_by_slug.values())
+    # Crew(agents=...) wants list[BaseAgent]; list[Agent] is invariant
+    # against it, so widen on construction.
+    agents: list[BaseAgent] = list(agents_by_slug.values())
     tasks: list[Task] = build_tasks(agents_by_slug)
     memory: Memory | None = _build_long_term_memory()
 
