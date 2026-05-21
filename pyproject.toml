@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Autonomous bug bounty pipeline powered by CrewAI"
 requires-python = ">=3.12"
 dependencies = [
-    "crewai[anthropic]>=0.80.0",
+    "crewai[anthropic]>=1.14.0",
     "crewai-tools>=0.15.0",
     "pydantic>=2.7.0",
     "requests>=2.32.0",

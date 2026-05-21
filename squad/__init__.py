@@ -16,6 +16,11 @@ has one subdir per task:
 
     research/description.md   triage/description.md
 
+Member-specialist skills live alongside the prose in a ``skills/`` subdirectory;
+each skill is its own folder containing a ``SKILL.md`` with frontmatter, per the
+crewai.skills loader contract. Squad-wide skills live at ``squad/skills/`` and
+are attached at Crew construction in crew.py.
+
 Assembly (LLM wiring, pipeline order, approval gates) lives in crew.py / tasks.py.
 """
 
@@ -32,6 +37,8 @@ from squad.workspace_tools import (
     read_run_file_tool,
     read_run_filelist_tool,
 )
+
+SQUAD_SKILLS_DIR = Path(__file__).parent / "skills"
 
 
 @dataclass(frozen=True)
@@ -50,14 +57,28 @@ class SquadMember:
         """
         return (self.dir.joinpath(*parts).with_suffix(".md")).read_text(encoding="utf-8").strip()
 
+    @property
+    def skills_dir(self) -> Path:
+        """Directory containing this member's specialist SKILL.md folders."""
+        return self.dir / "skills"
+
 
 def build_agent(member: SquadMember, llm: object, verbose: bool = False) -> Agent:
-    """Construct a CrewAI Agent from the member's role/goal/backstory files."""
+    """Construct a CrewAI Agent from the member's role/goal/backstory files.
+
+    Member-specialist skills are passed as a directory path; crewai.skills
+    discovers each ``SKILL.md`` subfolder and loads at METADATA disclosure
+    (frontmatter only) so the agent sees a cheap menu of what is available
+    and pays the body cost only on activation. Squad-wide skills are merged
+    in at Crew construction (crew.py) so they are discovered once per run.
+    """
+    skills: list[Path] = [member.skills_dir] if member.skills_dir.is_dir() else []
     return Agent(
         role=member.read("role"),
         goal=member.read("goal"),
         backstory=member.read("backstory"),
         tools=member.tools,
+        skills=skills,
         allow_delegation=False,
         llm=llm,
         verbose=verbose,

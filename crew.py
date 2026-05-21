@@ -9,7 +9,7 @@ from __future__ import annotations
 from crewai import LLM, Crew, Process
 
 from config import config
-from squad import SquadMember, build_agent
+from squad import SQUAD_SKILLS_DIR, SquadMember, build_agent
 from squad.disclosure_coordinator import MEMBER as DISCLOSURE_COORDINATOR
 from squad.osint_analyst import MEMBER as OSINT_ANALYST
 from squad.penetration_tester import MEMBER as PENETRATION_TESTER
@@ -53,4 +53,5 @@ def build_crew(verbose: bool | None = None) -> Crew:
         verbose=be_verbose,
         memory=False,
         embedder=None,
+        skills=[SQUAD_SKILLS_DIR] if SQUAD_SKILLS_DIR.is_dir() else None,
     )
