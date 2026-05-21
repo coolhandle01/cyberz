@@ -28,6 +28,38 @@ _SQUAD: list[SquadMember] = [
 ]
 
 
+def _build_llm() -> LLM:
+    """Construct the squad LLM, honouring extended-thinking config."""
+    kwargs: dict[str, object] = {
+        "model": config.llm.model,
+        "temperature": config.llm.temperature,
+        "max_tokens": config.llm.max_tokens,
+    }
+    if config.llm.reasoning_enabled:
+        kwargs["reasoning_effort"] = config.llm.reasoning_effort
+    return LLM(**kwargs)
+
+
+def _build_long_term_memory() -> object | None:
+    """Lazy-construct CrewAI long-term memory when enabled in config.
+
+    Returns the Memory instance to pass to ``Crew(memory=...)``, or None
+    when long-term memory is disabled (the default). Imports are local so
+    LanceDB / embedder dependencies are only touched when the operator
+    opts in.
+    """
+    if not config.memory.long_term_enabled:
+        return None
+    # pylint: disable=C0415  # lazy import: opt-in dependency surface
+    from pathlib import Path
+
+    from crewai.memory.memory import Memory
+
+    storage_path = Path(config.memory.storage_path)
+    storage_path.parent.mkdir(parents=True, exist_ok=True)
+    return Memory(storage="lancedb", root_scope="/long_term")
+
+
 def build_crew(verbose: bool | None = None) -> Crew:
     """
     Instantiate agents and tasks, then wire them into a sequential Crew.
@@ -38,20 +70,18 @@ def build_crew(verbose: bool | None = None) -> Crew:
     """
     be_verbose = verbose if verbose is not None else config.verbose
 
-    llm = LLM(
-        model=config.llm.model,
-        temperature=config.llm.temperature,
-        max_tokens=config.llm.max_tokens,
-    )
+    llm = _build_llm()
     agents = {m.slug: build_agent(m, llm, be_verbose) for m in _SQUAD}
     tasks = build_tasks(agents)
+
+    memory = _build_long_term_memory()
 
     return Crew(
         agents=list(agents.values()),
         tasks=tasks,
         process=Process.sequential,
         verbose=be_verbose,
-        memory=False,
+        memory=memory,
         embedder=None,
         skills=[SQUAD_SKILLS_DIR] if SQUAD_SKILLS_DIR.is_dir() else None,
     )

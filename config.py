@@ -44,6 +44,38 @@ class LLMConfig:
         default_factory=lambda: float(os.getenv("CREWAI_TEMPERATURE", "0.2"))
     )
     max_tokens: int = field(default_factory=lambda: int(os.getenv("CREWAI_MAX_TOKENS", "4096")))
+    # Extended thinking via litellm. CrewAI maps reasoning_effort -> the
+    # provider's native thinking budget; "none" disables, the others scale
+    # thinking tokens. Off via env by setting CREWAI_REASONING_ENABLED=false.
+    reasoning_enabled: bool = field(
+        default_factory=lambda: os.getenv("CREWAI_REASONING_ENABLED", "true").lower() == "true"
+    )
+    reasoning_effort: str = field(
+        default_factory=lambda: os.getenv("CREWAI_REASONING_EFFORT", "medium")
+    )
+
+
+@dataclass
+class MemoryConfig:
+    """CrewAI memory configuration.
+
+    Long-term memory persists task outcomes across pipeline runs so the squad
+    can learn (e.g. PM avoiding programmes the squad has recently exhausted,
+    DC tracking submission status post-handover). Off by default - flipping
+    it on requires an embedder, writes a LanceDB store to disk, and
+    introduces non-determinism into agent reasoning. Operator override is to
+    delete the storage path and set CREWAI_MEMORY_LONG_TERM_ENABLED=false.
+    """
+
+    long_term_enabled: bool = field(
+        default_factory=lambda: os.getenv("CREWAI_MEMORY_LONG_TERM_ENABLED", "false").lower()
+        == "true"
+    )
+    # Project-scoped storage so different cybersquad checkouts do not bleed
+    # into each other (CrewAI's default is user-global at ~/.crewai/...).
+    storage_path: str = field(
+        default_factory=lambda: os.getenv("CREWAI_MEMORY_STORAGE", ".cybersquad/memory")
+    )
 
 
 @dataclass
@@ -150,6 +182,7 @@ class AppConfig:
 
     h1: H1Config = field(default_factory=H1Config)
     llm: LLMConfig = field(default_factory=LLMConfig)
+    memory: MemoryConfig = field(default_factory=MemoryConfig)
     recon: ReconConfig = field(default_factory=ReconConfig)
     scan: ScanConfig = field(default_factory=ScanConfig)
     # Operator contact email surfaced in the outbound User-Agent so SOC teams
