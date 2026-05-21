@@ -68,7 +68,3 @@ The selected programme's `authorisation_basis` (1-2 sentences) must:
    proceeds, non-public names the corroborating evidence of admission.
 3. Confirm `policy_text` contains no contradicting private /
    invite-only / confidential restriction.
-
-A downstream agent reading `authorisation_basis` must be able to
-satisfy themselves the squad is authorised without re-hydrating the
-programme.
