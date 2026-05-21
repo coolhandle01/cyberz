@@ -6,6 +6,8 @@ Call build_crew() to get a fully wired crew, then crew.kickoff() to run it.
 
 from __future__ import annotations
 
+from typing import Any
+
 from crewai import LLM, Crew, Process
 
 from config import config
@@ -40,13 +42,14 @@ def _build_llm() -> LLM:
     return LLM(**kwargs)
 
 
-def _build_long_term_memory() -> object | None:
+def _build_long_term_memory() -> Any:  # noqa: ANN401  # crewai has no stubs yet
     """Lazy-construct CrewAI long-term memory when enabled in config.
 
     Returns the Memory instance to pass to ``Crew(memory=...)``, or None
     when long-term memory is disabled (the default). Imports are local so
     LanceDB / embedder dependencies are only touched when the operator
-    opts in.
+    opts in. Return type is ``Any`` because crewai does not publish stubs
+    yet - tighten when they do.
     """
     if not config.memory.long_term_enabled:
         return None

@@ -68,8 +68,9 @@ class MemoryConfig:
     """
 
     long_term_enabled: bool = field(
-        default_factory=lambda: os.getenv("CREWAI_MEMORY_LONG_TERM_ENABLED", "false").lower()
-        == "true"
+        default_factory=lambda: (
+            os.getenv("CREWAI_MEMORY_LONG_TERM_ENABLED", "false").lower() == "true"
+        )
     )
     # Project-scoped storage so different cybersquad checkouts do not bleed
     # into each other (CrewAI's default is user-global at ~/.crewai/...).

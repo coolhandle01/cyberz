@@ -9,30 +9,6 @@ import pytest
 pytestmark = pytest.mark.unit
 
 
-class TestLLMConfig:
-    def test_reasoning_enabled_default_on(self, monkeypatch):
-        monkeypatch.delenv("CREWAI_REASONING_ENABLED", raising=False)
-        from config import LLMConfig
-
-        c = LLMConfig()
-        assert c.reasoning_enabled is True
-        assert c.reasoning_effort == "medium"
-
-    def test_reasoning_disabled_via_env(self, monkeypatch):
-        monkeypatch.setenv("CREWAI_REASONING_ENABLED", "false")
-        from config import LLMConfig
-
-        c = LLMConfig()
-        assert c.reasoning_enabled is False
-
-    def test_reasoning_effort_override(self, monkeypatch):
-        monkeypatch.setenv("CREWAI_REASONING_EFFORT", "high")
-        from config import LLMConfig
-
-        c = LLMConfig()
-        assert c.reasoning_effort == "high"
-
-
 class TestMemoryConfig:
     def test_long_term_disabled_by_default(self, monkeypatch):
         monkeypatch.delenv("CREWAI_MEMORY_LONG_TERM_ENABLED", raising=False)
@@ -103,6 +79,29 @@ class TestLLMConfig:
 
         c = LLMConfig()
         assert c.temperature == 0.7
+
+    def test_reasoning_enabled_default_on(self, monkeypatch):
+        monkeypatch.delenv("CREWAI_REASONING_ENABLED", raising=False)
+        monkeypatch.delenv("CREWAI_REASONING_EFFORT", raising=False)
+        from config import LLMConfig
+
+        c = LLMConfig()
+        assert c.reasoning_enabled is True
+        assert c.reasoning_effort == "medium"
+
+    def test_reasoning_disabled_via_env(self, monkeypatch):
+        monkeypatch.setenv("CREWAI_REASONING_ENABLED", "false")
+        from config import LLMConfig
+
+        c = LLMConfig()
+        assert c.reasoning_enabled is False
+
+    def test_reasoning_effort_override(self, monkeypatch):
+        monkeypatch.setenv("CREWAI_REASONING_EFFORT", "high")
+        from config import LLMConfig
+
+        c = LLMConfig()
+        assert c.reasoning_effort == "high"
 
 
 class TestScanConfig:
