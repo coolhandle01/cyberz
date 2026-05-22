@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Protocol, cast
 
 from crewai.tools import tool
+from pydantic import BaseModel, Field
 
 from models import Endpoint, EndpointPage, OpenPortsMap, RawFinding, ReconResult
 from squad import (
@@ -79,8 +80,21 @@ class _PentestTool(CrewAITool, Protocol):
     def __call__(self, *args: object, **kwargs: object) -> list[RawFinding]: ...
 
 
-def pentest_tool(name: str, *, check_fn: object = None) -> Callable[[_PentestFn], _PentestTool]:
-    """Drop-in replacement for @tool that auto-appends OWASP categories from check_fn."""
+def pentest_tool(
+    name: str,
+    *,
+    check_fn: object = None,
+    args_schema: type[BaseModel],
+) -> Callable[[_PentestFn], _PentestTool]:
+    """Drop-in replacement for @tool that auto-appends OWASP categories from check_fn.
+
+    ``args_schema`` is the explicit Pydantic schema the agent sees when picking
+    the tool. Per #143 it is keyword-required: every pentest probe must declare
+    a hand-written schema because the inferred path cannot attach per-field
+    descriptions. The ``Tool.args_schema`` set by the underlying ``@tool``
+    decorator from the function signature is overwritten here with the
+    explicit class.
+    """
 
     def decorator(fn: _PentestFn) -> _PentestTool:
         if check_fn is not None:
@@ -88,7 +102,9 @@ def pentest_tool(name: str, *, check_fn: object = None) -> Callable[[_PentestFn]
             if cats:
                 lines = "\n".join(f"  - {c}" for c in cats)
                 fn.__doc__ = (fn.__doc__ or "").rstrip() + f"\n\nOWASP Top 10:\n{lines}\n"
-        return cast(_PentestTool, tool(name)(fn))
+        wrapped = tool(name)(fn)
+        wrapped.args_schema = args_schema
+        return cast(_PentestTool, wrapped)
 
     return decorator
 
@@ -124,7 +140,28 @@ def _recon_from_path(recon_path: str) -> ReconResult:
     return recon
 
 
-@pentest_tool("Nuclei Scan", check_fn=run_nuclei)
+class _NucleiScanArgs(BaseModel):
+    """Explicit args_schema for the Nuclei Scan tool (#143)."""
+
+    endpoints: list[Endpoint] = Field(
+        description=(
+            "Live endpoint objects to scan (status_code < 500). Pass the typed"
+            " list directly from recon; do not stringify."
+        ),
+    )
+    tech_tags: list[str] | None = Field(
+        default=None,
+        description=(
+            "Optional nuclei template tags to focus on, mapped from detected"
+            " technologies (e.g. ['wordpress', 'cve']). Omit or pass null to"
+            " run all templates. Common tags: wordpress, drupal, joomla,"
+            " apache, nginx, iis, spring, laravel, django, rails, php, cve,"
+            " exposure, misconfig."
+        ),
+    )
+
+
+@pentest_tool("Nuclei Scan", check_fn=run_nuclei, args_schema=_NucleiScanArgs)
 def nuclei_scan_tool(
     endpoints: list[Endpoint], tech_tags: list[str] | None = None
 ) -> list[RawFinding]:
@@ -148,7 +185,21 @@ def nuclei_scan_tool(
     return list(run_nuclei(_parse_endpoints(endpoints), tech_tags=tech_tags or None))
 
 
-@pentest_tool("SQLMap Injection Scan", check_fn=run_sqlmap)
+class _SqlmapArgs(BaseModel):
+    """Explicit args_schema for the SQLMap Injection Scan tool (#143)."""
+
+    endpoints: list[Endpoint] = Field(
+        description=(
+            "Parameterised endpoint objects to test for SQL injection. Pass"
+            " only endpoints whose ``parameters`` is non-empty AND where"
+            " injection is plausible (SQL errors observed, numeric/string"
+            " parameters in URLs or forms). Do not pass all endpoints"
+            " blindly - sqlmap is slow and loud."
+        ),
+    )
+
+
+@pentest_tool("SQLMap Injection Scan", check_fn=run_sqlmap, args_schema=_SqlmapArgs)
 def sqlmap_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
     """
     Run sqlmap against specific parameterised endpoints.
@@ -166,7 +217,18 @@ def sqlmap_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
     return list(run_sqlmap(_parse_endpoints(endpoints)))
 
 
-@pentest_tool("Cookie Security Check", check_fn=check_cookies)
+class _CookieCheckArgs(BaseModel):
+    """Explicit args_schema for the Cookie Security Check tool (#143)."""
+
+    recon_path: str = Field(
+        description=(
+            "Relative path to recon.json in the run directory. Cookies are"
+            " inspected across every host the OSINT Analyst recorded."
+        ),
+    )
+
+
+@pentest_tool("Cookie Security Check", check_fn=check_cookies, args_schema=_CookieCheckArgs)
 def cookie_check_tool(recon_path: str) -> list[RawFinding]:
     """
     Inspect Set-Cookie attributes across the recon surface for: missing
@@ -185,7 +247,22 @@ def cookie_check_tool(recon_path: str) -> list[RawFinding]:
     return list(check_cookies(recon.endpoints))
 
 
-@pentest_tool("CORS Misconfiguration Check", check_fn=check_cors_misconfiguration)
+class _CorsCheckArgs(BaseModel):
+    """Explicit args_schema for the CORS Misconfiguration Check tool (#143)."""
+
+    recon_path: str = Field(
+        description=(
+            "Relative path to recon.json in the run directory. CORS"
+            " misconfigurations are probed against every live endpoint."
+        ),
+    )
+
+
+@pentest_tool(
+    "CORS Misconfiguration Check",
+    check_fn=check_cors_misconfiguration,
+    args_schema=_CorsCheckArgs,
+)
 def cors_check_tool(recon_path: str) -> list[RawFinding]:
     """
     Check all live endpoints for CORS misconfigurations: origin reflection,
@@ -197,7 +274,18 @@ def cors_check_tool(recon_path: str) -> list[RawFinding]:
     return list(check_cors_misconfiguration(recon.endpoints))
 
 
-@pentest_tool("CSRF Detection", check_fn=check_csrf)
+class _CsrfCheckArgs(BaseModel):
+    """Explicit args_schema for the CSRF Detection tool (#143)."""
+
+    recon_path: str = Field(
+        description=(
+            "Relative path to recon.json in the run directory. CSRF probes"
+            " run against every HTML endpoint with a POST form."
+        ),
+    )
+
+
+@pentest_tool("CSRF Detection", check_fn=check_csrf, args_schema=_CsrfCheckArgs)
 def csrf_check_tool(recon_path: str) -> list[RawFinding]:
     """
     Detect CSRF vulnerabilities across HTML endpoints in the recon surface.
@@ -227,7 +315,28 @@ def csrf_check_tool(recon_path: str) -> list[RawFinding]:
     return list(check_csrf(recon.endpoints))
 
 
-@pentest_tool("SSRF Probe", check_fn=check_ssrf)
+class _SsrfArgs(BaseModel):
+    """Explicit args_schema for the SSRF Probe tool (#143)."""
+
+    endpoints: list[Endpoint] = Field(
+        description=(
+            "Endpoint objects whose parameters plausibly accept URLs,"
+            " hostnames, file paths, or resource identifiers (url=, path=,"
+            " file=, redirect=, src=). Skip endpoints without parameters."
+        ),
+    )
+    payloads: list[SsrfPayload] | None = Field(
+        default=None,
+        description=(
+            "Optional list of internal-address variants to try; omit or pass"
+            " null to try all. Pass ['aws-imds'] for an AWS-hosted target,"
+            " ['localhost-ipv4'] / ['localhost-ipv6'] for internal-service"
+            " reachability."
+        ),
+    )
+
+
+@pentest_tool("SSRF Probe", check_fn=check_ssrf, args_schema=_SsrfArgs)
 def ssrf_probe_tool(
     endpoints: list[Endpoint],
     payloads: list[SsrfPayload] | None = None,
@@ -250,7 +359,22 @@ def ssrf_probe_tool(
     return list(check_ssrf(_parse_endpoints(endpoints), payloads))
 
 
-@pentest_tool("Header Injection Check", check_fn=check_header_injection)
+class _HeaderInjectionArgs(BaseModel):
+    """Explicit args_schema for the Header Injection Check tool (#143)."""
+
+    recon_path: str = Field(
+        description=(
+            "Relative path to recon.json in the run directory. CRLF probes"
+            " run broadly against every endpoint."
+        ),
+    )
+
+
+@pentest_tool(
+    "Header Injection Check",
+    check_fn=check_header_injection,
+    args_schema=_HeaderInjectionArgs,
+)
 def header_injection_tool(recon_path: str) -> list[RawFinding]:
     """
     Check for CRLF injection via X-Forwarded-For and similar headers.
@@ -261,7 +385,23 @@ def header_injection_tool(recon_path: str) -> list[RawFinding]:
     return list(check_header_injection(recon.endpoints))
 
 
-@pentest_tool("Host Header Attack Check", check_fn=check_host_headers)
+class _HostHeaderArgs(BaseModel):
+    """Explicit args_schema for the Host Header Attack Check tool (#143)."""
+
+    recon_path: str = Field(
+        description=(
+            "Relative path to recon.json in the run directory. Host-header"
+            " reflection and X-Original-URL / X-Rewrite-URL overrides are"
+            " probed across every endpoint."
+        ),
+    )
+
+
+@pentest_tool(
+    "Host Header Attack Check",
+    check_fn=check_host_headers,
+    args_schema=_HostHeaderArgs,
+)
 def host_header_tool(recon_path: str) -> list[RawFinding]:
     """
     Test for Host header reflection (cache poisoning, password-reset poisoning)
@@ -272,7 +412,27 @@ def host_header_tool(recon_path: str) -> list[RawFinding]:
     return list(check_host_headers(recon.endpoints))
 
 
-@pentest_tool("Header XSS Probe", check_fn=check_header_xss)
+class _HeaderXssArgs(BaseModel):
+    """Explicit args_schema for the Header XSS Probe tool (#143)."""
+
+    endpoints: list[Endpoint] = Field(
+        description=(
+            "Live HTML-serving endpoint objects. Error pages and admin paths"
+            " are especially fruitful - they tend to echo request metadata"
+            " into the response body."
+        ),
+    )
+    header_names: list[XSSHeader] | None = Field(
+        default=None,
+        description=(
+            "Optional list of headers to probe; omit or pass null to test all"
+            " five. Narrow when recon evidence points to a specific header"
+            " (e.g. ['User-Agent', 'Referer'])."
+        ),
+    )
+
+
+@pentest_tool("Header XSS Probe", check_fn=check_header_xss, args_schema=_HeaderXssArgs)
 def header_xss_tool(
     endpoints: list[Endpoint],
     header_names: list[XSSHeader] | None = None,
@@ -306,7 +466,23 @@ def header_xss_tool(
     return list(check_header_xss(_parse_endpoints(endpoints), header_names))
 
 
-@pentest_tool("JS Source Map Scan", check_fn=check_js_source_maps)
+class _SourceMapsArgs(BaseModel):
+    """Explicit args_schema for the JS Source Map Scan tool (#143)."""
+
+    recon_path: str = Field(
+        description=(
+            "Relative path to recon.json in the run directory. Exposed"
+            " .js.map files are discovered across every HTML page that"
+            " loads JavaScript bundles."
+        ),
+    )
+
+
+@pentest_tool(
+    "JS Source Map Scan",
+    check_fn=check_js_source_maps,
+    args_schema=_SourceMapsArgs,
+)
 def source_maps_tool(recon_path: str) -> list[RawFinding]:
     """
     Discover exposed .js.map source map files and scan reconstructed source for
@@ -318,7 +494,34 @@ def source_maps_tool(recon_path: str) -> list[RawFinding]:
     return list(check_js_source_maps(recon.endpoints))
 
 
-@pentest_tool("Path Traversal Probe", check_fn=check_path_traversal)
+class _PathTraversalArgs(BaseModel):
+    """Explicit args_schema for the Path Traversal Probe tool (#143)."""
+
+    endpoints: list[Endpoint] = Field(
+        description=(
+            "Parameterised endpoint objects. Prioritise filesystem-shaped"
+            " parameter names (file, filename, path, page, template, include,"
+            " require, download, doc, image, img, src, view) and paths that"
+            " suggest file serving (/download, /view, /preview, /fetch,"
+            " /report, /export)."
+        ),
+    )
+    payloads: list[PathTraversalPayload] | None = Field(
+        default=None,
+        description=(
+            "Optional list of traversal encoding variants to try; omit or"
+            " pass null to try all. When the target OS is known, pass only"
+            " the matching set (e.g. ['unix-basic', 'unix-encoded'] for"
+            " Linux)."
+        ),
+    )
+
+
+@pentest_tool(
+    "Path Traversal Probe",
+    check_fn=check_path_traversal,
+    args_schema=_PathTraversalArgs,
+)
 def path_traversal_tool(
     endpoints: list[Endpoint],
     payloads: list[PathTraversalPayload] | None = None,
@@ -351,7 +554,25 @@ def path_traversal_tool(
     return list(check_path_traversal(_parse_endpoints(endpoints), payloads))
 
 
-@pentest_tool("HTTP Parameter Pollution Probe", check_fn=check_hpp)
+class _HppArgs(BaseModel):
+    """Explicit args_schema for the HTTP Parameter Pollution Probe tool (#143)."""
+
+    endpoints: list[Endpoint] = Field(
+        description=(
+            "Parameterised endpoint objects. Prioritise authorisation-shaped"
+            " parameter names (role, admin, is_admin, permission, group,"
+            " user_id), WAF-fronted endpoints, and auth or admin flows -"
+            " HPP is highest-impact as a WAF bypass or privilege flip"
+            " primitive."
+        ),
+    )
+
+
+@pentest_tool(
+    "HTTP Parameter Pollution Probe",
+    check_fn=check_hpp,
+    args_schema=_HppArgs,
+)
 def hpp_probe_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
     """
     Detect HTTP Parameter Pollution by sending a baseline request
@@ -379,7 +600,33 @@ def hpp_probe_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
     return list(check_hpp(_parse_endpoints(endpoints)))
 
 
-@pentest_tool("Server-Side Template Injection Probe", check_fn=check_ssti)
+class _SstiArgs(BaseModel):
+    """Explicit args_schema for the Server-Side Template Injection Probe tool (#143)."""
+
+    endpoints: list[Endpoint] = Field(
+        description=(
+            "Parameterised endpoint objects. Prioritise endpoints where the"
+            " parameter is rendered into HTML the response returns (search,"
+            " comment, preview, name, template parameters) and where the"
+            " stack is template-heavy (Flask/Jinja2, Django, Symfony/Twig,"
+            " Rails/ERB, Spring/FreeMarker)."
+        ),
+    )
+    payloads: list[SstiPayload] | None = Field(
+        default=None,
+        description=(
+            "Optional list of template-engine variants to try; omit or pass"
+            " null to try all. When the engine is known from recon, pass"
+            " only the matching engine (e.g. ['jinja2'] for a Flask target)."
+        ),
+    )
+
+
+@pentest_tool(
+    "Server-Side Template Injection Probe",
+    check_fn=check_ssti,
+    args_schema=_SstiArgs,
+)
 def ssti_probe_tool(
     endpoints: list[Endpoint],
     payloads: list[SstiPayload] | None = None,
@@ -412,7 +659,31 @@ def ssti_probe_tool(
     return list(check_ssti(_parse_endpoints(endpoints), payloads))
 
 
-@pentest_tool("Open Redirect Probe", check_fn=check_open_redirect)
+class _OpenRedirectArgs(BaseModel):
+    """Explicit args_schema for the Open Redirect Probe tool (#143)."""
+
+    endpoints: list[Endpoint] = Field(
+        description=(
+            "Parameterised endpoint objects. Prioritise redirect-shaped"
+            " parameter names (redirect, redirect_uri, return, return_to,"
+            " returnto, next, url, dest, destination, goto, target, link,"
+            " forward, continue, callback, rurl, r, u) and auth-flow paths"
+            " (/login, /logout, /signin, /oauth, /sso)."
+        ),
+    )
+    payloads: list[OpenRedirectPayload] | None = Field(
+        default=None,
+        description=(
+            "Optional list of redirect encoding variants to try; omit or pass null to try all."
+        ),
+    )
+
+
+@pentest_tool(
+    "Open Redirect Probe",
+    check_fn=check_open_redirect,
+    args_schema=_OpenRedirectArgs,
+)
 def open_redirect_tool(
     endpoints: list[Endpoint],
     payloads: list[OpenRedirectPayload] | None = None,
@@ -441,7 +712,23 @@ def open_redirect_tool(
     return list(check_open_redirect(_parse_endpoints(endpoints), payloads))
 
 
-@pentest_tool("Reflected XSS Probe", check_fn=check_reflected_xss)
+class _XssArgs(BaseModel):
+    """Explicit args_schema for the Reflected XSS Probe tool (#143)."""
+
+    endpoints: list[Endpoint] = Field(
+        description=(
+            "Parameterised endpoint objects. Pass only endpoints whose"
+            " response is HTML (the target renders user input back into a"
+            " page) rather than JSON or a redirect."
+        ),
+    )
+
+
+@pentest_tool(
+    "Reflected XSS Probe",
+    check_fn=check_reflected_xss,
+    args_schema=_XssArgs,
+)
 def xss_probe_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
     """
     Inject an angle-bracket canary into URL parameters and check for unescaped
@@ -457,7 +744,22 @@ def xss_probe_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
     return list(check_reflected_xss(_parse_endpoints(endpoints)))
 
 
-@pentest_tool("Subresource Integrity Check", check_fn=check_sri)
+class _SriCheckArgs(BaseModel):
+    """Explicit args_schema for the Subresource Integrity Check tool (#143)."""
+
+    recon_path: str = Field(
+        description=(
+            "Relative path to recon.json in the run directory. SRI gaps are"
+            " scanned across every HTML-serving endpoint."
+        ),
+    )
+
+
+@pentest_tool(
+    "Subresource Integrity Check",
+    check_fn=check_sri,
+    args_schema=_SriCheckArgs,
+)
 def sri_check_tool(recon_path: str) -> list[RawFinding]:
     """
     Scan HTML pages for cross-origin <script> and <link> tags missing an
@@ -468,7 +770,24 @@ def sri_check_tool(recon_path: str) -> list[RawFinding]:
     return list(check_sri(recon.endpoints))
 
 
-@pentest_tool("Error and Stack Trace Disclosure Check", check_fn=check_error_disclosure)
+class _ErrorDisclosureArgs(BaseModel):
+    """Explicit args_schema for the Error and Stack Trace Disclosure Check tool (#143)."""
+
+    endpoints: list[Endpoint] = Field(
+        description=(
+            "Endpoint objects to probe with error-triggering inputs."
+            " Prioritise parameterised endpoints (parameters increase the"
+            " chance of triggering an error) and any endpoint where passive"
+            " error-disclosure findings already suggest verbose errors."
+        ),
+    )
+
+
+@pentest_tool(
+    "Error and Stack Trace Disclosure Check",
+    check_fn=check_error_disclosure,
+    args_schema=_ErrorDisclosureArgs,
+)
 def error_disclosure_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
     """
     Probe endpoints with error-triggering inputs and scan responses for framework
@@ -737,7 +1056,33 @@ def consul_vault_tool(recon_path: str) -> list[RawFinding]:
     return list(check_consul_vault(recon))
 
 
-@pentest_tool("Prompt Injection Probe", check_fn=check_prompt_injection)
+class _PromptInjectionArgs(BaseModel):
+    """Explicit args_schema for the Prompt Injection Probe tool (#143)."""
+
+    endpoints: list[Endpoint] = Field(
+        description=(
+            "LLM-backed endpoint objects. Pass endpoints where the OSINT"
+            " Analyst's LLM Endpoint Detection tool returned results,"
+            " technologies include 'LLM', or paths suggest an AI assistant"
+            " (/chat, /ask, /ai, /assistant, /copilot)."
+        ),
+    )
+    payloads: list[PromptPayload] | None = Field(
+        default=None,
+        description=(
+            "Optional list of injection-technique variants to try; omit or"
+            " pass null to try all. Use ['override'] for direct instruction"
+            " override, ['conversation'] for transcript-style, ['token-"
+            "boundary'] for models that recognise chat delimiter tokens."
+        ),
+    )
+
+
+@pentest_tool(
+    "Prompt Injection Probe",
+    check_fn=check_prompt_injection,
+    args_schema=_PromptInjectionArgs,
+)
 def prompt_injection_tool(
     endpoints: list[Endpoint],
     payloads: list[PromptPayload] | None = None,
@@ -766,7 +1111,21 @@ def prompt_injection_tool(
     return list(check_prompt_injection(_parse_endpoints(endpoints), payloads))
 
 
-@pentest_tool("NoSQL Injection Scan", check_fn=run_nosqli)
+class _NosqliArgs(BaseModel):
+    """Explicit args_schema for the NoSQL Injection Scan tool (#143)."""
+
+    endpoints: list[Endpoint] = Field(
+        description=(
+            "Parameterised endpoint objects. Prioritise endpoints where"
+            " technologies mention MongoDB / DocumentDB / Mongoose, parameters"
+            " include id / user / username / filter / query, error disclosure"
+            " findings mention BSON / ObjectId, or the endpoint is an auth"
+            " route (login, signup, profile) with parameter-bearing URLs."
+        ),
+    )
+
+
+@pentest_tool("NoSQL Injection Scan", check_fn=run_nosqli, args_schema=_NosqliArgs)
 def nosqli_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
     """
     Run nosqli against parameterised endpoints to detect NoSQL injection vulnerabilities.
@@ -784,7 +1143,35 @@ def nosqli_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
     return list(run_nosqli(_parse_endpoints(endpoints)))
 
 
-@pentest_tool("LDAP Injection Probe", check_fn=check_ldap_injection)
+class _LdapInjectionArgs(BaseModel):
+    """Explicit args_schema for the LDAP Injection Probe tool (#143)."""
+
+    endpoints: list[Endpoint] = Field(
+        description=(
+            "Parameterised endpoint objects. Prioritise endpoints whose"
+            " parameter names suggest authentication or directory lookup"
+            " (username, user, login, email, uid, cn, search, filter, q),"
+            " paths suggest auth / directory (/login, /auth, /search,"
+            " /directory, /ldap, /user), or technologies mention LDAP /"
+            " Active Directory / OpenLDAP / JNDI."
+        ),
+    )
+    payloads: list[LdapPayload] | None = Field(
+        default=None,
+        description=(
+            "Optional list of LDAP injection variants to try; omit or pass"
+            " null to try all. Use ['auth-bypass'] first on a /login"
+            " endpoint to confirm the class with a single request, then"
+            " escalate."
+        ),
+    )
+
+
+@pentest_tool(
+    "LDAP Injection Probe",
+    check_fn=check_ldap_injection,
+    args_schema=_LdapInjectionArgs,
+)
 def ldap_injection_tool(
     endpoints: list[Endpoint],
     payloads: list[LdapPayload] | None = None,
@@ -816,7 +1203,36 @@ def ldap_injection_tool(
     return list(check_ldap_injection(_parse_endpoints(endpoints), payloads))
 
 
-@pentest_tool("Command Injection Probe", check_fn=check_cmd_injection)
+class _CmdInjectionArgs(BaseModel):
+    """Explicit args_schema for the Command Injection Probe tool (#143)."""
+
+    endpoints: list[Endpoint] = Field(
+        description=(
+            "Parameterised endpoint objects. Prioritise endpoints whose"
+            " parameter names suggest shell / system interaction (cmd, exec,"
+            " command, shell, run, ping, host, ip, addr, query, search,"
+            " name, input), technologies mention CGI / Perl / PHP, paths"
+            " suggest system utilities (/ping, /traceroute, /lookup, /exec,"
+            " /run, /convert, /render, /preview, /generate), or error"
+            " disclosure findings mention exec / popen / system / shell."
+        ),
+    )
+    payloads: list[CmdPayload] | None = Field(
+        default=None,
+        description=(
+            "Optional list of shell-separator variants to try; omit or pass"
+            " null to try all. When the OS is known, pass only matching"
+            " separators (e.g. ['windows-amp'] for an IIS target;"
+            " ['semicolon', 'dollar-paren'] for a known Unix target)."
+        ),
+    )
+
+
+@pentest_tool(
+    "Command Injection Probe",
+    check_fn=check_cmd_injection,
+    args_schema=_CmdInjectionArgs,
+)
 def cmd_injection_tool(
     endpoints: list[Endpoint],
     payloads: list[CmdPayload] | None = None,
@@ -848,7 +1264,31 @@ def cmd_injection_tool(
     return list(check_cmd_injection(_parse_endpoints(endpoints), payloads))
 
 
-@pentest_tool("XXE Probe", check_fn=check_xxe)
+class _XxeArgs(BaseModel):
+    """Explicit args_schema for the XXE Probe tool (#143)."""
+
+    endpoints: list[Endpoint] = Field(
+        description=(
+            "Endpoint objects. Prioritise endpoints whose technologies mention"
+            " SOAP / XML-RPC / WSDL / XML / web services, paths contain"
+            " /soap /xml /wsdl /rpc /service /api or end in .asmx / .wsdl /"
+            " .xml, OSINT noted XML or SOAP in the response, or the endpoint"
+            " accepts file uploads."
+        ),
+    )
+    payloads: list[XxePayload] | None = Field(
+        default=None,
+        description=(
+            "Optional list of probe variants to try; omit or pass null to"
+            " try all. linux-* probes target /etc/passwd, windows-* probes"
+            " target win.ini, error-* probes are MEDIUM-severity backend"
+            " confirmation only. Select error-* alone for a quiet 'is there"
+            " an XML parser?' reconnaissance pass."
+        ),
+    )
+
+
+@pentest_tool("XXE Probe", check_fn=check_xxe, args_schema=_XxeArgs)
 def xxe_probe_tool(
     endpoints: list[Endpoint],
     payloads: list[XxePayload] | None = None,
@@ -884,7 +1324,36 @@ def xxe_probe_tool(
     return list(check_xxe(_parse_endpoints(endpoints), payloads))
 
 
-@pentest_tool("Prototype Pollution Check", check_fn=check_prototype_pollution)
+class _PrototypePollutionArgs(BaseModel):
+    """Explicit args_schema for the Prototype Pollution Check tool (#143)."""
+
+    endpoints: list[Endpoint] = Field(
+        description=(
+            "Endpoint objects. Prioritise endpoints whose technologies mention"
+            " Node.js / Express / Koa / Hapi / Fastify or other JS / TS"
+            " server frameworks, the API accepts JSON request bodies, URL"
+            " parameters are parsed server-side into plain objects (lodash"
+            " merge, recursive assign), or the target is a REST / GraphQL"
+            " API with a JavaScript backend."
+        ),
+    )
+    payloads: list[PrototypePollutionPayload] | None = Field(
+        default=None,
+        description=(
+            "Optional list of injection variants to try; omit or pass null"
+            " to try all. proto-* / constructor-* target URL query-string"
+            " vectors, json-* target JSON POST body vectors. Pass json-*"
+            " alone for a JSON-only API or proto-* alone for a quick"
+            " reconnaissance pass."
+        ),
+    )
+
+
+@pentest_tool(
+    "Prototype Pollution Check",
+    check_fn=check_prototype_pollution,
+    args_schema=_PrototypePollutionArgs,
+)
 def prototype_pollution_tool(
     endpoints: list[Endpoint],
     payloads: list[PrototypePollutionPayload] | None = None,
@@ -923,7 +1392,30 @@ def prototype_pollution_tool(
     return list(check_prototype_pollution(_parse_endpoints(endpoints), payloads))
 
 
-@pentest_tool("IDOR Probe", check_fn=check_idor)
+class _IdorArgs(BaseModel):
+    """Explicit args_schema for the IDOR Probe tool (#143)."""
+
+    endpoints: list[Endpoint] = Field(
+        description=(
+            "Endpoint objects. Prioritise endpoints whose URL path includes"
+            " numeric segments (/api/users/42, /orders/9), parameters include"
+            " id / user_id / account_id / order_id, or the endpoint handles"
+            " authenticated or per-user data."
+        ),
+    )
+    attacks: list[IDORAttack] | None = Field(
+        default=None,
+        description=(
+            "Optional list of IDOR attack strategies to run; omit or pass"
+            " null to run all three. Use ['boundary'] for a quiet recon pass"
+            " (2 requests per candidate), ['sequential'] when an ID is"
+            " already known and adjacent objects are suspected, or all three"
+            " for maximum coverage."
+        ),
+    )
+
+
+@pentest_tool("IDOR Probe", check_fn=check_idor, args_schema=_IdorArgs)
 def idor_probe_tool(
     endpoints: list[Endpoint],
     attacks: list[IDORAttack] | None = None,
@@ -965,7 +1457,43 @@ def idor_probe_tool(
     return list(check_idor(_parse_endpoints(endpoints), attacks))
 
 
-@pentest_tool("JWT Vulnerability Check", check_fn=check_jwt)
+class _JwtCheckArgs(BaseModel):
+    """Explicit args_schema for the JWT Vulnerability Check tool (#143)."""
+
+    token: str = Field(
+        description=(
+            "Raw JWT string (three base64url parts separated by dots)."
+            " Source from Authorization: Bearer headers, Set-Cookie session"
+            " / auth cookies, JS source or API responses with access_token /"
+            " id_token fields, or any cookie value beginning with 'eyJ'"
+            " (base64url-encoded JSON header)."
+        ),
+    )
+    endpoint: str = Field(
+        description=(
+            "URL that validates the JWT - should return 401 / 403 without"
+            " a valid token and 200 on success. Use the endpoint where the"
+            " token was first observed (e.g. /api/profile, /api/me,"
+            " /dashboard)."
+        ),
+    )
+    attacks: list[JwtAttack] | None = Field(
+        default=None,
+        description=(
+            "Optional list of attack classes to run; omit or pass null to"
+            " run all seven. Useful when chaining - e.g. ['alg-none',"
+            " 'claims-escalation'] to confirm missing signature verification"
+            " without firing every kid variant against an endpoint where"
+            " kid is not even in the header."
+        ),
+    )
+
+
+@pentest_tool(
+    "JWT Vulnerability Check",
+    check_fn=check_jwt,
+    args_schema=_JwtCheckArgs,
+)
 def jwt_check_tool(
     token: str,
     endpoint: str,
