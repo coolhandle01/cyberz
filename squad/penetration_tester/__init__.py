@@ -93,9 +93,18 @@ def pentest_tool(name: str, *, check_fn: object = None) -> Callable[[_PentestFn]
     return decorator
 
 
-def _parse_endpoints(endpoints_json: str) -> list[Endpoint]:
-    """Deserialise a JSON array of endpoint dicts into Endpoint objects."""
-    return [Endpoint.model_validate(e) for e in json.loads(endpoints_json)]
+def _parse_endpoints(endpoints: list[Endpoint]) -> list[Endpoint]:
+    """Re-validate the endpoint list before handing it to a probe.
+
+    The wrapper signature is ``list[Endpoint]`` so the agent-facing
+    ``args_schema`` shows a typed schema, but CrewAI's
+    ``args_schema.model_validate(...).model_dump()`` pass leaves the
+    runtime value as ``list[dict]`` by the time the wrapper body runs.
+    ``model_validate`` accepts both shapes - it returns the same Endpoint
+    when given an instance and constructs one when given a dict - so this
+    single helper is the both-shapes adapter for every probe wrapper.
+    """
+    return [Endpoint.model_validate(e) for e in endpoints]
 
 
 def _recon_from_path(recon_path: str) -> ReconResult:
@@ -116,46 +125,45 @@ def _recon_from_path(recon_path: str) -> ReconResult:
 
 
 @pentest_tool("Nuclei Scan", check_fn=run_nuclei)
-def nuclei_scan_tool(endpoints_json: str, tech_tags_json: str = "[]") -> list[RawFinding]:
+def nuclei_scan_tool(
+    endpoints: list[Endpoint], tech_tags: list[str] | None = None
+) -> list[RawFinding]:
     """
     Run nuclei against a specific set of endpoints, optionally filtered by template tags.
 
-    endpoints_json: JSON array of endpoint objects to scan. Extract from ReconResult:
-      select live endpoints (status_code < 500), serialise to JSON.
-      Example: '[{"url": "https://example.com/", "status_code": 200,
-        "technologies": ["WordPress"]}]'
+    endpoints: list of endpoint objects to scan. Extract from ReconResult:
+      select live endpoints (status_code < 500), use the typed list directly.
+      Example: [{"url": "https://example.com/", "status_code": 200, "technologies": ["WordPress"]}]
 
-    tech_tags_json: JSON array of nuclei template tags to focus on. Map from detected
+    tech_tags: optional list of nuclei template tags to focus on. Map from detected
       technologies: WordPress -> ["wordpress"], Apache -> ["apache"], Spring -> ["spring"].
       Common tags: wordpress, drupal, joomla, apache, nginx, iis, spring, laravel,
-      django, rails, php, cve, exposure, misconfig. Pass "[]" to run all templates.
-      Example: '["wordpress", "cve"]'
+      django, rails, php, cve, exposure, misconfig. Omit or pass an empty list to run all templates.
+      Example: ["wordpress", "cve"]
 
     Prefer narrow tag lists when you have technology intel - running all templates
     against every endpoint is slow and noisy.
 
     """
-    endpoints = _parse_endpoints(endpoints_json)
-    tech_tags: list[str] = json.loads(tech_tags_json)
-    return list(run_nuclei(endpoints, tech_tags=tech_tags or None))
+    return list(run_nuclei(_parse_endpoints(endpoints), tech_tags=tech_tags or None))
 
 
 @pentest_tool("SQLMap Injection Scan", check_fn=run_sqlmap)
-def sqlmap_tool(endpoints_json: str) -> list[RawFinding]:
+def sqlmap_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
     """
     Run sqlmap against specific parameterised endpoints.
 
-    endpoints_json: JSON array of endpoint objects that have parameters you want
+    endpoints: list of endpoint objects that have parameters you want
       to test for SQL injection. Only pass endpoints where parameters is non-empty
       and where there is reason to suspect injection (e.g. error disclosure findings
       showing SQL errors, numeric/string parameters in URLs or forms).
-      Example: '[{"url": "https://example.com/search", "parameters": ["q", "page"]}]'
+      Example: [{"url": "https://example.com/search", "parameters": ["q", "page"]}]
 
     Do not pass all endpoints blindly - sqlmap is slow and loud. Pass only the
     endpoints where injection is plausible based on the recon context.
 
     """
-    return list(run_sqlmap(_parse_endpoints(endpoints_json)))
+    return list(run_sqlmap(_parse_endpoints(endpoints)))
 
 
 @pentest_tool("Cookie Security Check", check_fn=check_cookies)
@@ -221,17 +229,17 @@ def csrf_check_tool(recon_path: str) -> list[RawFinding]:
 
 @pentest_tool("SSRF Probe", check_fn=check_ssrf)
 def ssrf_probe_tool(
-    endpoints_json: str,
+    endpoints: list[Endpoint],
     payloads: list[SsrfPayload] | None = None,
 ) -> list[RawFinding]:
     """
     Inject cloud metadata (169.254.169.254) and loopback (127.0.0.1) payloads
     into URL parameters to detect Server-Side Request Forgery.
 
-    endpoints_json: JSON array of endpoint objects. Only pass endpoints that have
+    endpoints: list of endpoint objects. Only pass endpoints that have
       parameters AND where those parameters plausibly accept URLs, hostnames,
       file paths, or resource identifiers (e.g. url=, path=, file=, redirect=, src=).
-      Example: '[{"url": "https://example.com/fetch", "parameters": ["url"]}]'
+      Example: [{"url": "https://example.com/fetch", "parameters": ["url"]}]
 
     payloads: optional list of internal-address variants to try; omit or pass
       null to try all. Useful for stealth or when the cloud provider is known
@@ -239,7 +247,7 @@ def ssrf_probe_tool(
 
 
     """
-    return list(check_ssrf(_parse_endpoints(endpoints_json), payloads))
+    return list(check_ssrf(_parse_endpoints(endpoints), payloads))
 
 
 @pentest_tool("Header Injection Check", check_fn=check_header_injection)
@@ -266,7 +274,7 @@ def host_header_tool(recon_path: str) -> list[RawFinding]:
 
 @pentest_tool("Header XSS Probe", check_fn=check_header_xss)
 def header_xss_tool(
-    endpoints_json: str,
+    endpoints: list[Endpoint],
     header_names: list[XSSHeader] | None = None,
 ) -> list[RawFinding]:
     """
@@ -284,9 +292,9 @@ def header_xss_tool(
       - Recon found analytics or logging endpoints that display User-Agent strings
       - The target is an older web application (PHP, JSP, ASP) with legacy templating
 
-    endpoints_json: JSON array of endpoint objects. Pass a broad set of live
+    endpoints: list of endpoint objects. Pass a broad set of live
       HTML-serving endpoints; error pages and admin paths are especially fruitful.
-      Example: '[{"url": "https://example.com/error", "status_code": 404}]'
+      Example: [{"url": "https://example.com/error", "status_code": 404}]
 
     header_names: optional list of headers to probe; omit or pass null to test
       all five. Narrow this when recon evidence points to a specific header
@@ -295,7 +303,7 @@ def header_xss_tool(
 
 
     """
-    return list(check_header_xss(_parse_endpoints(endpoints_json), header_names))
+    return list(check_header_xss(_parse_endpoints(endpoints), header_names))
 
 
 @pentest_tool("JS Source Map Scan", check_fn=check_js_source_maps)
@@ -312,7 +320,7 @@ def source_maps_tool(recon_path: str) -> list[RawFinding]:
 
 @pentest_tool("Path Traversal Probe", check_fn=check_path_traversal)
 def path_traversal_tool(
-    endpoints_json: str,
+    endpoints: list[Endpoint],
     payloads: list[PathTraversalPayload] | None = None,
 ) -> list[RawFinding]:
     """
@@ -321,7 +329,7 @@ def path_traversal_tool(
     for unique content markers from OS sentinel files (/etc/passwd,
     Windows win.ini) in the response body.
 
-    endpoints_json: JSON array of endpoint objects. Prioritise endpoints that
+    endpoints: list of endpoint objects. Prioritise endpoints that
       have parameters AND where any of the following apply:
       - Parameter names look filesystem-shaped (file, filename, path, page,
         template, include, require, download, doc, image, img, src, view)
@@ -329,7 +337,7 @@ def path_traversal_tool(
         /fetch, /report, /export)
       - The response Content-Type or filename hint shows the server is reading
         files based on the parameter
-      Example: '[{"url": "https://example.com/download", "parameters": ["file"]}]'
+      Example: [{"url": "https://example.com/download", "parameters": ["file"]}]
 
     payloads: optional list of traversal variants to try; omit or pass null
       to try all. When the OS is known, pass only the matching set (e.g. just
@@ -340,11 +348,11 @@ def path_traversal_tool(
     or win.ini almost always implies a file-read primitive worth escalating.
 
     """
-    return list(check_path_traversal(_parse_endpoints(endpoints_json), payloads))
+    return list(check_path_traversal(_parse_endpoints(endpoints), payloads))
 
 
 @pentest_tool("HTTP Parameter Pollution Probe", check_fn=check_hpp)
-def hpp_probe_tool(endpoints_json: str) -> list[RawFinding]:
+def hpp_probe_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
     """
     Detect HTTP Parameter Pollution by sending a baseline request
     (`?param=1`) and a polluted request (`?param=1&param=2`) and comparing
@@ -352,7 +360,7 @@ def hpp_probe_tool(endpoints_json: str) -> list[RawFinding]:
     duplicate values as distinguishable from a single value - the
     pre-condition for WAF bypass and access-control bypass exploits.
 
-    endpoints_json: JSON array of endpoint objects. Prioritise endpoints
+    endpoints: list of endpoint objects. Prioritise endpoints
       where any of the following apply:
       - Parameter names look authorisation-shaped (role, admin, is_admin,
         permission, group, user_id) - HPP is most impactful when it can
@@ -360,7 +368,7 @@ def hpp_probe_tool(endpoints_json: str) -> list[RawFinding]:
       - Endpoint sits behind a WAF or rate-limit (HPP is a classic WAF
         bypass primitive)
       - Endpoint is part of an auth or admin flow
-      Example: '[{"url": "https://example.com/api/user", "parameters": ["role", "id"]}]'
+      Example: [{"url": "https://example.com/api/user", "parameters": ["role", "id"]}]
 
     Severity LOW on its own - HPP is a class of behaviour that enables
     further exploitation rather than a vuln in itself. The VR should
@@ -368,12 +376,12 @@ def hpp_probe_tool(endpoints_json: str) -> list[RawFinding]:
     (SQLi filter bypass, access-control override, cache poisoning).
 
     """
-    return list(check_hpp(_parse_endpoints(endpoints_json)))
+    return list(check_hpp(_parse_endpoints(endpoints)))
 
 
 @pentest_tool("Server-Side Template Injection Probe", check_fn=check_ssti)
 def ssti_probe_tool(
-    endpoints_json: str,
+    endpoints: list[Endpoint],
     payloads: list[SstiPayload] | None = None,
 ) -> list[RawFinding]:
     """
@@ -383,14 +391,14 @@ def ssti_probe_tool(
     to appear AND the literal expression to be absent, which rules out the
     common false positive of an app that just echoes the raw input.
 
-    endpoints_json: JSON array of endpoint objects. Prioritise endpoints where
+    endpoints: list of endpoint objects. Prioritise endpoints where
       any of the following apply:
       - Parameter values are rendered into HTML the response returns (search,
         comment, preview, name, template parameters)
       - Technologies mention a template-heavy stack (Flask/Jinja2, Django,
         Symfony/Twig, Rails/ERB, Spring with FreeMarker, etc.)
       - Error disclosure findings mention template internals
-      Example: '[{"url": "https://example.com/preview", "parameters": ["name"]}]'
+      Example: [{"url": "https://example.com/preview", "parameters": ["name"]}]
 
     payloads: optional list of engine variants to try; omit or pass null to
       try all. When the template engine is known from recon, pass only the
@@ -401,12 +409,12 @@ def ssti_probe_tool(
     (sandbox escape, attribute traversal, OS command execution).
 
     """
-    return list(check_ssti(_parse_endpoints(endpoints_json), payloads))
+    return list(check_ssti(_parse_endpoints(endpoints), payloads))
 
 
 @pentest_tool("Open Redirect Probe", check_fn=check_open_redirect)
 def open_redirect_tool(
-    endpoints_json: str,
+    endpoints: list[Endpoint],
     payloads: list[OpenRedirectPayload] | None = None,
 ) -> list[RawFinding]:
     """
@@ -414,14 +422,14 @@ def open_redirect_tool(
     into URL parameters and check whether the response Location, Refresh header,
     or meta-refresh tag points to the canary host.
 
-    endpoints_json: JSON array of endpoint objects. Prioritise endpoints that have
+    endpoints: list of endpoint objects. Prioritise endpoints that have
       parameters AND where any of the following apply:
       - Parameter names look redirect-shaped (redirect, redirect_uri, return,
         return_to, returnto, next, url, dest, destination, goto, target, link,
         forward, continue, callback, rurl, r, u)
       - Path looks like an auth flow (/login, /logout, /signin, /oauth, /sso)
       - Recon noted a 30x response on the endpoint already
-      Example: '[{"url": "https://example.com/login", "parameters": ["next"]}]'
+      Example: [{"url": "https://example.com/login", "parameters": ["next"]}]
 
     payloads: optional list of encoding variants to try; omit or pass null to
       try all.
@@ -430,23 +438,23 @@ def open_redirect_tool(
     redirect_uri and SSO callback endpoints (token theft) - flag those for VR.
 
     """
-    return list(check_open_redirect(_parse_endpoints(endpoints_json), payloads))
+    return list(check_open_redirect(_parse_endpoints(endpoints), payloads))
 
 
 @pentest_tool("Reflected XSS Probe", check_fn=check_reflected_xss)
-def xss_probe_tool(endpoints_json: str) -> list[RawFinding]:
+def xss_probe_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
     """
     Inject an angle-bracket canary into URL parameters and check for unescaped
     reflection in the response body.
 
-    endpoints_json: JSON array of endpoint objects. Only pass endpoints that have
+    endpoints: list of endpoint objects. Only pass endpoints that have
       parameters AND where the response is HTML (i.e. the target renders user input
       back into a page rather than returning JSON or a redirect).
-      Example: '[{"url": "https://example.com/search", "parameters": ["q"]}]'
+      Example: [{"url": "https://example.com/search", "parameters": ["q"]}]
 
 
     """
-    return list(check_reflected_xss(_parse_endpoints(endpoints_json)))
+    return list(check_reflected_xss(_parse_endpoints(endpoints)))
 
 
 @pentest_tool("Subresource Integrity Check", check_fn=check_sri)
@@ -461,20 +469,20 @@ def sri_check_tool(recon_path: str) -> list[RawFinding]:
 
 
 @pentest_tool("Error and Stack Trace Disclosure Check", check_fn=check_error_disclosure)
-def error_disclosure_tool(endpoints_json: str) -> list[RawFinding]:
+def error_disclosure_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
     """
     Probe endpoints with error-triggering inputs and scan responses for framework
     stack traces and SQL error messages.
 
-    endpoints_json: JSON array of endpoint objects to probe. Prioritise endpoints
+    endpoints: list of endpoint objects to probe. Prioritise endpoints
       where parameters are present (they increase the chance of triggering errors)
       and any endpoint where the error disclosure passive findings from recon suggest
       verbose errors are already present.
-      Example: '[{"url": "https://example.com/api/user", "parameters": ["id"]}]'
+      Example: [{"url": "https://example.com/api/user", "parameters": ["id"]}]
 
 
     """
-    return list(check_error_disclosure(_parse_endpoints(endpoints_json)))
+    return list(check_error_disclosure(_parse_endpoints(endpoints)))
 
 
 @tool("S3 Bucket Check")
@@ -601,33 +609,33 @@ def mysql_tool(recon_path: str) -> list[RawFinding]:
 
 
 @tool("Sensitive Files Check")
-def sensitive_files_tool(endpoints_json: str) -> list[RawFinding]:
+def sensitive_files_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
     """
     Probe for exposed .git/HEAD, .env, phpinfo.php, Apache server-status, and
     .DS_Store files. Run broadly - these are high-value finds on any target.
 
-    endpoints_json: JSON array of endpoint objects. Pass a representative set of
+    endpoints: list of endpoint objects. Pass a representative set of
       live endpoints; the tool deduplicates by origin so you can pass many without
       redundant probes.
-      Example: '[{"url": "https://example.com/", "status_code": 200}]'
+      Example: [{"url": "https://example.com/", "status_code": 200}]
 
 
     """
-    return list(check_sensitive_files(_parse_endpoints(endpoints_json)))
+    return list(check_sensitive_files(_parse_endpoints(endpoints)))
 
 
 @tool("Admin Panels Check")
-def admin_panels_tool(endpoints_json: str) -> list[RawFinding]:
+def admin_panels_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
     """
     Probe common admin panel paths: /admin, /wp-admin, /phpmyadmin, /adminer,
     /manager/html, /_admin. Run broadly on all live endpoints.
 
-    endpoints_json: JSON array of endpoint objects. The tool deduplicates by origin.
-      Example: '[{"url": "https://example.com/", "status_code": 200}]'
+    endpoints: list of endpoint objects. The tool deduplicates by origin.
+      Example: [{"url": "https://example.com/", "status_code": 200}]
 
 
     """
-    return list(check_admin_panels(_parse_endpoints(endpoints_json)))
+    return list(check_admin_panels(_parse_endpoints(endpoints)))
 
 
 @tool("cPanel/WHM Check")
@@ -731,14 +739,14 @@ def consul_vault_tool(recon_path: str) -> list[RawFinding]:
 
 @pentest_tool("Prompt Injection Probe", check_fn=check_prompt_injection)
 def prompt_injection_tool(
-    endpoints_json: str,
+    endpoints: list[Endpoint],
     payloads: list[PromptPayload] | None = None,
 ) -> list[RawFinding]:
     """
     Probe LLM-backed endpoints for prompt injection by injecting a canary string
     in multiple request formats (OpenAI chat, generic message, prompt completion).
 
-    endpoints_json: JSON array of endpoint objects. Use this tool when:
+    endpoints: list of endpoint objects. Use this tool when:
       - The OSINT Analyst's LLM Endpoint Detection tool returned results
       - Endpoint technologies include 'LLM'
       - URL paths suggest an AI assistant (/chat, /ask, /ai, /assistant, /copilot)
@@ -755,44 +763,44 @@ def prompt_injection_tool(
 
 
     """
-    return list(check_prompt_injection(_parse_endpoints(endpoints_json), payloads))
+    return list(check_prompt_injection(_parse_endpoints(endpoints), payloads))
 
 
 @pentest_tool("NoSQL Injection Scan", check_fn=run_nosqli)
-def nosqli_tool(endpoints_json: str) -> list[RawFinding]:
+def nosqli_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
     """
     Run nosqli against parameterised endpoints to detect NoSQL injection vulnerabilities.
 
-    endpoints_json: JSON array of endpoint objects. Prioritise endpoints that have
+    endpoints: list of endpoint objects. Prioritise endpoints that have
       parameters AND where any of the following apply:
       - Technologies mention MongoDB, DocumentDB, Mongoose, or similar document stores
       - Parameters include id, user, username, filter, query, or similar lookup keys
       - Error disclosure findings mention BSON, ObjectId, or a MongoDB driver
       - Auth routes (login, signup, profile) with parameter-bearing URLs
-      Example: '[{"url": "https://example.com/api/login", "parameters": ["username", "password"]}]'
+      Example: [{"url": "https://example.com/api/login", "parameters": ["username", "password"]}]
 
 
     """
-    return list(run_nosqli(_parse_endpoints(endpoints_json)))
+    return list(run_nosqli(_parse_endpoints(endpoints)))
 
 
 @pentest_tool("LDAP Injection Probe", check_fn=check_ldap_injection)
 def ldap_injection_tool(
-    endpoints_json: str,
+    endpoints: list[Endpoint],
     payloads: list[LdapPayload] | None = None,
 ) -> list[RawFinding]:
     """
     Inject LDAP bypass and enumeration payloads into URL parameters to detect
     LDAP injection vulnerabilities against Active Directory or OpenLDAP backends.
 
-    endpoints_json: JSON array of endpoint objects. Prioritise endpoints that have
+    endpoints: list of endpoint objects. Prioritise endpoints that have
       parameters AND where any of the following apply:
       - Parameter names suggest authentication or directory lookup (username, user,
         login, email, uid, cn, search, filter, q)
       - URL path suggests auth or directory (/login, /auth, /search, /directory,
         /ldap, /user)
       - Technologies mention LDAP, Active Directory, OpenLDAP, or JNDI
-      Example: '[{"url": "https://example.com/login", "parameters": ["username"]}]'
+      Example: [{"url": "https://example.com/login", "parameters": ["username"]}]
 
     payloads: optional list of injection variants to try; omit or pass null
       to try all. Use "auth-bypass" first on a /login endpoint to confirm the
@@ -805,12 +813,12 @@ def ldap_injection_tool(
 
 
     """
-    return list(check_ldap_injection(_parse_endpoints(endpoints_json), payloads))
+    return list(check_ldap_injection(_parse_endpoints(endpoints), payloads))
 
 
 @pentest_tool("Command Injection Probe", check_fn=check_cmd_injection)
 def cmd_injection_tool(
-    endpoints_json: str,
+    endpoints: list[Endpoint],
     payloads: list[CmdPayload] | None = None,
 ) -> list[RawFinding]:
     """
@@ -818,7 +826,7 @@ def cmd_injection_tool(
     separators and look for a canary string echoed back in the response body.
     Confirmed echo is CRITICAL - it is direct proof of arbitrary command execution.
 
-    endpoints_json: JSON array of endpoint objects. Prioritise endpoints that have
+    endpoints: list of endpoint objects. Prioritise endpoints that have
       parameters AND where any of the following apply:
       - Parameter names suggest shell or system interaction (cmd, exec, command,
         shell, run, ping, host, ip, addr, query, search, name, input)
@@ -826,7 +834,7 @@ def cmd_injection_tool(
       - URL paths suggest system utilities (/ping, /traceroute, /lookup, /exec,
         /run, /convert, /render, /preview, /generate)
       - Error disclosure findings mention exec, popen, system, or shell functions
-      Example: '[{"url": "https://example.com/ping", "parameters": ["host"]}]'
+      Example: [{"url": "https://example.com/ping", "parameters": ["host"]}]
 
     payloads: optional list of separator variants to try; omit or pass null
       to try all. When the OS is known, pass only matching separators
@@ -837,26 +845,26 @@ def cmd_injection_tool(
     escalate to manual time-based testing (e.g. sleep 5 with response-time delta).
 
     """
-    return list(check_cmd_injection(_parse_endpoints(endpoints_json), payloads))
+    return list(check_cmd_injection(_parse_endpoints(endpoints), payloads))
 
 
 @pentest_tool("XXE Probe", check_fn=check_xxe)
 def xxe_probe_tool(
-    endpoints_json: str,
+    endpoints: list[Endpoint],
     payloads: list[XxePayload] | None = None,
 ) -> list[RawFinding]:
     """
     POST crafted XML bodies to endpoints to detect XML External Entity (XXE)
     injection vulnerabilities.
 
-    endpoints_json: JSON array of endpoint objects. Prioritise endpoints where
+    endpoints: list of endpoint objects. Prioritise endpoints where
       any of the following apply:
       - technologies mention SOAP, XML-RPC, WSDL, XML, or web services
       - URL path contains /soap, /xml, /wsdl, /rpc, /service, /api, or ends
         in .asmx, .wsdl, .xml
       - The OSINT Analyst noted XML or SOAP in the response body or headers
       - The endpoint accepts file uploads (multipart may include XML processing)
-      Example: '[{"url": "https://example.com/soap/service", "status_code": 200}]'
+      Example: [{"url": "https://example.com/soap/service", "status_code": 200}]
 
     payloads: optional list of probe variants to try; omit or pass null to
       try all. linux-* probes target /etc/passwd, windows-* probes target
@@ -873,12 +881,12 @@ def xxe_probe_tool(
     Both generic XML and SOAP-envelope wrappers are tried automatically.
 
     """
-    return list(check_xxe(_parse_endpoints(endpoints_json), payloads))
+    return list(check_xxe(_parse_endpoints(endpoints), payloads))
 
 
 @pentest_tool("Prototype Pollution Check", check_fn=check_prototype_pollution)
 def prototype_pollution_tool(
-    endpoints_json: str,
+    endpoints: list[Endpoint],
     payloads: list[PrototypePollutionPayload] | None = None,
 ) -> list[RawFinding]:
     """
@@ -887,14 +895,14 @@ def prototype_pollution_tool(
     then checking whether a canary property is reflected in the response or
     whether the server returns an unhandled error.
 
-    endpoints_json: JSON array of endpoint objects. Use this tool when:
+    endpoints: list of endpoint objects. Use this tool when:
       - Technologies mention Node.js, Express, Koa, Hapi, Fastify, or other
         JavaScript/TypeScript server frameworks
       - The API accepts JSON request bodies (Content-Type: application/json)
       - URL parameters are parsed server-side into plain objects (lodash merge,
         recursive assign, query-string to object conversions)
       - The target is a REST or GraphQL API with a JavaScript backend
-      Example: '[{"url": "https://api.example.com/users", "status_code": 200}]'
+      Example: [{"url": "https://api.example.com/users", "status_code": 200}]
 
     payloads: optional list of injection variants to try; omit or pass null
       to try all. The proto-* and constructor-* names are URL query-string
@@ -912,12 +920,12 @@ def prototype_pollution_tool(
     One finding per endpoint. CRITICAL takes priority over MEDIUM.
 
     """
-    return list(check_prototype_pollution(_parse_endpoints(endpoints_json), payloads))
+    return list(check_prototype_pollution(_parse_endpoints(endpoints), payloads))
 
 
 @pentest_tool("IDOR Probe", check_fn=check_idor)
 def idor_probe_tool(
-    endpoints_json: str,
+    endpoints: list[Endpoint],
     attacks: list[IDORAttack] | None = None,
 ) -> list[RawFinding]:
     """
@@ -941,11 +949,11 @@ def idor_probe_tool(
       HIGH   - 200 response body contains a PII pattern (email, sensitive key)
       MEDIUM - unexpected 200 for boundary ID (id=0 or id=-1)
 
-    endpoints_json: JSON array of endpoint objects. Prioritise endpoints where:
+    endpoints: list of endpoint objects. Prioritise endpoints where:
       - The URL path includes numeric segments (/api/users/42, /orders/9)
       - Parameters include id, user_id, account_id, order_id, or similar
       - The endpoint handles authenticated or per-user data
-      Example: '[{"url": "https://example.com/api/users/42", "status_code": 200}]'
+      Example: [{"url": "https://example.com/api/users/42", "status_code": 200}]
 
     Use attacks=["boundary"] for a quiet reconnaissance pass (2 requests per
     candidate). Use attacks=["sequential"] when you already know an ID and want
@@ -954,7 +962,7 @@ def idor_probe_tool(
     One finding per endpoint; stops after the first confirming probe. Does not
     brute-force ID ranges.
     """
-    return list(check_idor(_parse_endpoints(endpoints_json), attacks))
+    return list(check_idor(_parse_endpoints(endpoints), attacks))
 
 
 @pentest_tool("JWT Vulnerability Check", check_fn=check_jwt)
@@ -1022,9 +1030,9 @@ def recon_endpoints_tool(
     case-insensitively. Returns an EndpointPage with total, offset, returned,
     and a typed endpoints list - paginate by re-calling with a larger offset.
 
-    Use this to build the endpoints_json argument for the narrow probe tools
-    (sqlmap_tool, nuclei_scan_tool, etc.): serialise page.endpoints to JSON
-    and pass it through.
+    Use this to build the ``endpoints`` argument for the narrow probe tools
+    (sqlmap_tool, nuclei_scan_tool, etc.): pass ``page.endpoints`` straight
+    through - the probe wrappers accept ``list[Endpoint]`` directly.
     """
     return recon_endpoints(
         recon_path,
@@ -1048,19 +1056,25 @@ def recon_open_ports_tool(recon_path: str, host: str | None = None) -> OpenPorts
 
 
 @tool("Save Findings")
-def save_findings_tool(findings_json: str) -> str:
+def save_findings_tool(findings: list[RawFinding]) -> str:
     """
     Write the collected raw findings to findings.json in the run directory.
-    Call this once after all probe tools have run, passing a JSON array of
-    finding dicts. Returns the relative filename for downstream agents.
+    Call this once after all probe tools have run, passing the typed list
+    of findings collected from the probe tools. Returns the relative
+    filename for downstream agents.
     """
     import runtime
 
     out_path = runtime.run_dir() / "findings.json"
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    # Validate the payload parses as JSON before writing.
-    json.loads(findings_json)
-    out_path.write_text(findings_json, encoding="utf-8")
+    # CrewAI args-schema validation produces list[dict] from the LLM JSON
+    # before invoking us; re-validate so the persisted artefact is the
+    # canonical typed shape findings.json consumers depend on.
+    validated = [RawFinding.model_validate(f) for f in findings]
+    out_path.write_text(
+        json.dumps([f.model_dump(mode="json") for f in validated]),
+        encoding="utf-8",
+    )
     return "findings.json"
 
 
