@@ -149,6 +149,30 @@ class TriageValidationReport(BaseModel):
     issues: list[TriageValidationIssue] = Field(default_factory=list)
 
 
+class AssessmentResult(BaseModel):
+    """Return shape of the Assess Raw Finding tool.
+
+    ``path`` is the workspace-relative location of the persisted assessment
+    (e.g. ``assessments/000.json``); ``validation`` is the quality-gate
+    report for the assessment that was just authored. The pair lives on a
+    single model so the agent does not have to remember which keys to
+    inspect on a bare dict.
+    """
+
+    path: str
+    validation: TriageValidationReport
+
+
+class DiscardResult(BaseModel):
+    """Return shape of the Discard Finding tool.
+
+    ``path`` is the workspace-relative location of the persisted discard
+    entry (e.g. ``discards/000.json``).
+    """
+
+    path: str
+
+
 def _count_steps_too_short(steps: list[str]) -> list[int]:
     """Return 1-based indices of steps whose stripped length is < 10."""
     return [n for n, s in enumerate(steps, 1) if len(s.strip()) < 10]

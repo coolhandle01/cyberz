@@ -33,7 +33,7 @@ class TestBrowseProgrammesTool:
         ) as mbrowse:
             result = browse_programmes_tool.func(offers_bounties=True)
 
-        assert result == [p.model_dump() for p in previews]
+        assert result == previews
         # No filter args defaulted, only the one we passed in flight.
         mbrowse.assert_called_once_with(
             asset_type=None,
@@ -88,7 +88,7 @@ class TestHydrateProgrammeTool:
         ):
             result = hydrate_programme_tool.func(programme.handle)
 
-        assert result == programme.model_dump()
+        assert result == programme
         mhydrate.assert_called_once_with(programme.handle)
         assert cache_path.exists()
 

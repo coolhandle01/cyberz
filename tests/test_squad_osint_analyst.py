@@ -79,8 +79,10 @@ class TestOsintAnalystTools:
             for p in reversed(patches):
                 p.stop()
 
-        assert isinstance(result, dict)
-        assert result["validation"]["ok"] is True
+        from tools.recon_insights import HostAnnotation
+
+        assert isinstance(result, HostAnnotation)
+        assert result.validation.ok is True
         assert (tmp_path / "host_insights" / "api.example.com.json").exists()
 
     def test_annotate_host_tool_surfaces_validation_issues(
@@ -108,9 +110,11 @@ class TestOsintAnalystTools:
             for p in reversed(patches):
                 p.stop()
 
-        assert isinstance(result, dict)
-        assert result["validation"]["ok"] is False
-        sections = {i["section"] for i in result["validation"]["issues"]}
+        from tools.recon_insights import HostAnnotation
+
+        assert isinstance(result, HostAnnotation)
+        assert result.validation.ok is False
+        sections = {i.section for i in result.validation.issues}
         assert "notes" in sections
 
     def test_uncovered_hosts_tool_returns_missing(self, programme, recon_result, tmp_path) -> None:
@@ -197,7 +201,7 @@ class TestOsintAnalystTools:
                 p.stop()
 
         assert isinstance(result, list)
-        assert result[0]["url"] == endpoint.url
+        assert result[0].url == endpoint.url
 
     def test_probe_hostnames_tool_empty_list(self) -> None:
         from squad.osint_analyst import probe_hostnames_tool
@@ -260,14 +264,7 @@ class TestOsintAnalystTools:
                 p.stop()
 
         assert isinstance(result, list)
-        assert result == [
-            {
-                "hostname": "legacy.example.com",
-                "cname": "bucket.s3.amazonaws.com",
-                "reason": "cname_to_vulnerable_provider",
-                "service": "AWS S3",
-            }
-        ]
+        assert result == [candidate]
 
     def test_detect_takeover_candidates_tool_empty(self) -> None:
         from squad.osint_analyst import detect_takeover_candidates_tool
@@ -305,18 +302,22 @@ class TestOsintAnalystTools:
 
     def test_lookup_cwe_tool(self) -> None:
         from squad.osint_analyst import lookup_cwe_tool
+        from tools.cwe_data import CWEEntry
 
         result = lookup_cwe_tool.func("XSS")
         assert isinstance(result, list)
         assert result
-        assert result[0]["cwe_id"] == 79
+        assert isinstance(result[0], CWEEntry)
+        assert result[0].cwe_id == 79
 
     def test_lookup_owasp_tool(self) -> None:
         from squad.osint_analyst import lookup_owasp_tool
+        from tools.owasp_data import OWASPEntry
 
         result = lookup_owasp_tool.func("sql injection")
         assert isinstance(result, list)
-        assert any("SQL_Injection_Prevention" in r["url"] for r in result)
+        assert all(isinstance(r, OWASPEntry) for r in result)
+        assert any("SQL_Injection_Prevention" in r.url for r in result)
 
     def test_cert_transparency_tool(self) -> None:
         from squad.osint_analyst import cert_transparency_tool
@@ -345,6 +346,7 @@ class TestOsintAnalystTools:
         m.assert_called_once_with("example.com")
 
     def test_llm_detection_tool(self, endpoint) -> None:
+        from models import LlmEndpoint
         from squad.osint_analyst import llm_detection_tool
 
         endpoints_json = json.dumps([endpoint.model_dump(mode="json")])
@@ -354,5 +356,5 @@ class TestOsintAnalystTools:
         ) as m:
             result = llm_detection_tool.func(endpoints_json)
 
-        assert result == [endpoint.model_dump()]
+        assert result == [LlmEndpoint.model_validate(endpoint.model_dump())]
         assert len(m.call_args[0][0]) == 1

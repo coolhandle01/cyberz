@@ -15,7 +15,7 @@ in one hop.
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, computed_field
 
 _BASE_URL = "https://cheatsheetseries.owasp.org/cheatsheets"
 
@@ -28,6 +28,10 @@ class OWASPEntry(BaseModel):
     key_principles: list[str]
     aliases: list[str] = []  # short keywords the TA may use to find this sheet
 
+    # Exposed as a computed_field rather than a plain @property so it appears
+    # in model_dump output - the @tool wrapper returns list[OWASPEntry] direct
+    # and the agent sees the cheatsheetseries.owasp.org URL it cites.
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def url(self) -> str:
         return f"{_BASE_URL}/{self.topic}_Cheat_Sheet.html"

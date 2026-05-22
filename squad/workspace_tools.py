@@ -4,27 +4,27 @@ from __future__ import annotations
 
 from crewai.tools import tool
 
+from models import RunFile, RunFileContent
 from models.attack import AttackPlan
 from tools import workspace
 from tools.research_tools import attack_plan_path, load_attack_plan
 
 
 @tool("List Run Files")
-def read_run_filelist_tool() -> list[dict]:
+def read_run_filelist_tool() -> list[RunFile]:
     """List the artefacts written to the current run directory by the squad
     so far, each with its name and byte size. Use this to discover what an
     upstream teammate has produced before deciding which file to sample with
     Read Run File."""
-    return workspace.list_run_files()
+    return [RunFile(**entry) for entry in workspace.list_run_files()]
 
 
 @tool("Read Run File")
-def read_run_file_tool(relative_path: str) -> dict:
+def read_run_file_tool(relative_path: str) -> RunFileContent:
     """Read a file from the current run directory and return its full contents.
     ``relative_path`` is a path relative to the run directory (e.g.
-    "recon.json") - the only kind of path this tool accepts. Returns
-    {name, size_bytes, content}."""
-    return workspace.read_run_file(relative_path)
+    "recon.json") - the only kind of path this tool accepts."""
+    return RunFileContent(**workspace.read_run_file(relative_path))
 
 
 @tool("Read Attack Plan")

@@ -165,6 +165,89 @@ class ReconResult(BaseModel):
     completed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
+# Workspace artefacts (shared @tool wrapper return shapes)
+
+
+class RunFile(BaseModel):
+    """One file in the per-run shared workspace."""
+
+    name: str  # path relative to the run directory
+    size_bytes: int
+
+
+class RunFileContent(BaseModel):
+    """The full contents of one run-directory file."""
+
+    name: str
+    size_bytes: int
+    content: str
+
+
+# Recon-derived tool return shapes
+
+
+class OpenPortsMap(BaseModel):
+    """The recon-derived port map keyed by host.
+
+    Lives as its own model rather than ``dict[str, list[int]]`` so the
+    Penetration Tester sees a documented shape it can pattern-match on
+    when deciding which port-specific probes to run.
+    """
+
+    hosts: dict[str, list[int]] = Field(default_factory=dict)
+
+
+class LlmEndpoint(BaseModel):
+    """An endpoint flagged as LLM-backed by ``detect_llm_endpoints``.
+
+    A thin wrapper over ``Endpoint`` so the OSINT Analyst tool surface
+    carries the LLM-detection intent at the type level (the field set is
+    identical, but the model name marks the contract).
+    """
+
+    url: str
+    status_code: int | None = None
+    technologies: list[str] = Field(default_factory=list)
+    parameters: list[str] = Field(default_factory=list)
+
+
+# Triage / report / OSINT tool return shapes
+#
+# These wrap a workspace path plus the validation report produced by the
+# underlying tool. Keeping the path and the validation grouped on the same
+# model means the agent does not have to guess which keys to read on a
+# bare dict.
+
+
+class RawFindingSummary(BaseModel):
+    """Compact summary of one raw finding, returned by List Raw Findings."""
+
+    index: int
+    title: str
+    vuln_class: str
+    target: str
+    severity_hint: Severity
+    evidence_bytes: int
+
+
+class ProgrammeReportSummary(BaseModel):
+    """Compact summary of one HackerOne report listed against a programme."""
+
+    report_id: str | None = None
+    title: str | None = None
+    severity: str | None = None
+    state: str | None = None
+
+
+class CveEntry(BaseModel):
+    """One NVD CVE record, returned by NVD CVE Lookup."""
+
+    id: str
+    cvss_score: float | None = None
+    cvss_vector: str | None = None
+    description: str = ""
+
+
 # Operational metrics (emitted after every pipeline run)
 
 

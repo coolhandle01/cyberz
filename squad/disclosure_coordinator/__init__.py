@@ -6,6 +6,8 @@ from pathlib import Path
 
 from crewai.tools import tool
 
+from models import ProgrammeReportSummary
+from models.h1 import DisclosureReport, SubmissionResult
 from squad import SquadMember, read_run_file_tool, read_run_filelist_tool
 from tools import http
 from tools.h1_api import h1
@@ -13,19 +15,16 @@ from tools.report_tools import save_report
 
 
 @tool("Submit Report")
-def submit_report_tool(report_json: str) -> dict:
+def submit_report_tool(report_json: str) -> SubmissionResult:
     """Submit a serialised DisclosureReport to HackerOne."""
-    from models.h1 import DisclosureReport
-
     report = DisclosureReport.model_validate_json(report_json)
     http.set_programme(report.programme_handle)
     save_report(report)
-    result = h1.submit_report(report)
-    return result.model_dump()
+    return h1.submit_report(report)
 
 
 @tool("Check H1 Duplicate")
-def check_duplicate_tool(programme_handle: str, title: str) -> list[dict]:
+def check_duplicate_tool(programme_handle: str, title: str) -> list[ProgrammeReportSummary]:
     """
     Last-chance duplicate check before submission. Lists recent reports on this
     programme whose titles resemble the given title. A match means another
@@ -35,11 +34,11 @@ def check_duplicate_tool(programme_handle: str, title: str) -> list[dict]:
     reports = h1.list_reports(programme_handle, page_size=25)
     title_lower = title.lower()
     return [
-        {
-            "report_id": r.get("id"),
-            "title": r.get("attributes", {}).get("title"),
-            "state": r.get("attributes", {}).get("state"),
-        }
+        ProgrammeReportSummary(
+            report_id=r.get("id"),
+            title=r.get("attributes", {}).get("title"),
+            state=r.get("attributes", {}).get("state"),
+        )
         for r in reports
         if title_lower[:30] in (r.get("attributes", {}).get("title") or "").lower()
     ]

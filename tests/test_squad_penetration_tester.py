@@ -23,26 +23,24 @@ class TestPenetrationTesterTools:
     def test_nuclei_scan_tool(self, endpoint, raw_finding_low) -> None:
         from squad.penetration_tester import nuclei_scan_tool
 
-        endpoints_json = json.dumps([endpoint.model_dump(mode="json")])
         with patch(
             "squad.penetration_tester.run_nuclei",
             return_value=[raw_finding_low],
         ):
-            result = nuclei_scan_tool.func(endpoints_json, '["wordpress"]')
+            result = nuclei_scan_tool.func([endpoint.model_dump(mode="json")], ["wordpress"])
 
-        assert result == [raw_finding_low.model_dump()]
+        assert result == [raw_finding_low]
 
     def test_sqlmap_tool(self, endpoint, raw_finding_low) -> None:
         from squad.penetration_tester import sqlmap_tool
 
-        endpoints_json = json.dumps([endpoint.model_dump(mode="json")])
         with patch(
             "squad.penetration_tester.run_sqlmap",
             return_value=[raw_finding_low],
         ):
-            result = sqlmap_tool.func(endpoints_json)
+            result = sqlmap_tool.func([endpoint.model_dump(mode="json")])
 
-        assert result == [raw_finding_low.model_dump()]
+        assert result == [raw_finding_low]
 
     def test_cookie_check_tool(self, recon_result, raw_finding_low, tmp_path) -> None:
         from squad.penetration_tester import cookie_check_tool
@@ -59,7 +57,7 @@ class TestPenetrationTesterTools:
         ):
             result = cookie_check_tool.func("recon.json")
 
-        assert result == [raw_finding_low.model_dump()]
+        assert result == [raw_finding_low]
         mhttp.assert_called_once_with(recon_result.programme.handle)
 
     def test_cors_check_tool(self, recon_result, raw_finding_low, tmp_path) -> None:
@@ -77,7 +75,7 @@ class TestPenetrationTesterTools:
         ):
             result = cors_check_tool.func("recon.json")
 
-        assert result == [raw_finding_low.model_dump()]
+        assert result == [raw_finding_low]
 
     def test_csrf_check_tool(self, recon_result, raw_finding_low, tmp_path) -> None:
         from squad.penetration_tester import csrf_check_tool
@@ -94,19 +92,18 @@ class TestPenetrationTesterTools:
         ):
             result = csrf_check_tool.func("recon.json")
 
-        assert result == [raw_finding_low.model_dump()]
+        assert result == [raw_finding_low]
 
     def test_ssrf_probe_tool(self, endpoint, raw_finding_low) -> None:
         from squad.penetration_tester import ssrf_probe_tool
 
-        endpoints_json = json.dumps([endpoint.model_dump(mode="json")])
         with patch(
             "squad.penetration_tester.check_ssrf",
             return_value=[raw_finding_low],
         ):
-            result = ssrf_probe_tool.func(endpoints_json, None)
+            result = ssrf_probe_tool.func([endpoint.model_dump(mode="json")], None)
 
-        assert result == [raw_finding_low.model_dump()]
+        assert result == [raw_finding_low]
 
     def test_header_injection_tool(self, recon_result, raw_finding_low, tmp_path) -> None:
         from squad.penetration_tester import header_injection_tool
@@ -123,7 +120,7 @@ class TestPenetrationTesterTools:
         ):
             result = header_injection_tool.func("recon.json")
 
-        assert result == [raw_finding_low.model_dump()]
+        assert result == [raw_finding_low]
 
     def test_host_header_tool(self, recon_result, raw_finding_low, tmp_path) -> None:
         from squad.penetration_tester import host_header_tool
@@ -140,17 +137,18 @@ class TestPenetrationTesterTools:
         ):
             result = host_header_tool.func("recon.json")
 
-        assert result == [raw_finding_low.model_dump()]
+        assert result == [raw_finding_low]
 
     def test_save_findings_tool(self, raw_finding_low, tmp_path) -> None:
+        from models import RawFinding
         from squad.penetration_tester import save_findings_tool
 
-        findings_json = json.dumps([raw_finding_low.model_dump(mode="json")])
         with patch("runtime.run_dir", return_value=tmp_path):
-            result = save_findings_tool.func(findings_json)
+            result = save_findings_tool.func([raw_finding_low.model_dump(mode="json")])
 
         assert result == "findings.json"
-        assert (tmp_path / "findings.json").read_text(encoding="utf-8") == findings_json
+        persisted = json.loads((tmp_path / "findings.json").read_text(encoding="utf-8"))
+        assert [RawFinding.model_validate(f) for f in persisted] == [raw_finding_low]
 
     def test_recon_subdomains_tool(self, recon_result, tmp_path) -> None:
         from squad.penetration_tester import recon_subdomains_tool
@@ -179,6 +177,9 @@ class TestPenetrationTesterTools:
 
         recon_path = tmp_path / "recon.json"
         recon_path.write_text(recon_result.model_dump_json(), encoding="utf-8")
+        from models import OpenPortsMap
+
         with patch("tools.workspace.runtime.run_dir", return_value=tmp_path):
             result = recon_open_ports_tool.func("recon.json")
-        assert result == recon_result.open_ports
+        assert isinstance(result, OpenPortsMap)
+        assert result.hosts == recon_result.open_ports

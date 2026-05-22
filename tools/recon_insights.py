@@ -65,6 +65,18 @@ class InsightValidationReport(BaseModel):
     issues: list[InsightValidationIssue] = Field(default_factory=list)
 
 
+class HostAnnotation(BaseModel):
+    """Return shape of the Annotate Host tool.
+
+    ``path`` is the workspace-relative location of the persisted insight
+    (e.g. ``host_insights/api.example.com.json``); ``validation`` is the
+    quality-gate report for the insight that was just authored.
+    """
+
+    path: str
+    validation: InsightValidationReport
+
+
 def validate_insight(
     insight: HostInsight,
     sweep: ReconResult,

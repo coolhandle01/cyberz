@@ -8,11 +8,23 @@ from pathlib import Path
 from crewai.tools import tool
 
 import runtime
-from models import Endpoint, HostInsight, HostPriority, HostRole
+from models import (
+    Endpoint,
+    EndpointPage,
+    HostInsight,
+    HostPriority,
+    HostRole,
+    LlmEndpoint,
+    OpenPortsMap,
+)
 from models.h1 import Programme
 from squad import SquadMember, read_run_file_tool, read_run_filelist_tool
-from tools import cwe_data, http, owasp_data
+from tools import http
+from tools.cwe_data import CWEEntry
+from tools.cwe_data import lookup as cwe_lookup
 from tools.h1_api import h1
+from tools.owasp_data import OWASPEntry
+from tools.owasp_data import lookup as owasp_lookup
 from tools.recon import (
     cert_transparency,
     detect_llm_endpoints,
@@ -21,9 +33,11 @@ from tools.recon import (
     run_recon,
 )
 from tools.recon import probe_endpoints as probe_endpoints_impl
+from tools.recon.dnsx import TakeoverCandidate
 from tools.recon.query import recon_endpoints, recon_open_ports, recon_subdomains
 from tools.recon.scope import filter_in_scope as filter_in_scope_impl
 from tools.recon_insights import (
+    HostAnnotation,
     ReconFinalisationError,
     finalise_recon,
     save_insight,
@@ -64,7 +78,9 @@ def run_initial_sweep_tool(programme_handle: str) -> str:
 
 
 @tool("Recon Subdomains")
-def recon_subdomains_tool(sweep_path: str = "sweep.json", host_filter: str | None = None) -> list:
+def recon_subdomains_tool(
+    sweep_path: str = "sweep.json", host_filter: str | None = None
+) -> list[str]:
     """
     Return the in-scope subdomains in the OA's draft sweep. ``host_filter`` is
     a case-insensitive substring (e.g. "api" returns every subdomain
@@ -82,7 +98,7 @@ def recon_endpoints_tool(
     host_contains: str | None = None,
     offset: int = 0,
     limit: int = 50,
-) -> dict:
+) -> EndpointPage:
     """
     Return a paginated slice of endpoints from the sweep matching the given
     filters (conjunctive). ``tech`` matches case-insensitively as a
@@ -97,18 +113,18 @@ def recon_endpoints_tool(
         host_contains=host_contains,
         offset=offset,
         limit=limit,
-    ).model_dump(mode="json")
+    )
 
 
 @tool("Recon Open Ports")
-def recon_open_ports_tool(sweep_path: str = "sweep.json", host: str | None = None) -> dict:
+def recon_open_ports_tool(sweep_path: str = "sweep.json", host: str | None = None) -> OpenPortsMap:
     """
     Return the open-port map per host from the sweep. Passing a ``host``
     restricts the result to that single host. Use to surface non-HTTP
     services (Redis 6379, Elasticsearch 9200, Mongo 27017, etc.) that an
     annotation should call out.
     """
-    return recon_open_ports(sweep_path, host=host)
+    return OpenPortsMap(hosts=recon_open_ports(sweep_path, host=host))
 
 
 @tool("Certificate Transparency Lookup")
@@ -132,7 +148,7 @@ def historical_urls_tool(domain: str) -> list[str]:
 
 
 @tool("LLM Endpoint Detection")
-def llm_detection_tool(endpoints_json: str) -> list[dict]:
+def llm_detection_tool(endpoints_json: str) -> list[LlmEndpoint]:
     """
     Scan a set of live endpoints for signals that they are backed by an LLM
     or AI assistant (URL path heuristics, OpenAI-format response keys,
@@ -142,11 +158,11 @@ def llm_detection_tool(endpoints_json: str) -> list[dict]:
     Tester at prompt-injection probes.
     """
     endpoints = [Endpoint.model_validate(e) for e in json.loads(endpoints_json)]
-    return [ep.model_dump() for ep in detect_llm_endpoints(endpoints)]
+    return [LlmEndpoint.model_validate(ep.model_dump()) for ep in detect_llm_endpoints(endpoints)]
 
 
 @tool("Probe Hostnames")
-def probe_hostnames_tool(hostnames: list[str], programme_handle: str) -> list[dict]:
+def probe_hostnames_tool(hostnames: list[str], programme_handle: str) -> list[Endpoint]:
     """
     Re-probe a list of hostnames with httpx to confirm liveness, capture
     status codes, and fingerprint technologies. Use this on hostnames
@@ -156,8 +172,8 @@ def probe_hostnames_tool(hostnames: list[str], programme_handle: str) -> list[di
     The hostnames are filtered against the programme's structured scope
     before any HTTP traffic is generated; out-of-scope hostnames are
     dropped silently (we never probe outside scope, even for fingerprinting).
-    Returns ``[{url, status_code, technologies, parameters}]``. Net-new
-    endpoints can then be annotated with Annotate Host.
+    Returns a list of Endpoint with {url, status_code, technologies,
+    parameters}. Net-new endpoints can then be annotated with Annotate Host.
     """
     if not hostnames:
         return []
@@ -165,20 +181,21 @@ def probe_hostnames_tool(hostnames: list[str], programme_handle: str) -> list[di
     in_scope = filter_in_scope_impl([h.strip().lower() for h in hostnames if h.strip()], programme)
     if not in_scope:
         return []
-    eps = probe_endpoints_impl(in_scope)
-    return [ep.model_dump(mode="json") for ep in eps]
+    return list(probe_endpoints_impl(in_scope))
 
 
 @tool("Detect Takeover Candidates")
-def detect_takeover_candidates_tool(hostnames: list[str], programme_handle: str) -> list[dict]:
+def detect_takeover_candidates_tool(
+    hostnames: list[str], programme_handle: str
+) -> list[TakeoverCandidate]:
     """
     Resolve each hostname via dnsx and flag subdomain-takeover candidates.
 
     A candidate is flagged when the host's CNAME points to a known-vulnerable
     provider (AWS S3, Heroku, GitHub Pages, Azure, Vercel, Netlify, ...) or
     when the CNAME chain dangles (CNAME exists but resolves to no A records).
-    Returns ``[{hostname, cname, reason, service}]`` where ``reason`` is one
-    of ``cname_to_vulnerable_provider`` or ``dangling_cname``.
+    Returns a list of TakeoverCandidate where ``reason`` is one of
+    ``cname_to_vulnerable_provider`` or ``dangling_cname``.
 
     Each candidate is exactly that - a candidate. Follow up by annotating
     the host HIGH priority with a note pointing the Penetration Tester at
@@ -194,12 +211,11 @@ def detect_takeover_candidates_tool(hostnames: list[str], programme_handle: str)
     in_scope = filter_in_scope_impl([h.strip().lower() for h in hostnames if h.strip()], programme)
     if not in_scope:
         return []
-    candidates = detect_takeover_candidates(in_scope)
-    return [c.model_dump(mode="json") for c in candidates]
+    return list(detect_takeover_candidates(in_scope))
 
 
 @tool("Lookup CWE")
-def lookup_cwe_tool(query: str) -> list[dict]:
+def lookup_cwe_tool(query: str) -> list[CWEEntry]:
     """
     Find Common Weakness Enumeration entries that match a query - useful
     when annotating a host whose detected tech has a well-known weakness
@@ -207,36 +223,17 @@ def lookup_cwe_tool(query: str) -> list[dict]:
     Returns each match's cwe_id, name, short description, and the matching
     OWASP cheat-sheet topic.
     """
-    entries = cwe_data.lookup(query)
-    return [
-        {
-            "cwe_id": e.cwe_id,
-            "name": e.name,
-            "description": e.description,
-            "url": e.url,
-            "owasp_topic": e.owasp_topic,
-        }
-        for e in entries
-    ]
+    return list(cwe_lookup(query))
 
 
 @tool("Lookup OWASP Guidance")
-def lookup_owasp_tool(query: str) -> list[dict]:
+def lookup_owasp_tool(query: str) -> list[OWASPEntry]:
     """
     Find OWASP Cheat Sheet entries for a vuln class or topic - hint for
     the downstream VR's attack-plan reasoning. Returns each match's title,
     key_principles, and the canonical cheatsheetseries.owasp.org URL.
     """
-    entries = owasp_data.lookup(query)
-    return [
-        {
-            "topic": e.topic,
-            "title": e.title,
-            "url": e.url,
-            "key_principles": e.key_principles,
-        }
-        for e in entries
-    ]
+    return list(owasp_lookup(query))
 
 
 @tool("Annotate Host")
@@ -248,7 +245,7 @@ def annotate_host_tool(
     detected_tech: list[str] | None = None,
     sweep_path: str = "sweep.json",
     programme_handle: str | None = None,
-) -> dict:
+) -> HostAnnotation:
     """
     Author one HostInsight for a single hostname and run the quality gate.
 
@@ -265,8 +262,9 @@ def annotate_host_tool(
         "Spring Boot"); the warning fires when the sweep saw tech that the
         annotation drops
 
-    Returns ``{"path": "host_insights/HOST.json", "validation": {ok, issues}}``.
-    Re-run with the issues addressed when validation.ok is false.
+    Returns a HostAnnotation with the relative insight path and an
+    InsightValidationReport. Re-run with the issues addressed when
+    validation.ok is false.
     """
     sweep = load_sweep_impl(sweep_path)
     programme = _load_programme(programme_handle)
@@ -279,11 +277,10 @@ def annotate_host_tool(
         detected_tech=[t.strip() for t in (detected_tech or []) if t.strip()],
     )
     path = save_insight(insight)
-    report = validate_insight(insight, sweep, programme)
-    return {
-        "path": str(path.relative_to(path.parents[1])),
-        "validation": report.model_dump(),
-    }
+    return HostAnnotation(
+        path=str(path.relative_to(path.parents[1])),
+        validation=validate_insight(insight, sweep, programme),
+    )
 
 
 @tool("Uncovered Hosts")

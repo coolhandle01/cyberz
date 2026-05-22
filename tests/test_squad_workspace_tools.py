@@ -18,22 +18,24 @@ pytestmark = pytest.mark.unit
 
 class TestSharedWorkspaceTools:
     def test_read_run_filelist_tool(self, tmp_path) -> None:
+        from models import RunFile
         from squad import read_run_filelist_tool
 
         (tmp_path / "recon.json").write_text("{}", encoding="utf-8")
         with patch("tools.workspace.runtime.run_dir", return_value=tmp_path):
             result = read_run_filelist_tool.func()
-        assert result == [{"name": "recon.json", "size_bytes": 2}]
+        assert result == [RunFile(name="recon.json", size_bytes=2)]
 
     def test_read_run_file_tool(self, tmp_path) -> None:
+        from models import RunFileContent
         from squad import read_run_file_tool
 
         (tmp_path / "recon.json").write_text("hello", encoding="utf-8")
         with patch("tools.workspace.runtime.run_dir", return_value=tmp_path):
             result = read_run_file_tool.func("recon.json")
-        assert isinstance(result, dict)
-        assert result["content"] == "hello"
-        assert result["size_bytes"] == 5
+        assert isinstance(result, RunFileContent)
+        assert result.content == "hello"
+        assert result.size_bytes == 5
 
     def test_read_run_file_tool_refuses_escape(self, tmp_path) -> None:
         from squad import read_run_file_tool

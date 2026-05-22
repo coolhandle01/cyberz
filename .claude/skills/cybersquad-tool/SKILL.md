@@ -16,8 +16,8 @@ def read_attack_plan_tool() -> AttackPlan:
     return load_attack_plan(attack_plan_path())
 
 @tool("Reflected XSS Probe")
-def xss_probe_tool(endpoints_json: str) -> list[RawFinding]:
-    return list(check_reflected_xss(_parse_endpoints(endpoints_json)))
+def xss_probe_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
+    return list(check_reflected_xss(_parse_endpoints(endpoints)))
 ```
 
 ```python
@@ -40,7 +40,7 @@ Never `dict`, `list[dict]`, or bare `list` (no inner type). CrewAI serialises py
 # correct
 @pentest_tool("SSRF Probe", check_fn=check_ssrf)
 def ssrf_probe_tool(
-    endpoints_json: str,
+    endpoints: list[Endpoint],
     payloads: list[SsrfPayload] | None = None,
 ) -> list[RawFinding]:
     ...
@@ -48,10 +48,10 @@ def ssrf_probe_tool(
 
 ```python
 # wrong - the agent has no idea what strings are valid
-def ssrf_probe_tool(endpoints_json: str, payloads: list[str] | None = None) -> ...:
+def ssrf_probe_tool(endpoints: list[Endpoint], payloads: list[str] | None = None) -> ...:
 ```
 
-The `endpoints_json: str` pattern exists because CrewAI's tool-call protocol cannot pass arbitrary pydantic objects in - the wrapper takes the JSON-encoded form and unmarshals via `_parse_endpoints`. That is the only acceptable use of a bare `str` parameter for structured data; everywhere else, use the typed shape.
+The legacy `endpoints_json: str` pattern was retired in #139 once CrewAI's args-schema validation grew up enough to accept `list[<Model>]` directly. Today the LLM-side wire format is still JSON, but `args_schema.model_validate(kwargs).model_dump()` happens inside CrewAI before the function is called, so the wrapper just receives `list[dict]` and re-validates via `_parse_endpoints`. The agent sees a typed Endpoint schema instead of "pass a JSON string" - never reintroduce the JSON-string parameter for structured data.
 
 ## Workspace artifacts: writer and reader ship together
 
@@ -72,7 +72,7 @@ The reader returns the typed model; downstream agents work against the schema, n
 
 ## The `SquadMember.tools` registry
 
-Today `SquadMember.tools` is typed `list[Any]` because the local `_PentestTool` / `_ResearchBriefTool` Protocols do not share a base. That is being tightened in a follow-up (define a `CrewAITool` Protocol once, retype the registry). When that lands, the contract test that walks `MEMBER.tools` and asserts return-type annotations will be the mechanical enforcement of this skill - skill stays in AI context, test stays in CI.
+`SquadMember.tools` is typed `list[CrewAITool]` (the `CrewAITool` Protocol in `squad/__init__.py`). The local `_PentestTool` / `_ResearchBriefTool` Protocols inherit from it, so the registry is properly typed end-to-end. The contract test in `tests/test_squad_tool_contracts.py` walks every `MEMBER.tools` entry and asserts return-type annotations - skill stays in AI context, test stays in CI.
 
 ## Anti-patterns to catch
 

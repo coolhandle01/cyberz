@@ -8,6 +8,7 @@ from pathlib import Path
 from crewai.tools import tool
 
 import runtime
+from models.h1 import Programme, ProgrammePreview
 from squad import SquadMember
 from tools.h1_api import h1
 
@@ -25,7 +26,7 @@ def browse_programmes_tool(
     submission_state: str | None = None,
     sort: str | None = None,
     limit: int | None = None,
-) -> list[dict]:
+) -> list[ProgrammePreview]:
     """
     Survey the accessible H1 catalog with lightweight previews - one HTTP
     call per page, no per-programme detail fetch. Cheap, so use this first
@@ -45,22 +46,23 @@ def browse_programmes_tool(
       - sort: e.g. "-launched_at" for newest first
       - limit: cap on total previews (default config.h1.max_programmes)
 
-    Returns a list of ProgrammePreview dicts. Hydrate shortlisted handles
-    with hydrate_programme_tool.
+    Returns a list of ProgrammePreview. Hydrate shortlisted handles with
+    hydrate_programme_tool.
     """
-    previews = h1.browse_programmes(
-        asset_type=asset_type,
-        bookmarked=bookmarked,
-        offers_bounties=offers_bounties,
-        submission_state=submission_state,
-        sort=sort,
-        limit=limit,
+    return list(
+        h1.browse_programmes(
+            asset_type=asset_type,
+            bookmarked=bookmarked,
+            offers_bounties=offers_bounties,
+            submission_state=submission_state,
+            sort=sort,
+            limit=limit,
+        )
     )
-    return [p.model_dump() for p in previews]
 
 
 @tool("Hydrate HackerOne Programme")
-def hydrate_programme_tool(handle: str) -> dict:
+def hydrate_programme_tool(handle: str) -> Programme:
     """
     Fetch full programme detail for one handle - bounty_table, structured
     scope, policy text, response/payout stats. One HTTP call.
@@ -73,7 +75,7 @@ def hydrate_programme_tool(handle: str) -> dict:
     cache_path = runtime.programme_cache_path(prog.handle)
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     cache_path.write_text(prog.model_dump_json(), encoding="utf-8")
-    return prog.model_dump()
+    return prog
 
 
 @tool("Save Selected Programme")

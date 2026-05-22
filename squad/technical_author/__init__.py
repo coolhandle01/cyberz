@@ -6,12 +6,19 @@ from pathlib import Path
 
 from crewai.tools import tool
 
+from models import ProgrammeReportSummary
 from squad import SquadMember, read_run_file_tool, read_run_filelist_tool
-from tools import cwe_data, http, owasp_data
+from tools import http
+from tools.cwe_data import CWEEntry
+from tools.cwe_data import lookup as cwe_lookup
 from tools.h1_api import h1
+from tools.owasp_data import OWASPEntry
+from tools.owasp_data import lookup as owasp_lookup
 from tools.report_tools import (
     FinalisationError,
     ReportDraft,
+    ReportDraftResult,
+    SanitisationReport,
     calculate_cvss_score,
     finalise_drafts,
     load_verified,
@@ -23,7 +30,7 @@ from tools.workspace import resolve_run_path
 
 
 @tool("Sanitise Evidence")
-def sanitise_evidence_tool(text: str) -> dict:
+def sanitise_evidence_tool(text: str) -> SanitisationReport:
     """
     Redact credentials, cookies, bearer tokens, JWTs, AWS keys and secret-shaped
     key=value pairs from a chunk of evidence so it is safe to inline in a
@@ -33,11 +40,11 @@ def sanitise_evidence_tool(text: str) -> dict:
     request that proves the issue. Run this on the Penetration Tester's raw
     evidence before pasting it into Draft Vulnerability Report.
     """
-    return sanitise_evidence(text).model_dump()
+    return sanitise_evidence(text)
 
 
 @tool("Lookup CWE")
-def lookup_cwe_tool(query: str) -> list[dict]:
+def lookup_cwe_tool(query: str) -> list[CWEEntry]:
     """
     Find Common Weakness Enumeration entries that match a query. Pass a
     vuln_class string ("SQLi", "ReflectedXSS"), a CWE name ("Cross-Site
@@ -45,21 +52,11 @@ def lookup_cwe_tool(query: str) -> list[dict]:
     short description, MITRE URL, and the matching OWASP cheat-sheet topic so
     you can chain to Lookup OWASP Guidance.
     """
-    entries = cwe_data.lookup(query)
-    return [
-        {
-            "cwe_id": e.cwe_id,
-            "name": e.name,
-            "description": e.description,
-            "url": e.url,
-            "owasp_topic": e.owasp_topic,
-        }
-        for e in entries
-    ]
+    return list(cwe_lookup(query))
 
 
 @tool("Lookup OWASP Guidance")
-def lookup_owasp_tool(query: str) -> list[dict]:
+def lookup_owasp_tool(query: str) -> list[OWASPEntry]:
     """
     Find OWASP Cheat Sheet entries that match a query (topic slug or title
     keyword such as "sql injection", "ssrf", "authorization"). Returns each
@@ -67,16 +64,7 @@ def lookup_owasp_tool(query: str) -> list[dict]:
     canonical cheatsheetseries.owasp.org URL to cite in the Remediation
     section.
     """
-    entries = owasp_data.lookup(query)
-    return [
-        {
-            "topic": e.topic,
-            "title": e.title,
-            "url": e.url,
-            "key_principles": e.key_principles,
-        }
-        for e in entries
-    ]
+    return list(owasp_lookup(query))
 
 
 @tool("Calculate CVSS Score")
@@ -91,7 +79,9 @@ def calculate_cvss_tool(vector: str) -> float:
 
 
 @tool("List Programme Reports")
-def list_programme_reports_tool(programme_handle: str, page_size: int = 25) -> list[dict]:
+def list_programme_reports_tool(
+    programme_handle: str, page_size: int = 25
+) -> list[ProgrammeReportSummary]:
     """
     List recent public reports on this programme so you can write a title that
     is distinct from existing submissions. Returns each report's id, title,
@@ -102,12 +92,12 @@ def list_programme_reports_tool(programme_handle: str, page_size: int = 25) -> l
     http.set_programme(programme_handle)
     reports = h1.list_reports(programme_handle, page_size=page_size)
     return [
-        {
-            "report_id": r.get("id"),
-            "title": r.get("attributes", {}).get("title"),
-            "severity": r.get("attributes", {}).get("severity_rating"),
-            "state": r.get("attributes", {}).get("state"),
-        }
+        ProgrammeReportSummary(
+            report_id=r.get("id"),
+            title=r.get("attributes", {}).get("title"),
+            severity=r.get("attributes", {}).get("severity_rating"),
+            state=r.get("attributes", {}).get("state"),
+        )
         for r in reports
     ]
 
@@ -125,7 +115,7 @@ def draft_report_tool(
     cvss_vector: str,
     cwe_id: int,
     verified_path: str = "verified.json",
-) -> dict:
+) -> ReportDraftResult:
     """
     Draft a single H1-format report for one verified finding and run quality
     validation against it. The carried fields (target, vuln_class, severity)
@@ -144,9 +134,10 @@ def draft_report_tool(
       - cvss_vector + cwe_id: must match the computed CVSS score and an entry
         in the CWE catalogue
 
-    Returns {"path": "drafts/NNN.json", "validation": {ok, issues}}. When
-    ok is false, re-run with the issues addressed - Finalise Reports refuses
-    to consolidate drafts with unresolved errors.
+    Returns a ReportDraftResult with the relative draft path and a
+    ValidationReport. When validation.ok is false, re-run with the issues
+    addressed - Finalise Reports refuses to consolidate drafts with
+    unresolved errors.
     """
     verified = load_verified(resolve_run_path(verified_path))
     if finding_index < 0 or finding_index >= len(verified):
@@ -173,11 +164,10 @@ def draft_report_tool(
         remediation=remediation.strip(),
     )
     path = save_draft(draft)
-    report = validate_draft(draft)
-    return {
-        "path": str(path.relative_to(path.parents[1])),
-        "validation": report.model_dump(),
-    }
+    return ReportDraftResult(
+        path=str(path.relative_to(path.parents[1])),
+        validation=validate_draft(draft),
+    )
 
 
 @tool("Finalise Reports")
