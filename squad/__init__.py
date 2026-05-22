@@ -30,7 +30,7 @@ import functools
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Protocol, TypeVar, runtime_checkable
 
 from crewai import Agent, Task
 from crewai.tools import tool
@@ -45,6 +45,32 @@ from squad.workspace_tools import (
 R = TypeVar("R")
 
 SQUAD_SKILLS_DIR = Path(__file__).parent / "skills"
+
+
+@runtime_checkable
+class CrewAITool(Protocol):
+    """The shape every ``MEMBER.tools`` entry conforms to.
+
+    The decorators in use - the bare ``@tool``, ``@pentest_tool``,
+    ``@research_brief_tool``, ``@cached_tool`` - all produce CrewAI ``Tool``
+    instances that carry ``name``, ``description``, and ``func``. This
+    Protocol is the single shared surface those decorators expose, so the
+    registry can be ``list[CrewAITool]`` rather than ``list[Any]`` and the
+    contract test in ``tests/test_squad_tool_contracts.py`` has a typed
+    handle to walk.
+
+    ``func`` is declared via ``@property`` (rather than as a plain class
+    attribute) so the Protocol is satisfied by CrewAI's ``Tool`` model -
+    its ``func`` field is typed ``Callable[P, R | Awaitable[R]]`` for the
+    concrete wrapped function and would otherwise fail Protocol variance
+    against ``Callable[..., object]``.
+    """
+
+    name: str
+    description: str
+
+    @property
+    def func(self) -> Callable[..., object]: ...
 
 
 def cached_tool(name: str) -> Callable[[Callable[..., R]], Tool[..., R]]:
@@ -78,7 +104,7 @@ class SquadMember:
     """
 
     dir: Path
-    tools: list[Any] = field(default_factory=list)
+    tools: list[CrewAITool] = field(default_factory=list)
 
     @property
     def slug(self) -> str:
@@ -142,6 +168,7 @@ def build_task(
 
 
 __all__ = [
+    "CrewAITool",
     "SquadMember",
     "build_agent",
     "build_task",

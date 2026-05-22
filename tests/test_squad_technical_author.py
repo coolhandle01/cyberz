@@ -63,6 +63,7 @@ class TestTechnicalAuthorTools:
         self, verified_vuln, tmp_path
     ) -> None:
         from squad.technical_author import draft_report_tool
+        from tools.report_tools import ReportDraftResult
 
         self._write_verified(tmp_path, verified_vuln)
         with (
@@ -71,12 +72,13 @@ class TestTechnicalAuthorTools:
         ):
             result = draft_report_tool.func(**self._good_authoring())
 
-        assert isinstance(result, dict)
-        assert result["validation"]["ok"] is True
+        assert isinstance(result, ReportDraftResult)
+        assert result.validation.ok is True
         assert (tmp_path / "drafts" / "000.json").exists()
 
     def test_draft_report_tool_surfaces_validation_issues(self, verified_vuln, tmp_path) -> None:
         from squad.technical_author import draft_report_tool
+        from tools.report_tools import ReportDraftResult
 
         self._write_verified(tmp_path, verified_vuln)
         with (
@@ -85,9 +87,9 @@ class TestTechnicalAuthorTools:
         ):
             result = draft_report_tool.func(**self._good_authoring(title="bad title"))
 
-        assert isinstance(result, dict)
-        assert result["validation"]["ok"] is False
-        sections = {i["section"] for i in result["validation"]["issues"]}
+        assert isinstance(result, ReportDraftResult)
+        assert result.validation.ok is False
+        sections = {i.section for i in result.validation.issues}
         assert "title" in sections
 
     def test_draft_report_tool_rejects_out_of_range_index(self, verified_vuln, tmp_path) -> None:
@@ -131,20 +133,23 @@ class TestTechnicalAuthorTools:
 
     def test_sanitise_evidence_tool_returns_redactions(self) -> None:
         from squad.technical_author import sanitise_evidence_tool
+        from tools.report_tools import SanitisationReport
 
         result = sanitise_evidence_tool.func("Authorization: Bearer abc.def.ghi")
-        assert isinstance(result, dict)
-        assert "Bearer abc.def.ghi" not in result["sanitised"]
-        assert result["redactions"]
+        assert isinstance(result, SanitisationReport)
+        assert "Bearer abc.def.ghi" not in result.sanitised
+        assert result.redactions
 
     def test_lookup_cwe_tool_finds_known_class(self) -> None:
         from squad.technical_author import lookup_cwe_tool
+        from tools.cwe_data import CWEEntry
 
         result = lookup_cwe_tool.func("SQLi")
         assert isinstance(result, list)
         assert result
-        assert result[0]["cwe_id"] == 89
-        assert "cwe.mitre.org" in result[0]["url"]
+        assert isinstance(result[0], CWEEntry)
+        assert result[0].cwe_id == 89
+        assert "cwe.mitre.org" in result[0].url
 
     def test_lookup_cwe_tool_empty_for_unknown(self) -> None:
         from squad.technical_author import lookup_cwe_tool
@@ -165,11 +170,13 @@ class TestTechnicalAuthorTools:
 
     def test_lookup_owasp_tool_returns_cheatsheet(self) -> None:
         from squad.technical_author import lookup_owasp_tool
+        from tools.owasp_data import OWASPEntry
 
         result = lookup_owasp_tool.func("sql injection")
         assert isinstance(result, list)
         assert result
-        assert any("SQL_Injection_Prevention" in r["url"] for r in result)
+        assert all(isinstance(r, OWASPEntry) for r in result)
+        assert any("SQL_Injection_Prevention" in r.url for r in result)
 
     def test_calculate_cvss_tool(self) -> None:
         from squad.technical_author import calculate_cvss_tool
@@ -184,6 +191,7 @@ class TestTechnicalAuthorTools:
         m.assert_called_once_with("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
 
     def test_list_programme_reports_tool(self) -> None:
+        from models import ProgrammeReportSummary
         from squad.technical_author import list_programme_reports_tool
 
         h1_reports = [
@@ -203,12 +211,12 @@ class TestTechnicalAuthorTools:
             result = list_programme_reports_tool.func("acme", page_size=10)
 
         assert result == [
-            {
-                "report_id": "1",
-                "title": "Existing report",
-                "severity": "high",
-                "state": "triaged",
-            }
+            ProgrammeReportSummary(
+                report_id="1",
+                title="Existing report",
+                severity="high",
+                state="triaged",
+            )
         ]
         mhttp.assert_called_once_with("acme")
         mlist.assert_called_once_with("acme", page_size=10)

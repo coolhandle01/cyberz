@@ -337,6 +337,18 @@ class ValidationReport(BaseModel):
     issues: list[ValidationIssue] = Field(default_factory=list)
 
 
+class ReportDraftResult(BaseModel):
+    """Return shape of the Draft Vulnerability Report tool.
+
+    ``path`` is the workspace-relative location of the persisted draft
+    (e.g. ``drafts/000.json``); ``validation`` is the quality-gate report
+    for the draft that was just authored.
+    """
+
+    path: str
+    validation: ValidationReport
+
+
 def _count_sentences(text: str) -> int:
     text = text.strip()
     if not text:
