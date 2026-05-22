@@ -6,7 +6,7 @@ from pathlib import Path
 
 from crewai.tools import tool
 
-from squad import SquadMember, read_run_file_tool, read_run_filelist_tool
+from squad import SquadMember, cached_tool, read_run_file_tool, read_run_filelist_tool
 from tools import cwe_data, http, owasp_data
 from tools.h1_api import h1
 from tools.report_tools import (
@@ -36,7 +36,7 @@ def sanitise_evidence_tool(text: str) -> dict:
     return sanitise_evidence(text).model_dump()
 
 
-@tool("Lookup CWE")
+@cached_tool("Lookup CWE")
 def lookup_cwe_tool(query: str) -> list[dict]:
     """
     Find Common Weakness Enumeration entries that match a query. Pass a
@@ -58,7 +58,7 @@ def lookup_cwe_tool(query: str) -> list[dict]:
     ]
 
 
-@tool("Lookup OWASP Guidance")
+@cached_tool("Lookup OWASP Guidance")
 def lookup_owasp_tool(query: str) -> list[dict]:
     """
     Find OWASP Cheat Sheet entries that match a query (topic slug or title

@@ -26,11 +26,15 @@ Assembly (LLM wiring, pipeline order, approval gates) lives in crew.py / tasks.p
 
 from __future__ import annotations
 
+import functools
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 from crewai import Agent, Task
+from crewai.tools import tool
+from crewai.tools.base_tool import Tool
 
 from squad.workspace_tools import (
     read_attack_plan_tool,
@@ -38,7 +42,30 @@ from squad.workspace_tools import (
     read_run_filelist_tool,
 )
 
+R = TypeVar("R")
+
 SQUAD_SKILLS_DIR = Path(__file__).parent / "skills"
+
+
+def cached_tool(name: str) -> Callable[[Callable[..., R]], Tool[..., R]]:
+    """Drop-in replacement for ``@tool`` for deterministic data lookups.
+
+    Wraps the underlying function in ``functools.cache`` so repeated calls
+    with the same arguments skip recomputation, then registers it as a
+    CrewAI tool. Use this for pure functions whose return depends only on
+    their arguments and never mutates state (the CWE / OWASP cheat-sheet
+    lookups are the canonical case). Do not apply to tools that hit the
+    network, read or write the workspace, or otherwise depend on time-
+    varying state - those would silently return stale results.
+
+    The cache lives on the Tool's ``.func`` attribute and can be cleared
+    via ``tool_obj.func.cache_clear()``.
+    """
+
+    def decorator(fn: Callable[..., R]) -> Tool[..., R]:
+        return tool(name)(functools.cache(fn))
+
+    return decorator
 
 
 @dataclass(frozen=True)
@@ -118,6 +145,7 @@ __all__ = [
     "SquadMember",
     "build_agent",
     "build_task",
+    "cached_tool",
     "read_attack_plan_tool",
     "read_run_filelist_tool",
     "read_run_file_tool",

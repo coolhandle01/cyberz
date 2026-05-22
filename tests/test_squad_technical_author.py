@@ -151,6 +151,18 @@ class TestTechnicalAuthorTools:
 
         assert lookup_cwe_tool.func("zzz-not-a-class") == []
 
+    def test_lookup_cwe_tool_memoises_repeat_queries(self) -> None:
+        from squad.technical_author import lookup_cwe_tool
+
+        # Tool.func is typed Callable[P, R]; cached_tool wraps it in
+        # functools.cache, which adds cache_clear at runtime.
+        lookup_cwe_tool.func.cache_clear()  # type: ignore[attr-defined]
+        first = lookup_cwe_tool.func("XXE")
+        second = lookup_cwe_tool.func("XXE")
+        # Same object identity proves the cache decorator is in effect; the
+        # default ``@tool`` wrapper would build a fresh list on every call.
+        assert first is second
+
     def test_lookup_owasp_tool_returns_cheatsheet(self) -> None:
         from squad.technical_author import lookup_owasp_tool
 
