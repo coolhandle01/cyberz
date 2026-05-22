@@ -18,7 +18,7 @@ from models import (
     OpenPortsMap,
 )
 from models.h1 import Programme
-from squad import SquadMember, cached_tool, read_run_file_tool, read_run_filelist_tool
+from squad import SquadMember, read_run_file_tool, read_run_filelist_tool
 from tools import http
 from tools.cwe_data import CWEEntry
 from tools.cwe_data import lookup as cwe_lookup
@@ -214,7 +214,7 @@ def detect_takeover_candidates_tool(
     return list(detect_takeover_candidates(in_scope))
 
 
-@cached_tool("Lookup CWE")
+@tool("Lookup CWE")
 def lookup_cwe_tool(query: str) -> list[CWEEntry]:
     """
     Find Common Weakness Enumeration entries that match a query - useful
@@ -226,7 +226,7 @@ def lookup_cwe_tool(query: str) -> list[CWEEntry]:
     return list(cwe_lookup(query))
 
 
-@cached_tool("Lookup OWASP Guidance")
+@tool("Lookup OWASP Guidance")
 def lookup_owasp_tool(query: str) -> list[OWASPEntry]:
     """
     Find OWASP Cheat Sheet entries for a vuln class or topic - hint for

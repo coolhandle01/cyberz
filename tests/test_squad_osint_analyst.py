@@ -304,8 +304,6 @@ class TestOsintAnalystTools:
         from squad.osint_analyst import lookup_cwe_tool
         from tools.cwe_data import CWEEntry
 
-        # Caches across tests; clear so this case sees a real lookup.
-        lookup_cwe_tool.func.cache_clear()  # type: ignore[attr-defined]
         result = lookup_cwe_tool.func("XSS")
         assert isinstance(result, list)
         assert result
@@ -316,7 +314,6 @@ class TestOsintAnalystTools:
         from squad.osint_analyst import lookup_owasp_tool
         from tools.owasp_data import OWASPEntry
 
-        lookup_owasp_tool.func.cache_clear()  # type: ignore[attr-defined]
         result = lookup_owasp_tool.func("sql injection")
         assert isinstance(result, list)
         assert all(isinstance(r, OWASPEntry) for r in result)

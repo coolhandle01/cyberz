@@ -26,23 +26,18 @@ Assembly (LLM wiring, pipeline order, approval gates) lives in crew.py / tasks.p
 
 from __future__ import annotations
 
-import functools
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Protocol, TypeVar, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from crewai import Agent, Task
-from crewai.tools import tool
-from crewai.tools.base_tool import Tool
 
 from squad.workspace_tools import (
     read_attack_plan_tool,
     read_run_file_tool,
     read_run_filelist_tool,
 )
-
-R = TypeVar("R")
 
 SQUAD_SKILLS_DIR = Path(__file__).parent / "skills"
 
@@ -52,12 +47,11 @@ class CrewAITool(Protocol):
     """The shape every ``MEMBER.tools`` entry conforms to.
 
     The decorators in use - the bare ``@tool``, ``@pentest_tool``,
-    ``@research_brief_tool``, ``@cached_tool`` - all produce CrewAI ``Tool``
-    instances that carry ``name``, ``description``, and ``func``. This
-    Protocol is the single shared surface those decorators expose, so the
-    registry can be ``list[CrewAITool]`` rather than ``list[Any]`` and the
-    contract test in ``tests/test_squad_tool_contracts.py`` has a typed
-    handle to walk.
+    ``@research_brief_tool`` - all produce CrewAI ``Tool`` instances that
+    carry ``name``, ``description``, and ``func``. This Protocol is the
+    single shared surface those decorators expose, so the registry can be
+    ``list[CrewAITool]`` rather than ``list[Any]`` and the contract test in
+    ``tests/test_squad_tool_contracts.py`` has a typed handle to walk.
 
     ``func`` is declared via ``@property`` (rather than as a plain class
     attribute) so the Protocol is satisfied by CrewAI's ``Tool`` model -
@@ -71,27 +65,6 @@ class CrewAITool(Protocol):
 
     @property
     def func(self) -> Callable[..., object]: ...
-
-
-def cached_tool(name: str) -> Callable[[Callable[..., R]], Tool[..., R]]:
-    """Drop-in replacement for ``@tool`` for deterministic data lookups.
-
-    Wraps the underlying function in ``functools.cache`` so repeated calls
-    with the same arguments skip recomputation, then registers it as a
-    CrewAI tool. Use this for pure functions whose return depends only on
-    their arguments and never mutates state (the CWE / OWASP cheat-sheet
-    lookups are the canonical case). Do not apply to tools that hit the
-    network, read or write the workspace, or otherwise depend on time-
-    varying state - those would silently return stale results.
-
-    The cache lives on the Tool's ``.func`` attribute and can be cleared
-    via ``tool_obj.func.cache_clear()``.
-    """
-
-    def decorator(fn: Callable[..., R]) -> Tool[..., R]:
-        return tool(name)(functools.cache(fn))
-
-    return decorator
 
 
 @dataclass(frozen=True)
@@ -172,7 +145,6 @@ __all__ = [
     "SquadMember",
     "build_agent",
     "build_task",
-    "cached_tool",
     "read_attack_plan_tool",
     "read_run_filelist_tool",
     "read_run_file_tool",
