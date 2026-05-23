@@ -15,6 +15,7 @@ from squad import (
     read_attack_plan_tool,
     read_run_file_tool,
     read_run_filelist_tool,
+    typed_tool,
 )
 from tools import http
 from tools.cloud import (
@@ -86,14 +87,13 @@ def pentest_tool(
     check_fn: object = None,
     args_schema: type[BaseModel],
 ) -> Callable[[_PentestFn], _PentestTool]:
-    """Drop-in replacement for @tool that auto-appends OWASP categories from check_fn.
+    """Pentest-specialised wrapper. Composes ``typed_tool`` plus OWASP injection.
 
-    ``args_schema`` is the explicit Pydantic schema the agent sees when picking
-    the tool. Per #143 it is keyword-required: every pentest probe must declare
-    a hand-written schema because the inferred path cannot attach per-field
-    descriptions. The ``Tool.args_schema`` set by the underlying ``@tool``
-    decorator from the function signature is overwritten here with the
-    explicit class.
+    ``typed_tool`` handles the schema override; ``pentest_tool`` layers the
+    OWASP categories from ``check_fn.owasp_categories`` into the agent-facing
+    docstring. Every pentest probe goes through this wrapper, never bare
+    ``@tool`` and never raw ``@typed_tool`` - the OWASP framing is what the
+    PT agent's role.md teaches it to reason against.
     """
 
     def decorator(fn: _PentestFn) -> _PentestTool:
@@ -102,8 +102,7 @@ def pentest_tool(
             if cats:
                 lines = "\n".join(f"  - {c}" for c in cats)
                 fn.__doc__ = (fn.__doc__ or "").rstrip() + f"\n\nOWASP Top 10:\n{lines}\n"
-        wrapped = tool(name)(fn)
-        wrapped.args_schema = args_schema
+        wrapped = typed_tool(name, args_schema=args_schema)(fn)
         return cast(_PentestTool, wrapped)
 
     return decorator
@@ -804,7 +803,21 @@ def error_disclosure_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
     return list(check_error_disclosure(_parse_endpoints(endpoints)))
 
 
-@tool("S3 Bucket Check")
+class _S3CheckArgs(BaseModel):
+    """Explicit args_schema for the S3 Bucket Check tool (#147)."""
+
+    recon_path: str = Field(
+        description=(
+            "Relative path to recon.json in the run directory. Buckets are"
+            " derived from the programme handle and any S3 subdomains the"
+            " OSINT Analyst surfaced. Worth firing when the target is known"
+            " to use AWS or when *.s3 / *.s3.amazonaws.com subdomains appear"
+            " in recon."
+        ),
+    )
+
+
+@typed_tool("S3 Bucket Check", args_schema=_S3CheckArgs)
 def s3_check_tool(recon_path: str) -> list[RawFinding]:
     """
     Check for publicly accessible or listable AWS S3 buckets derived from the
@@ -816,7 +829,20 @@ def s3_check_tool(recon_path: str) -> list[RawFinding]:
     return list(check_s3_buckets(recon))
 
 
-@tool("Azure Blob Storage Check")
+class _AzureStorageCheckArgs(BaseModel):
+    """Explicit args_schema for the Azure Blob Storage Check tool (#147)."""
+
+    recon_path: str = Field(
+        description=(
+            "Relative path to recon.json in the run directory. Fire when the"
+            " target is known to use Azure, or when"
+            " *.blob.core.windows.net subdomains appear in recon. Probes for"
+            " public containers and SAS-token leakage in endpoint URLs."
+        ),
+    )
+
+
+@typed_tool("Azure Blob Storage Check", args_schema=_AzureStorageCheckArgs)
 def azure_storage_check_tool(recon_path: str) -> list[RawFinding]:
     """
     Check for publicly accessible Azure Blob Storage containers and exposed SAS
@@ -828,7 +854,20 @@ def azure_storage_check_tool(recon_path: str) -> list[RawFinding]:
     return list(check_azure_storage(recon))
 
 
-@tool("Unauthenticated Elasticsearch Check")
+class _ElasticsearchCheckArgs(BaseModel):
+    """Explicit args_schema for the Unauthenticated Elasticsearch Check tool (#147)."""
+
+    recon_path: str = Field(
+        description=(
+            "Relative path to recon.json in the run directory. Fire when"
+            " open_ports shows 9200, or when technologies mention"
+            " Elasticsearch. Probes /_cluster/health; a 200 with"
+            " cluster_name confirms no auth."
+        ),
+    )
+
+
+@typed_tool("Unauthenticated Elasticsearch Check", args_schema=_ElasticsearchCheckArgs)
 def elasticsearch_tool(recon_path: str) -> list[RawFinding]:
     """
     Check for an unauthenticated Elasticsearch instance on port 9200.
@@ -844,7 +883,19 @@ def elasticsearch_tool(recon_path: str) -> list[RawFinding]:
     return list(findings)
 
 
-@tool("Unauthenticated CouchDB Check")
+class _CouchdbCheckArgs(BaseModel):
+    """Explicit args_schema for the Unauthenticated CouchDB Check tool (#147)."""
+
+    recon_path: str = Field(
+        description=(
+            "Relative path to recon.json in the run directory. Fire when"
+            " open_ports shows 5984. Probes /_all_dbs; a 200 listing"
+            " databases confirms no auth."
+        ),
+    )
+
+
+@typed_tool("Unauthenticated CouchDB Check", args_schema=_CouchdbCheckArgs)
 def couchdb_tool(recon_path: str) -> list[RawFinding]:
     """
     Check for an unauthenticated CouchDB instance on port 5984.
@@ -860,7 +911,19 @@ def couchdb_tool(recon_path: str) -> list[RawFinding]:
     return list(findings)
 
 
-@tool("Unauthenticated Redis Check")
+class _RedisCheckArgs(BaseModel):
+    """Explicit args_schema for the Unauthenticated Redis Check tool (#147)."""
+
+    recon_path: str = Field(
+        description=(
+            "Relative path to recon.json in the run directory. Fire when"
+            " open_ports shows 6379. Sends a PING; a +PONG without AUTH"
+            " confirms no password is set."
+        ),
+    )
+
+
+@typed_tool("Unauthenticated Redis Check", args_schema=_RedisCheckArgs)
 def redis_tool(recon_path: str) -> list[RawFinding]:
     """
     Check for an unauthenticated Redis instance on port 6379 via a PING command.
@@ -876,7 +939,20 @@ def redis_tool(recon_path: str) -> list[RawFinding]:
     return list(findings)
 
 
-@tool("Unauthenticated MongoDB Check")
+class _MongodbCheckArgs(BaseModel):
+    """Explicit args_schema for the Unauthenticated MongoDB Check tool (#147)."""
+
+    recon_path: str = Field(
+        description=(
+            "Relative path to recon.json in the run directory. Fire when"
+            " open_ports shows 27017. Sends a minimal isMaster wire query;"
+            " a valid response without error confirms unauthenticated"
+            " access."
+        ),
+    )
+
+
+@typed_tool("Unauthenticated MongoDB Check", args_schema=_MongodbCheckArgs)
 def mongodb_tool(recon_path: str) -> list[RawFinding]:
     """
     Check for an unauthenticated MongoDB instance on port 27017.
@@ -893,7 +969,21 @@ def mongodb_tool(recon_path: str) -> list[RawFinding]:
     return list(findings)
 
 
-@tool("Exposed PostgreSQL Check")
+class _PostgresqlCheckArgs(BaseModel):
+    """Explicit args_schema for the Exposed PostgreSQL Check tool (#147)."""
+
+    recon_path: str = Field(
+        description=(
+            "Relative path to recon.json in the run directory. Fire when"
+            " open_ports shows 5432. CRITICAL if trust authentication"
+            " allows connection without a password; MEDIUM if the port is"
+            " exposed but credentials are required (unnecessary internet"
+            " exposure)."
+        ),
+    )
+
+
+@typed_tool("Exposed PostgreSQL Check", args_schema=_PostgresqlCheckArgs)
 def postgresql_tool(recon_path: str) -> list[RawFinding]:
     """
     Check for PostgreSQL on port 5432. Returns CRITICAL if trust authentication
@@ -910,7 +1000,20 @@ def postgresql_tool(recon_path: str) -> list[RawFinding]:
     return list(findings)
 
 
-@tool("Exposed MySQL/MariaDB Check")
+class _MysqlCheckArgs(BaseModel):
+    """Explicit args_schema for the Exposed MySQL/MariaDB Check tool (#147)."""
+
+    recon_path: str = Field(
+        description=(
+            "Relative path to recon.json in the run directory. Fire when"
+            " open_ports shows 3306. MEDIUM if the port is reachable and"
+            " the server responds with a valid handshake (unnecessary"
+            " internet exposure; verify anonymous login is disabled)."
+        ),
+    )
+
+
+@typed_tool("Exposed MySQL/MariaDB Check", args_schema=_MysqlCheckArgs)
 def mysql_tool(recon_path: str) -> list[RawFinding]:
     """
     Check for MySQL or MariaDB on port 3306. Returns MEDIUM if the port is
@@ -927,7 +1030,21 @@ def mysql_tool(recon_path: str) -> list[RawFinding]:
     return list(findings)
 
 
-@tool("Sensitive Files Check")
+class _SensitiveFilesArgs(BaseModel):
+    """Explicit args_schema for the Sensitive Files Check tool (#147)."""
+
+    endpoints: list[Endpoint] = Field(
+        description=(
+            "Endpoint objects. Pass a representative set of live endpoints;"
+            " the tool deduplicates by origin so many can be passed without"
+            " redundant probes. High-value finds on any target (.git/HEAD,"
+            " .env, phpinfo.php, Apache server-status, .DS_Store) - run"
+            " broadly."
+        ),
+    )
+
+
+@typed_tool("Sensitive Files Check", args_schema=_SensitiveFilesArgs)
 def sensitive_files_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
     """
     Probe for exposed .git/HEAD, .env, phpinfo.php, Apache server-status, and
@@ -943,7 +1060,20 @@ def sensitive_files_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
     return list(check_sensitive_files(_parse_endpoints(endpoints)))
 
 
-@tool("Admin Panels Check")
+class _AdminPanelsArgs(BaseModel):
+    """Explicit args_schema for the Admin Panels Check tool (#147)."""
+
+    endpoints: list[Endpoint] = Field(
+        description=(
+            "Endpoint objects. The tool deduplicates by origin so passing"
+            " many is safe. Probes common admin paths (/admin, /wp-admin,"
+            " /phpmyadmin, /adminer, /manager/html, /_admin) - run broadly"
+            " on all live endpoints."
+        ),
+    )
+
+
+@typed_tool("Admin Panels Check", args_schema=_AdminPanelsArgs)
 def admin_panels_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
     """
     Probe common admin panel paths: /admin, /wp-admin, /phpmyadmin, /adminer,
@@ -957,7 +1087,21 @@ def admin_panels_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
     return list(check_admin_panels(_parse_endpoints(endpoints)))
 
 
-@tool("cPanel/WHM Check")
+class _CpanelArgs(BaseModel):
+    """Explicit args_schema for the cPanel/WHM Check tool (#147)."""
+
+    recon_path: str = Field(
+        description=(
+            "Relative path to recon.json in the run directory. Fire when"
+            " open_ports shows 2082, 2083, 2086, or 2087, or when the"
+            " target appears to be a shared / managed hosting environment."
+            " Probes cPanel (2082/2083) and WHM (2086/2087) on every"
+            " discovered hostname."
+        ),
+    )
+
+
+@typed_tool("cPanel/WHM Check", args_schema=_CpanelArgs)
 def cpanel_tool(recon_path: str) -> list[RawFinding]:
     """
     Check for an exposed cPanel hosting control panel (ports 2082/2083) and
@@ -970,7 +1114,20 @@ def cpanel_tool(recon_path: str) -> list[RawFinding]:
     return list(check_cpanel(recon))
 
 
-@tool("Plesk Check")
+class _PleskArgs(BaseModel):
+    """Explicit args_schema for the Plesk Check tool (#147)."""
+
+    recon_path: str = Field(
+        description=(
+            "Relative path to recon.json in the run directory. Fire when"
+            " open_ports shows 8880 or 8443, or when the target is a"
+            " managed hosting or VPS provider. Probes Plesk on 8880 (HTTP)"
+            " and 8443 (HTTPS)."
+        ),
+    )
+
+
+@typed_tool("Plesk Check", args_schema=_PleskArgs)
 def plesk_tool(recon_path: str) -> list[RawFinding]:
     """
     Check for an exposed Plesk web hosting control panel on ports 8880 (HTTP)
@@ -982,7 +1139,19 @@ def plesk_tool(recon_path: str) -> list[RawFinding]:
     return list(check_plesk(recon))
 
 
-@tool("DirectAdmin Check")
+class _DirectadminArgs(BaseModel):
+    """Explicit args_schema for the DirectAdmin Check tool (#147)."""
+
+    recon_path: str = Field(
+        description=(
+            "Relative path to recon.json in the run directory. Fire when"
+            " open_ports shows 2222 on a target that appears to be shared"
+            " hosting."
+        ),
+    )
+
+
+@typed_tool("DirectAdmin Check", args_schema=_DirectadminArgs)
 def directadmin_tool(recon_path: str) -> list[RawFinding]:
     """
     Check for an exposed DirectAdmin hosting control panel on port 2222.
@@ -993,7 +1162,19 @@ def directadmin_tool(recon_path: str) -> list[RawFinding]:
     return list(check_directadmin(recon))
 
 
-@tool("Webmin Check")
+class _WebminArgs(BaseModel):
+    """Explicit args_schema for the Webmin Check tool (#147)."""
+
+    recon_path: str = Field(
+        description=(
+            "Relative path to recon.json in the run directory. Fire when"
+            " open_ports shows 10000, or when the target is a self-hosted"
+            " Linux server."
+        ),
+    )
+
+
+@typed_tool("Webmin Check", args_schema=_WebminArgs)
 def webmin_tool(recon_path: str) -> list[RawFinding]:
     """
     Check for an exposed Webmin Linux server administration panel on port 10000.
@@ -1004,7 +1185,20 @@ def webmin_tool(recon_path: str) -> list[RawFinding]:
     return list(check_webmin(recon))
 
 
-@tool("Grafana Check")
+class _GrafanaArgs(BaseModel):
+    """Explicit args_schema for the Grafana Check tool (#147)."""
+
+    recon_path: str = Field(
+        description=(
+            "Relative path to recon.json in the run directory. Fire when"
+            " open_ports shows 3000, technologies mention Grafana, or the"
+            " target is a DevOps / SRE-heavy organisation. Also probes"
+            " /grafana reverse-proxy paths on existing endpoints."
+        ),
+    )
+
+
+@typed_tool("Grafana Check", args_schema=_GrafanaArgs)
 def grafana_tool(recon_path: str) -> list[RawFinding]:
     """
     Check for an exposed Grafana metrics dashboard on port 3000 and via /grafana
@@ -1017,7 +1211,20 @@ def grafana_tool(recon_path: str) -> list[RawFinding]:
     return list(check_grafana(recon))
 
 
-@tool("Kibana Check")
+class _KibanaArgs(BaseModel):
+    """Explicit args_schema for the Kibana Check tool (#147)."""
+
+    recon_path: str = Field(
+        description=(
+            "Relative path to recon.json in the run directory. Fire when"
+            " open_ports shows 5601 or 9200 (Elasticsearch stack), or when"
+            " technologies mention Kibana or Elasticsearch. Also probes"
+            " /kibana reverse-proxy paths on existing endpoints."
+        ),
+    )
+
+
+@typed_tool("Kibana Check", args_schema=_KibanaArgs)
 def kibana_tool(recon_path: str) -> list[RawFinding]:
     """
     Check for an exposed Kibana log/data visualisation dashboard on port 5601 and
@@ -1030,7 +1237,20 @@ def kibana_tool(recon_path: str) -> list[RawFinding]:
     return list(check_kibana(recon))
 
 
-@tool("Portainer Check")
+class _PortainerArgs(BaseModel):
+    """Explicit args_schema for the Portainer Check tool (#147)."""
+
+    recon_path: str = Field(
+        description=(
+            "Relative path to recon.json in the run directory. Fire when"
+            " open_ports shows 9000, or when technologies mention Docker /"
+            " containerised infrastructure. Also probes /portainer"
+            " reverse-proxy paths on existing endpoints."
+        ),
+    )
+
+
+@typed_tool("Portainer Check", args_schema=_PortainerArgs)
 def portainer_tool(recon_path: str) -> list[RawFinding]:
     """
     Check for an exposed Portainer Docker management UI on port 9000 and via
@@ -1043,7 +1263,21 @@ def portainer_tool(recon_path: str) -> list[RawFinding]:
     return list(check_portainer(recon))
 
 
-@tool("Consul/Vault Check")
+class _ConsulVaultArgs(BaseModel):
+    """Explicit args_schema for the Consul/Vault Check tool (#147)."""
+
+    recon_path: str = Field(
+        description=(
+            "Relative path to recon.json in the run directory. Fire when"
+            " open_ports shows 8500 (Consul) or 8200 (Vault), or when the"
+            " target is a cloud-native / microservices environment. Also"
+            " probes /consul/ui and /vault/ui reverse-proxy paths on"
+            " existing endpoints."
+        ),
+    )
+
+
+@typed_tool("Consul/Vault Check", args_schema=_ConsulVaultArgs)
 def consul_vault_tool(recon_path: str) -> list[RawFinding]:
     """
     Check for an exposed HashiCorp Consul UI (port 8500) or Vault UI (port 8200),
