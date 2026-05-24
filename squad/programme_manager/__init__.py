@@ -6,7 +6,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 import runtime
-from models.h1 import Programme, ProgrammePreview
+from models.h1 import Programme, ProgrammePreview, ScopeType, SubmissionState
 from squad import SquadMember, cyber_tool
 from tools.h1_api import h1
 
@@ -14,15 +14,18 @@ from tools.h1_api import h1
 class _BrowseProgrammesArgs(BaseModel):
     """Explicit args_schema for the Browse HackerOne Programmes tool (#149)."""
 
-    asset_type: str | None = Field(
+    asset_type: ScopeType | None = Field(
         default=None,
         description=(
-            "H1 ``filter[asset_type]`` value. Maps directly onto the asset"
-            " types H1 documents for a programme's structured scope - common"
-            " values include 'URL', 'WILDCARD', 'IP_ADDRESS', 'CIDR',"
-            " 'SOURCE_CODE', 'HARDWARE', and the various mobile / store"
-            " types. Omit (None) to accept any asset type - the H1 default."
-            " A wrong value here pulls the wrong shortlist."
+            "H1 ``filter[asset_type]`` value, typed as the codebase's"
+            " ``ScopeType`` StrEnum (lowercase Python-side: ``ScopeType."
+            " WILDCARD`` has value ``'wildcard'``). The wrapper uppercases"
+            " on the wire to match H1's filter format. Common picks:"
+            " ``WILDCARD`` for broad surface coverage, ``URL`` for a"
+            " single application target, ``IP_ADDRESS`` / ``CIDR`` for"
+            " network-tier targets. Omit (None) to accept any asset type"
+            " - the H1 default. A wrong value here pulls the wrong"
+            " shortlist."
         ),
     )
     bookmarked: bool | None = Field(
@@ -42,13 +45,14 @@ class _BrowseProgrammesArgs(BaseModel):
             " VDP programmes - the H1 default."
         ),
     )
-    submission_state: str | None = Field(
+    submission_state: SubmissionState | None = Field(
         default=None,
         description=(
-            "H1 ``filter[submission_state]`` value. 'open' excludes paused"
-            " and disabled programmes; omit (None) to accept any state."
-            " Almost always pass 'open' - submitting against a paused or"
-            " disabled programme wastes the submission."
+            "H1 ``filter[submission_state]`` value, typed as the"
+            " ``SubmissionState`` StrEnum. ``OPEN`` excludes paused and"
+            " disabled programmes; almost always pass ``OPEN`` -"
+            " submitting against a paused or disabled programme wastes"
+            " the submission. Omit (None) to accept any state."
         ),
     )
     sort: str | None = Field(
@@ -78,10 +82,10 @@ class _BrowseProgrammesArgs(BaseModel):
 # keys.
 # pylint: disable=R0913,R0917
 def browse_programmes_tool(
-    asset_type: str | None = None,
+    asset_type: ScopeType | None = None,
     bookmarked: bool | None = None,
     offers_bounties: bool | None = None,
-    submission_state: str | None = None,
+    submission_state: SubmissionState | None = None,
     sort: str | None = None,
     limit: int | None = None,
 ) -> list[ProgrammePreview]:
@@ -97,22 +101,28 @@ def browse_programmes_tool(
 
     Filter kwargs map to H1 filter[*] query params on /hackers/programs and
     are sent to the server; the H1 default applies when a kwarg is omitted.
-      - asset_type: e.g. "URL", "WILDCARD"
+      - asset_type: a ScopeType (e.g. ScopeType.WILDCARD)
       - bookmarked: True for programmes you have bookmarked
       - offers_bounties: True to exclude VDPs
-      - submission_state: "open" to exclude paused/disabled programmes
+      - submission_state: SubmissionState.OPEN to exclude paused/disabled
       - sort: e.g. "-launched_at" for newest first
       - limit: cap on total previews (default config.h1.max_programmes)
 
     Returns a list of ProgrammePreview. Hydrate shortlisted handles with
     hydrate_programme_tool.
     """
+    # H1's filter API expects uppercase asset_type values (URL, WILDCARD,
+    # ...); ScopeType is the parsed Python-side shape with lowercase
+    # values. Normalise here so the agent passes the same enum it sees on
+    # parsed Programme objects, and the wire form stays H1's expected
+    # uppercase.
+    asset_type_wire = asset_type.value.upper() if asset_type is not None else None
     return list(
         h1.browse_programmes(
-            asset_type=asset_type,
+            asset_type=asset_type_wire,
             bookmarked=bookmarked,
             offers_bounties=offers_bounties,
-            submission_state=submission_state,
+            submission_state=submission_state.value if submission_state is not None else None,
             sort=sort,
             limit=limit,
         )

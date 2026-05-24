@@ -10,7 +10,7 @@ accept/reject checks, scoped to the DC's tool surface. Closes #149 for DC.
 The DC is the only agent whose tools have an irreversible public
 side-effect - ``Submit Report`` files a report on hackerone.com that the
 programme's triage team sees and the operator cannot silently retract.
-The per-field descriptions for ``report_json`` name the consequence; the
+The per-field description for ``report`` names the consequence; the
 contract test ensures the description is present and non-empty.
 
 The two workspace tools on the DC (``List Run Files``, ``Read Run
@@ -107,7 +107,7 @@ class TestDcArgsSchemaContracts:
         ``test_every_field_has_description`` above) already enforces the
         latter.
         """
-        desc = _SubmitReportArgs.model_fields["report_json"].description or ""
+        desc = _SubmitReportArgs.model_fields["report"].description or ""
         # "Irreversible" is the framing the issue body uses; we look for
         # the broader semantic signal (irreversible + programme_handle
         # warning) rather than a single literal so the description can be
@@ -130,17 +130,29 @@ class TestSchemaAcceptReject:
     well served by the ``disclosure_report`` and ``programme`` fixtures.
     """
 
-    def test_submit_report_accepts_serialised_report(self, disclosure_report) -> None:
-        """The Technical Author's serialised DisclosureReport must validate.
+    def test_submit_report_accepts_dict_payload(self, disclosure_report) -> None:
+        """CrewAI hands the args_schema a dict shaped like DisclosureReport.
 
         Uses the ``disclosure_report`` conftest fixture so test intent
         ("a real, in-scope report") is readable at the call site rather
-        than a hand-rolled JSON literal.
+        than a hand-rolled dict literal.
         """
-        instance = _SubmitReportArgs.model_validate(
-            {"report_json": disclosure_report.model_dump_json()}
-        )
-        assert instance.report_json == disclosure_report.model_dump_json()
+        instance = _SubmitReportArgs.model_validate({"report": disclosure_report.model_dump()})
+        assert instance.report.programme_handle == disclosure_report.programme_handle
+        assert instance.report.title == disclosure_report.title
+
+    def test_submit_report_accepts_typed_model(self, disclosure_report) -> None:
+        """Direct test invocations pass a DisclosureReport instance; the
+        schema must accept that too (the both-shapes adapter pattern)."""
+        instance = _SubmitReportArgs.model_validate({"report": disclosure_report})
+        assert instance.report.programme_handle == disclosure_report.programme_handle
+
+    def test_submit_report_rejects_mis_shaped_report(self) -> None:
+        """A dict that doesn't validate as DisclosureReport rejects
+        upstream of the wrapper - the whole point of the typed
+        parameter is the schema reject."""
+        with pytest.raises(ValidationError):
+            _SubmitReportArgs.model_validate({"report": {"not_a_real_field": "x"}})
 
     def test_check_duplicate_accepts_programme_and_title(
         self, programme, disclosure_report

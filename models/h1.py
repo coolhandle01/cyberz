@@ -41,6 +41,22 @@ class ScopeType(StrEnum):
     OTHER = "other"
 
 
+class SubmissionState(StrEnum):
+    """H1 ``filter[submission_state]`` value for the /hackers/programs list endpoint.
+
+    Covers the three documented values the filter accepts. ``Programme.
+    submission_state`` stays ``str | None`` (rather than typed as this
+    StrEnum) because the programme detail endpoint may emit additional
+    values for invitation-only or legacy programmes - the full enum is
+    not pinned against a captured response (FIXME #43). This StrEnum is
+    deliberately scoped to the filter-input direction only.
+    """
+
+    OPEN = "open"
+    DISABLED = "disabled"
+    PAUSED = "paused"
+
+
 class ScopeItem(BaseModel):
     """A single in-scope or out-of-scope asset."""
 

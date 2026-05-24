@@ -22,6 +22,7 @@ from __future__ import annotations
 import pytest
 from pydantic import BaseModel, ValidationError
 
+from models.h1 import ScopeType, SubmissionState
 from squad.programme_manager import (
     MEMBER,
     _BrowseProgrammesArgs,
@@ -109,7 +110,10 @@ class TestSchemaAcceptReject:
             (
                 _BrowseProgrammesArgs,
                 {
-                    "asset_type": "WILDCARD",
+                    # StrEnum values are lowercase Python-side; the
+                    # wrapper uppercases asset_type before sending it to
+                    # H1.
+                    "asset_type": "wildcard",
                     "bookmarked": True,
                     "offers_bounties": True,
                     "submission_state": "open",
@@ -125,6 +129,30 @@ class TestSchemaAcceptReject:
         """Known-good shapes pass model_validate without raising."""
         instance = schema_cls.model_validate(kwargs)
         assert isinstance(instance, schema_cls)
+
+    def test_browse_rejects_unknown_asset_type(self) -> None:
+        """Per #149 review: ``asset_type`` is a StrEnum; H1's documented
+        types are the only acceptable values."""
+        with pytest.raises(ValidationError):
+            _BrowseProgrammesArgs.model_validate({"asset_type": "not-a-real-type"})
+
+    def test_browse_rejects_unknown_submission_state(self) -> None:
+        """Per #149 review: ``submission_state`` is a StrEnum scoped to
+        the documented H1 filter values (open / disabled / paused)."""
+        with pytest.raises(ValidationError):
+            _BrowseProgrammesArgs.model_validate({"submission_state": "closed"})
+
+    def test_browse_accepts_strenum_members_directly(self) -> None:
+        """Passing the StrEnum members (rather than their string values)
+        also validates - the wrapper is happy with either."""
+        instance = _BrowseProgrammesArgs.model_validate(
+            {
+                "asset_type": ScopeType.WILDCARD,
+                "submission_state": SubmissionState.OPEN,
+            }
+        )
+        assert instance.asset_type is ScopeType.WILDCARD
+        assert instance.submission_state is SubmissionState.OPEN
 
     def test_hydrate_accepts_programme_handle(self, programme) -> None:
         """Hydrate takes the exact handle of the selected programme."""

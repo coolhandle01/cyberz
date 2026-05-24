@@ -17,23 +17,23 @@ class _SubmitReportArgs(BaseModel):
 
     IRREVERSIBLE: a successful call publishes a report to hackerone.com.
     Once filed the report is visible to the programme's triage team and
-    cannot be silently retried - the field descriptions below name the
+    cannot be silently retried - the field description below names the
     consequences the agent must reason about before calling.
     """
 
-    report_json: str = Field(
+    report: DisclosureReport = Field(
         description=(
-            "Serialised ``DisclosureReport`` JSON. Built by the Technical"
-            " Author and parsed via ``DisclosureReport.model_validate_json``"
-            " before submission. IRREVERSIBLE: a successful call publishes"
+            "The fully-built ``DisclosureReport`` to submit. Built by the"
+            " Technical Author and passed as a typed model - CrewAI"
+            " serialises and re-validates against the ``DisclosureReport``"
+            " schema upstream, so mis-shaped reports reject before the"
+            " HTTP POST. IRREVERSIBLE: a successful submission publishes"
             " the report to hackerone.com and cannot be silently retried."
-            " Mis-shaped JSON rejects upstream of the HTTP POST, but a"
-            " well-shaped report with the wrong ``programme_handle`` inside"
-            " it does NOT: it files a report against the wrong target,"
-            " which is a public scope violation the operator has to"
-            " apologise for. Double-check the ``programme_handle`` field"
-            " inside the payload against the selected programme before"
-            " calling. Also verify ``title``, ``vulnerability.severity``,"
+            " A well-shaped report with the wrong ``programme_handle``"
+            " inside it files against the wrong target - a public scope"
+            " violation the operator has to apologise for. Double-check"
+            " ``programme_handle`` against the selected programme and"
+            " verify ``title``, ``vulnerability.severity``,"
             " ``weakness_id``, and ``structured_scope_id`` - all four are"
             " submission-time authoritative; H1 records them verbatim and"
             " there is no quiet edit path."
@@ -42,9 +42,15 @@ class _SubmitReportArgs(BaseModel):
 
 
 @cyber_tool("Submit Report", args_schema=_SubmitReportArgs)
-def submit_report_tool(report_json: str) -> SubmissionResult:
-    """Submit a serialised DisclosureReport to HackerOne."""
-    report = DisclosureReport.model_validate_json(report_json)
+def submit_report_tool(report: DisclosureReport) -> SubmissionResult:
+    """Submit a DisclosureReport to HackerOne."""
+    # The wrapper signature is DisclosureReport so the agent-facing
+    # args_schema is typed, but CrewAI's args_schema.model_validate(...)
+    # .model_dump() pass leaves the runtime value as a dict by the time
+    # this body runs. model_validate accepts both shapes - it returns
+    # the same DisclosureReport when given an instance and constructs
+    # one when given a dict - so this is the both-shapes adapter.
+    report = DisclosureReport.model_validate(report)
     http.set_programme(report.programme_handle)
     save_report(report)
     return h1.submit_report(report)

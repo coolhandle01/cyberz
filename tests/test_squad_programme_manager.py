@@ -45,6 +45,7 @@ class TestBrowseProgrammesTool:
         )
 
     def test_forwards_all_filter_args(self, tmp_path) -> None:
+        from models.h1 import ScopeType, SubmissionState
         from squad.programme_manager import browse_programmes_tool
 
         with patch(
@@ -52,14 +53,17 @@ class TestBrowseProgrammesTool:
             return_value=[],
         ) as mbrowse:
             browse_programmes_tool.func(
-                asset_type="WILDCARD",
+                asset_type=ScopeType.WILDCARD,
                 bookmarked=True,
                 offers_bounties=True,
-                submission_state="open",
+                submission_state=SubmissionState.OPEN,
                 sort="-launched_at",
                 limit=50,
             )
 
+        # The wrapper uppercases the asset_type StrEnum value to match
+        # H1's filter[asset_type] wire format; submission_state passes
+        # through as its lowercase StrEnum value.
         mbrowse.assert_called_once_with(
             asset_type="WILDCARD",
             bookmarked=True,
