@@ -1,8 +1,5 @@
 """OSINT Analyst - maps the in-scope attack surface."""
 
-from __future__ import annotations
-
-import json
 from pathlib import Path
 
 from pydantic import BaseModel, Field
@@ -275,36 +272,34 @@ def historical_urls_tool(domain: str) -> list[str]:
     return historical_urls(domain)
 
 
-# TODO: switch ``endpoints_json: str`` to ``endpoints: list[Endpoint]`` per the
-# #139 / cybersquad-tool convention. Out of scope for #148 (args_schema sweep);
-# tracked as a separate cleanup.
 class _LlmDetectionArgs(BaseModel):
     """Explicit args_schema for the LLM Endpoint Detection tool (#148)."""
 
-    endpoints_json: str = Field(
+    endpoints: list[Endpoint] = Field(
         description=(
-            "JSON-encoded list of Endpoint objects from the sweep (or a"
-            " filtered subset). Each entry needs ``url`` and ideally"
-            " ``technologies``; ``status_code`` is honoured if present."
-            " Note: this is the legacy stringified-JSON pattern retired by"
-            " #139 for the PT wrappers - a follow-up will migrate this to"
-            " ``list[Endpoint]``."
+            "Live endpoint objects from the sweep (or a filtered subset)."
+            " Each entry needs ``url`` and ideally ``technologies``;"
+            " ``status_code`` is honoured if present. Pass the typed list"
+            " straight through from Recon Endpoints - do not stringify."
         ),
     )
 
 
 @cyber_tool("LLM Endpoint Detection", args_schema=_LlmDetectionArgs)
-def llm_detection_tool(endpoints_json: str) -> list[LlmEndpoint]:
+def llm_detection_tool(endpoints: list[Endpoint]) -> list[LlmEndpoint]:
     """
     Scan a set of live endpoints for signals that they are backed by an LLM
     or AI assistant (URL path heuristics, OpenAI-format response keys,
     EventSource content-type, self-identification phrases). Pass the
-    sweep's endpoint list (or a filtered subset) as JSON. Returned hits
-    deserve a HIGH-priority annotation and a note pointing the Penetration
-    Tester at prompt-injection probes.
+    sweep's endpoint list (or a filtered subset) straight through from
+    Recon Endpoints. Returned hits deserve a HIGH-priority annotation and
+    a note pointing the Penetration Tester at prompt-injection probes.
     """
-    endpoints = [Endpoint.model_validate(e) for e in json.loads(endpoints_json)]
-    return [LlmEndpoint.model_validate(ep.model_dump()) for ep in detect_llm_endpoints(endpoints)]
+    # CrewAI's args_schema validation produces list[dict] from the LLM JSON
+    # before invoking us; re-validate so we always see ``Endpoint`` instances
+    # regardless of whether the caller is the runtime or a direct test invocation.
+    parsed = [Endpoint.model_validate(e) for e in endpoints]
+    return [LlmEndpoint.model_validate(ep.model_dump()) for ep in detect_llm_endpoints(parsed)]
 
 
 class _ProbeHostnamesArgs(BaseModel):

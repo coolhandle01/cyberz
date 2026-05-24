@@ -136,7 +136,7 @@ class TestSchemaAcceptReject:
             (_ReconOpenPortsArgs, {"host": "victim.example.com"}),
             (_CertTransparencyArgs, {"domain": "example.com"}),
             (_HistoricalUrlsArgs, {"domain": "example.com"}),
-            (_LlmDetectionArgs, {"endpoints_json": "[]"}),
+            (_LlmDetectionArgs, {"endpoints": []}),
             (
                 _ProbeHostnamesArgs,
                 {"hostnames": ["api.example.com"], "programme_handle": "example"},
@@ -177,7 +177,7 @@ class TestSchemaAcceptReject:
             _RunInitialSweepArgs,  # programme_handle required
             _CertTransparencyArgs,  # domain required
             _HistoricalUrlsArgs,  # domain required
-            _LlmDetectionArgs,  # endpoints_json required
+            _LlmDetectionArgs,  # endpoints required
             _ProbeHostnamesArgs,  # hostnames + programme_handle required
             _DetectTakeoverCandidatesArgs,  # hostnames + programme_handle required
             _OsintLookupCweArgs,  # query required
