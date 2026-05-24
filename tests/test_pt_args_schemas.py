@@ -1,11 +1,11 @@
 """
 tests/test_pt_args_schemas.py - contract tests for the explicit Pydantic
-``args_schema`` every Penetration Tester ``@typed_tool`` / ``@pentest_tool``
+``args_schema`` every Penetration Tester ``@cyber_tool`` / ``@pentest_tool``
 wrapper carries.
 
 Started life under #143/#146 covering the 25 ``@pentest_tool`` probes;
-#147 extended it to cover the 18 cloud / infra ``@typed_tool`` wrappers on
-the same agent. Both decorators go through the same ``typed_tool`` helper
+#147 extended it to cover the 18 cloud / infra ``@cyber_tool`` wrappers on
+the same agent. Both decorators go through the same ``cyber_tool`` helper
 so the contract is identical: the schema class is hand-written, every
 field carries a non-empty ``description``, and ``args_schema`` on the
 registered ``Tool`` ``is`` (identity) the explicit class - not the
@@ -85,7 +85,7 @@ from squad.penetration_tester import (
 pytestmark = pytest.mark.unit
 
 
-# Tool-name -> explicit schema class. Covers every PT @typed_tool /
+# Tool-name -> explicit schema class. Covers every PT @cyber_tool /
 # @pentest_tool wrapper. Recon / write / workspace tools that intentionally
 # keep the signature-inferred schema (Recon Subdomains, Recon Endpoints,
 # Recon Open Ports, Save Findings, plus the three workspace readers) are
@@ -117,7 +117,7 @@ _PT_SCHEMAS: dict[str, type[BaseModel]] = {
     "Prototype Pollution Check": _PrototypePollutionArgs,
     "IDOR Probe": _IdorArgs,
     "JWT Vulnerability Check": _JwtCheckArgs,
-    # @typed_tool cloud / infra wrappers (#147)
+    # @cyber_tool cloud / infra wrappers (#147)
     "S3 Bucket Check": _S3CheckArgs,
     "Azure Blob Storage Check": _AzureStorageCheckArgs,
     "Unauthenticated Elasticsearch Check": _ElasticsearchCheckArgs,
@@ -189,8 +189,8 @@ class TestPtArgsSchemaContracts:
                 f"{tool_name}::{field_name} description is blank"
             )
 
-    def test_every_pt_typed_tool_has_schema_mapping(self) -> None:
-        """The mapping above must cover every PT ``@typed_tool`` / ``@pentest_tool``.
+    def test_every_pt_cyber_tool_has_schema_mapping(self) -> None:
+        """The mapping above must cover every PT ``@cyber_tool`` / ``@pentest_tool``.
 
         Closed-world structural check: every PT tool whose Tool exposes a
         private (``_*``) args_schema class name is in ``_PT_SCHEMAS``;
@@ -256,7 +256,7 @@ class TestSchemaAcceptReject:
             (_HostHeaderArgs, {"recon_path": "recon.json"}),
             (_SourceMapsArgs, {"recon_path": "recon.json"}),
             (_SriCheckArgs, {"recon_path": "recon.json"}),
-            # @typed_tool cloud / infra acceptance cases (#147)
+            # @cyber_tool cloud / infra acceptance cases (#147)
             (_S3CheckArgs, {"recon_path": "recon.json"}),
             (_AzureStorageCheckArgs, {"recon_path": "recon.json"}),
             (_ElasticsearchCheckArgs, {"recon_path": "recon.json"}),
@@ -336,7 +336,7 @@ class TestSchemaAcceptReject:
             _XssArgs,
             _HppArgs,
             _ErrorDisclosureArgs,
-            # @typed_tool cloud wrappers that take endpoints (#147)
+            # @cyber_tool cloud wrappers that take endpoints (#147)
             _SensitiveFilesArgs,
             _AdminPanelsArgs,
         ],
