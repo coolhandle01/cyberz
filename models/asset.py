@@ -116,6 +116,19 @@ class LlmEndpoint(BaseModel):
     A thin wrapper over ``Endpoint`` so the OSINT Analyst tool surface
     carries the LLM-detection intent at the type level (the field set is
     identical, but the model name marks the contract).
+
+    FIXME(#144 / #83): this class is on the way to becoming ``DiscoveredMCP``.
+    The intent the original author was reaching for - "this endpoint
+    exposes an LLM" - has a more useful concrete shape now that the MCP
+    threat model is clear: MCP servers advertise tool lists, capability
+    bits, init handshakes, and schemas, and that structured surface is
+    what the PT would actually probe against. The right move is to
+    promote this into ``models/framework.py`` (per #83) as
+    ``DiscoveredMCP`` carrying the advertised tool inventory, the
+    suspicious-docstring flags, and the schema-laxness markers that the
+    #144 MCP-discipline conversation called out. Until then this class
+    exists as an intent marker and a placeholder; do not extend it as a
+    generic LLM endpoint shape.
     """
 
     url: HttpUrl
