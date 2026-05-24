@@ -29,9 +29,11 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import Protocol, cast, runtime_checkable
 
 from crewai import Agent, Task
+from crewai.tools import tool
+from pydantic import BaseModel
 
 from squad.workspace_tools import (
     read_attack_plan_tool,
@@ -46,12 +48,13 @@ SQUAD_SKILLS_DIR = Path(__file__).parent / "skills"
 class CrewAITool(Protocol):
     """The shape every ``MEMBER.tools`` entry conforms to.
 
-    The decorators in use - the bare ``@tool``, ``@pentest_tool``,
-    ``@research_brief_tool`` - all produce CrewAI ``Tool`` instances that
-    carry ``name``, ``description``, and ``func``. This Protocol is the
-    single shared surface those decorators expose, so the registry can be
-    ``list[CrewAITool]`` rather than ``list[Any]`` and the contract test in
-    ``tests/test_squad_tool_contracts.py`` has a typed handle to walk.
+    The decorators in use - the bare ``@tool``, ``@typed_tool``,
+    ``@pentest_tool``, ``@research_brief_tool`` - all produce CrewAI ``Tool``
+    instances that carry ``name``, ``description``, and ``func``. This
+    Protocol is the single shared surface those decorators expose, so the
+    registry can be ``list[CrewAITool]`` rather than ``list[Any]`` and the
+    contract test in ``tests/test_squad_tool_contracts.py`` has a typed
+    handle to walk.
 
     ``func`` is declared via ``@property`` (rather than as a plain class
     attribute) so the Protocol is satisfied by CrewAI's ``Tool`` model -
@@ -65,6 +68,33 @@ class CrewAITool(Protocol):
 
     @property
     def func(self) -> Callable[..., object]: ...
+
+
+def typed_tool(
+    name: str, *, args_schema: type[BaseModel]
+) -> Callable[[Callable[..., object]], CrewAITool]:
+    """The blessed cybersquad replacement for bare ``@crewai.tools.tool``.
+
+    Equivalent to ``tool(name)`` except that ``args_schema`` is keyword-
+    required: the explicit Pydantic class overrides the signature-inferred
+    schema CrewAI would otherwise build. Per #143/#146 every cybersquad
+    ``@tool`` wrapper carries one, because the inferred path cannot attach
+    per-field ``Field(description=...)`` and the agent reads those
+    descriptions when picking the tool.
+
+    ``pentest_tool`` and ``research_brief_tool`` compose on top of this
+    helper: they call ``typed_tool`` underneath and then layer their own
+    docstring-injection (OWASP categories for the pentest wrapper, brief
+    formatting for the research one). Anything that does not need a
+    specialist wrapper uses ``@typed_tool`` directly.
+    """
+
+    def decorator(fn: Callable[..., object]) -> CrewAITool:
+        wrapped = tool(name)(fn)
+        wrapped.args_schema = args_schema
+        return cast(CrewAITool, wrapped)
+
+    return decorator
 
 
 @dataclass(frozen=True)
@@ -148,4 +178,5 @@ __all__ = [
     "read_attack_plan_tool",
     "read_run_filelist_tool",
     "read_run_file_tool",
+    "typed_tool",
 ]

@@ -1,11 +1,47 @@
 ---
 name: cybersquad-tool
-description: Universal rules for every CrewAI `@tool`-wrapped function in cybersquad. Pydantic return shape, typed parameters, writer/reader workspace pair. Load before editing any `@tool` wrapper.
+description: Universal rules for every CrewAI `@tool`-wrapped function in cybersquad. Pydantic return shape, typed parameters, explicit `args_schema` via `@typed_tool`, writer/reader workspace pair. Load before editing any `@tool` wrapper.
 ---
 
 # cybersquad @tool conventions
 
 Every CrewAI `@tool`-wrapped function the agents see follows these rules. They are universal; `cybersquad-pentest-tool` is a specialisation that adds OWASP + StrEnum + `@pentest_tool` on top of this baseline. If you are touching a pentest probe wrapper, load both.
+
+## Use `@typed_tool`, not bare `@tool`
+
+`@typed_tool(name, args_schema=...)` lives in `squad/__init__.py` and is the blessed replacement for `crewai.tools.tool`. It accepts a keyword-required `args_schema` Pydantic class that overrides the schema CrewAI would otherwise infer from the function signature.
+
+```python
+from pydantic import BaseModel, Field
+from squad import typed_tool
+
+class _S3CheckArgs(BaseModel):
+    """Explicit args_schema for the S3 Bucket Check tool."""
+
+    recon_path: str = Field(
+        description=(
+            "Relative path to recon.json in the run directory. Buckets are"
+            " derived from the programme handle and any S3 subdomains the"
+            " OSINT Analyst surfaced."
+        ),
+    )
+
+
+@typed_tool("S3 Bucket Check", args_schema=_S3CheckArgs)
+def s3_check_tool(recon_path: str) -> list[RawFinding]:
+    ...
+```
+
+Why this matters: every tool's contract is what the LLM reads when picking the tool, including per-field guidance. The inferred path cannot attach per-field `Field(description=...)`; the explicit path can, and writing those descriptions is where the LLM gets the targeting signal that keeps probes on-scope. Per-field descriptions also reject unknown StrEnum variants upstream of any HTTP request - the validation fires before a mis-call costs a request.
+
+Rules:
+
+- Class name is underscore-prefixed `_<ToolName>Args`. The contract test in `tests/test_pt_args_schemas.py` discovers PT-agent schemas via this prefix. Other agents will get parallel `_<X>_SCHEMAS` test mappings as #148/#149/#150 land.
+- Every field carries a `Field(description=...)` phrased as agent-facing targeting guidance ("fire when open_ports shows X", "prioritise endpoints where Y"), not type information the schema already encodes.
+- Field types mirror the wrapper signature exactly. StrEnum filters stay typed (`list[<StrEnum>] | None`), never `list[str]`.
+- Schema lives inline in the same module as the wrapper, directly above the decorator. Do not import from a separate file.
+
+`@pentest_tool` composes on top of `@typed_tool`: pentest probes still use `@pentest_tool` so the OWASP injection layer runs, and the `args_schema=` argument flows through. `@research_brief_tool` will compose the same way once #150 lands.
 
 ## Return a pydantic model, or `list[<Model>]`
 
@@ -38,7 +74,7 @@ Never `dict`, `list[dict]`, or bare `list` (no inner type). CrewAI serialises py
 
 ```python
 # correct
-@pentest_tool("SSRF Probe", check_fn=check_ssrf)
+@pentest_tool("SSRF Probe", check_fn=check_ssrf, args_schema=_SsrfArgs)
 def ssrf_probe_tool(
     endpoints: list[Endpoint],
     payloads: list[SsrfPayload] | None = None,
@@ -79,14 +115,17 @@ The reader returns the typed model; downstream agents work against the schema, n
 - `[f.model_dump() for f in check_X(...)]` in any wrapper body - drop the comprehension, just `return list(check_X(...))`.
 - Return annotation of `dict` for a structured payload that has a pydantic shape already.
 - Bare `list` (no inner type) as a return annotation - either it is `list[str]` for a flat handle list, or it is `list[<Model>]` for structured rows.
+- `@tool("...")` from `crewai.tools` for a new wrapper. Use `@typed_tool` (or `@pentest_tool` for probes) so `args_schema` is enforced. Bare `@tool` survives only on the recon / write / workspace wrappers still on the #148-#150 backlog.
+- An `args_schema` class with a field that lacks `Field(description=...)`. The whole point of the explicit path is per-field guidance; an empty description is the same gap the inferred path had.
 - New workspace writer with no typed reader.
 - `from squad.workspace_tools import ...` in a consumer instead of `from squad import ...` - the re-export exists so the import path stays stable when shared tools move.
 
 ## Canonical examples
 
-Cross-agent intent matters: this skill applies to every agent's `@tool` wrappers, not just the pentester's. The codebase is mid-migration (#139) so exemplary typed returns are still sparse - one canonical pydantic-return example today, plus the workspace-handle string family.
+Cross-agent intent matters: this skill applies to every agent's `@tool` wrappers, not just the pentester's. The codebase is mid-migration (#139 typed returns, #143/#146/#147 explicit args_schemas) - the PT agent is fully migrated, the other four are on the #148-#150 backlog.
 
-- `squad/penetration_tester/__init__.py` `recon_endpoints_tool` returns `EndpointPage` - the only `@tool` in the codebase today that follows the pydantic-return rule end-to-end. The wrapper lives on PT but it reads OSINT's recon output, so the pattern is cross-agent.
+- `squad/penetration_tester/__init__.py` is the migration's tip. Every `@typed_tool` and `@pentest_tool` carries an explicit `_<ToolName>Args` schema directly above the wrapper, with `Field(description=...)` on every field. Pentest probes (`ssrf_probe_tool`, `idor_probe_tool`) are the shortest examples; cloud / infra wrappers (`s3_check_tool`, `mongodb_tool`) show the `recon_path: str` shape.
+- `squad/penetration_tester/__init__.py` `recon_endpoints_tool` returns `EndpointPage` - the canonical typed-return example. The wrapper lives on PT but it reads OSINT's recon output, so the pattern is cross-agent.
 - The workspace-handle string family demonstrates the `str` exception (writer returns the filename, next agent passes it to a typed reader):
   - `Finalise Recon` (`squad/osint_analyst/__init__.py`) -> `"recon.json"`
   - `Finalise Research` (`squad/vulnerability_researcher/__init__.py`) -> `"attack_plan.json"`
