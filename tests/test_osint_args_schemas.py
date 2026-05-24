@@ -136,7 +136,6 @@ class TestSchemaAcceptReject:
             (_ReconOpenPortsArgs, {"host": "victim.example.com"}),
             (_CertTransparencyArgs, {"domain": "example.com"}),
             (_HistoricalUrlsArgs, {"domain": "example.com"}),
-            (_LlmDetectionArgs, {"endpoints": []}),
             (
                 _ProbeHostnamesArgs,
                 {"hostnames": ["api.example.com"], "programme_handle": "example"},
@@ -210,3 +209,34 @@ class TestSchemaAcceptReject:
             kwargs = {k: v for k, v in base.items() if k != missing}
             with pytest.raises(ValidationError):
                 _AnnotateHostArgs.model_validate(kwargs)
+
+    def test_llm_detection_accepts_populated_endpoint_list(self, endpoint) -> None:
+        """LLM Endpoint Detection schema accepts the realistic ``Endpoint`` shape.
+
+        The parametrize cases above cover empty-list and missing-field paths;
+        this one exercises a populated list with a real ``Endpoint`` (via the
+        canonical conftest fixture) so the Endpoint model's own validation
+        path is part of the contract test.
+        """
+        instance = _LlmDetectionArgs.model_validate(
+            {"endpoints": [endpoint.model_dump(mode="json")]}
+        )
+        assert len(instance.endpoints) == 1
+        assert instance.endpoints[0].url == endpoint.url
+
+    def test_annotate_host_rejects_unknown_role_and_priority(self) -> None:
+        """role and priority are typed as HostRole / HostPriority StrEnums.
+
+        Unknown values reject upstream of the wrapper rather than in the
+        body's ``HostRole(role)`` / ``HostPriority(priority)`` coercion.
+        """
+        base: dict[str, object] = {
+            "hostname": "api.example.com",
+            "role": "api",
+            "priority": "high",
+            "notes": "Production REST API surface; warrants careful probing.",
+        }
+        with pytest.raises(ValidationError):
+            _AnnotateHostArgs.model_validate({**base, "role": "not-a-real-role"})
+        with pytest.raises(ValidationError):
+            _AnnotateHostArgs.model_validate({**base, "priority": "urgent"})

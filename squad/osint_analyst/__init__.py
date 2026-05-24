@@ -459,19 +459,21 @@ class _AnnotateHostArgs(BaseModel):
             " Discovery / Probe Hostnames. Lowercased before save."
         ),
     )
-    role: str = Field(
+    role: HostRole = Field(
         description=(
-            "One of: admin, api, auth, app, cdn, static, mail, infra, dev,"
-            " unknown. Drives downstream prioritisation - admin / auth"
-            " hosts attract more probe budget than static / cdn ones."
+            "Functional role this host plays. Drives downstream"
+            " prioritisation - admin / auth hosts attract more probe"
+            " budget than static / cdn ones. The schema enforces the"
+            " enum upstream so an unknown role rejects before the"
+            " wrapper body runs."
         ),
     )
-    priority: str = Field(
+    priority: HostPriority = Field(
         description=(
-            "One of: high, medium, low, skip. The curation signal the PT"
-            " uses to allocate probe budget. ``high`` means 'spend probes"
-            " here'; ``skip`` means 'do not probe this even if reachable'."
-            " Must match the threat model in the notes."
+            "Curation signal the PT uses to allocate probe budget."
+            " ``high`` means 'spend probes here'; ``skip`` means 'do not"
+            " probe this even if reachable'. Must match the threat model"
+            " in the notes; the quality gate checks both."
         ),
     )
     notes: str = Field(
@@ -508,8 +510,8 @@ class _AnnotateHostArgs(BaseModel):
 @cyber_tool("Annotate Host", args_schema=_AnnotateHostArgs)
 def annotate_host_tool(
     hostname: str,
-    role: str,
-    priority: str,
+    role: HostRole,
+    priority: HostPriority,
     notes: str,
     detected_tech: list[str] | None = None,
     sweep_path: str = "sweep.json",
