@@ -36,7 +36,7 @@ Why this matters: every tool's contract is what the LLM reads when picking the t
 
 Rules:
 
-- Class name is underscore-prefixed `_<ToolName>Args`. The per-agent contract tests (`tests/test_pt_args_schemas.py`, `tests/test_osint_args_schemas.py`, and the parallel `_<AGENT>_SCHEMAS` mappings #149 / #150 will add) discover schemas via this prefix.
+- Class name is underscore-prefixed `_<ToolName>Args`. The per-agent contract tests (`tests/test_pt_args_schemas.py`, `tests/test_osint_args_schemas.py`, `tests/test_pm_args_schemas.py`, `tests/test_dc_args_schemas.py`, and the parallel `_<AGENT>_SCHEMAS` mappings #150 will add for VR / TA) discover schemas via this prefix.
 - Every field carries a `Field(description=...)` phrased as agent-facing targeting guidance ("fire when open_ports shows X", "prioritise endpoints where Y"), not type information the schema already encodes.
 - Field types mirror the wrapper signature exactly. StrEnum filters stay typed (`list[<StrEnum>] | None`), never `list[str]`. Hostname-shaped fields use the `Hostname` typed-string from `models.primitives`, never bare `str` (see "Typed string primitives" below).
 - Schema lives inline in the same module as the wrapper, directly above the decorator. Do not import from a separate file.
@@ -143,7 +143,7 @@ Dependency layers flow `primitives -> finding -> h1 -> asset`; modules import on
 - `[f.model_dump() for f in check_X(...)]` in any wrapper body - drop the comprehension, just `return list(check_X(...))`.
 - Return annotation of `dict` for a structured payload that has a pydantic shape already.
 - Bare `list` (no inner type) as a return annotation - either it is `list[str]` for a flat handle list, or it is `list[<Model>]` for structured rows.
-- `@tool("...")` from `crewai.tools` for a new wrapper. Use `@cyber_tool` (or `@pentest_tool` for probes) so `args_schema` is enforced. Bare `@tool` survives only on workspace wrappers still on the #149 / #150 backlog.
+- `@tool("...")` from `crewai.tools` for a new wrapper. Use `@cyber_tool` (or `@pentest_tool` for probes) so `args_schema` is enforced. Bare `@tool` survives only on workspace wrappers still on the #150 backlog.
 - An `args_schema` class with a field that lacks `Field(description=...)`. The whole point of the explicit path is per-field guidance; an empty description is the same gap the inferred path had.
 - A field typed `str` whose value is a hostname (`hostname: str`, `host: str`, `domain: str`) or a URL (`url: str`, `endpoint: str`). Use `Hostname` / `HttpUrl` from `models.primitives` - the typed primitives reject mis-shaped values upstream.
 - A `dict[str, ...]` whose keys are hostnames - type the key as `dict[Hostname, ...]` so the validator fires on the keys too.
@@ -153,7 +153,7 @@ Dependency layers flow `primitives -> finding -> h1 -> asset`; modules import on
 
 ## Canonical examples
 
-Cross-agent intent matters: this skill applies to every agent's `@cyber_tool` / `@pentest_tool` wrappers, not just the pentester's. The codebase is mid-migration (#139 typed returns, #143 / #146 / #147 / #148 explicit args_schemas) - PT and OSINT are fully migrated; PM, DC, VR, TA are on the #149 / #150 backlog.
+Cross-agent intent matters: this skill applies to every agent's `@cyber_tool` / `@pentest_tool` wrappers, not just the pentester's. The codebase is mid-migration (#139 typed returns, #143 / #146 / #147 / #148 / #149 explicit args_schemas) - PT, OSINT, PM, and DC are fully migrated; VR and TA are on the #150 backlog.
 
 - `squad/penetration_tester/__init__.py` and `squad/osint_analyst/__init__.py` are the migration's tip. Every `@cyber_tool` and `@pentest_tool` carries an explicit `_<ToolName>Args` schema directly above the wrapper, with `Field(description=...)` on every field. Pentest probes (`ssrf_probe_tool`, `idor_probe_tool`) are the shortest StrEnum examples; cloud / infra wrappers (`s3_check_tool`, `mongodb_tool`) show the bare `recon_path: str`; OSINT (`probe_hostnames_tool`, `annotate_host_tool`) show the `Hostname` composition.
 - `squad/penetration_tester/__init__.py` `recon_endpoints_tool` returns `EndpointPage` - the canonical typed-return example. The wrapper lives on PT but it reads OSINT's recon output, so the pattern is cross-agent.

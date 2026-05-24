@@ -1,19 +1,77 @@
 """Programme Manager - selects the highest-value H1 programme."""
 
-from __future__ import annotations
-
 import shutil
 from pathlib import Path
 
-from crewai.tools import tool
+from pydantic import BaseModel, Field
 
 import runtime
 from models.h1 import Programme, ProgrammePreview
-from squad import SquadMember
+from squad import SquadMember, cyber_tool
 from tools.h1_api import h1
 
 
-@tool("Browse HackerOne Programmes")
+class _BrowseProgrammesArgs(BaseModel):
+    """Explicit args_schema for the Browse HackerOne Programmes tool (#149)."""
+
+    asset_type: str | None = Field(
+        default=None,
+        description=(
+            "H1 ``filter[asset_type]`` value. Maps directly onto the asset"
+            " types H1 documents for a programme's structured scope - common"
+            " values include 'URL', 'WILDCARD', 'IP_ADDRESS', 'CIDR',"
+            " 'SOURCE_CODE', 'HARDWARE', and the various mobile / store"
+            " types. Omit (None) to accept any asset type - the H1 default."
+            " A wrong value here pulls the wrong shortlist."
+        ),
+    )
+    bookmarked: bool | None = Field(
+        default=None,
+        description=(
+            "Restrict to programmes the authenticated user has bookmarked."
+            " Useful when the operator has curated a shortlist server-side."
+            " Omit (None) for the H1 default, which does not filter on"
+            " bookmarks."
+        ),
+    )
+    offers_bounties: bool | None = Field(
+        default=None,
+        description=(
+            "Pass True to exclude VDPs (vulnerability disclosure programmes"
+            " that pay no bounty). Omit (None) to accept both bounty and"
+            " VDP programmes - the H1 default."
+        ),
+    )
+    submission_state: str | None = Field(
+        default=None,
+        description=(
+            "H1 ``filter[submission_state]`` value. 'open' excludes paused"
+            " and disabled programmes; omit (None) to accept any state."
+            " Almost always pass 'open' - submitting against a paused or"
+            " disabled programme wastes the submission."
+        ),
+    )
+    sort: str | None = Field(
+        default=None,
+        description=(
+            "H1 JSON:API sort key. Prefix with '-' for descending."
+            " Common values: '-launched_at' (newest first),"
+            " 'launched_at' (oldest first), '-resolved_report_count' (most"
+            " active triage)."
+        ),
+    )
+    limit: int | None = Field(
+        default=None,
+        description=(
+            "Cap on total previews returned across pages. Omit (None) to use"
+            " the configured default (``config.h1.max_programmes``)."
+            " This is a server-side pagination ceiling, not a per-request"
+            " page size."
+        ),
+    )
+
+
+@cyber_tool("Browse HackerOne Programmes", args_schema=_BrowseProgrammesArgs)
 # CrewAI builds the tool's JSON schema from this signature; each filter has
 # to be a named parameter so the LLM can discover and pass it. Collapsing
 # into a single dict argument would force the agent to guess valid filter
@@ -61,7 +119,23 @@ def browse_programmes_tool(
     )
 
 
-@tool("Hydrate HackerOne Programme")
+class _HydrateProgrammeArgs(BaseModel):
+    """Explicit args_schema for the Hydrate HackerOne Programme tool (#149)."""
+
+    handle: str = Field(
+        description=(
+            "Exact HackerOne programme handle as it appears in the URL"
+            " (lowercase, no slashes, no spaces, no protocol or host). For"
+            " ``https://hackerone.com/security`` the handle is ``security``."
+            " The H1 API treats the handle as the authoritative key for the"
+            " programme detail endpoint; an unknown or mis-cased handle"
+            " returns 404 and the PM walks past the programme it should have"
+            " hydrated."
+        ),
+    )
+
+
+@cyber_tool("Hydrate HackerOne Programme", args_schema=_HydrateProgrammeArgs)
 def hydrate_programme_tool(handle: str) -> Programme:
     """
     Fetch full programme detail for one handle - bounty_table, structured
@@ -78,7 +152,22 @@ def hydrate_programme_tool(handle: str) -> Programme:
     return prog
 
 
-@tool("Save Selected Programme")
+class _SaveProgrammeArgs(BaseModel):
+    """Explicit args_schema for the Save Selected Programme tool (#149)."""
+
+    handle: str = Field(
+        description=(
+            "Exact HackerOne programme handle as it appears in the URL"
+            " (lowercase, no slashes, no spaces). Must match a handle that"
+            " was already hydrated this run - the cached ``programme.json``"
+            " is keyed by handle and a mismatch means downstream agents see"
+            " an empty run directory and reason against a programme that"
+            " was never selected."
+        ),
+    )
+
+
+@cyber_tool("Save Selected Programme", args_schema=_SaveProgrammeArgs)
 def save_programme_tool(handle: str) -> str:
     """
     Record the selected programme for downstream agents. Sets
