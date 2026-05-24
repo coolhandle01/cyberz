@@ -23,6 +23,8 @@ scope here - #150 covers them.
 
 from __future__ import annotations
 
+from urllib.parse import urlparse
+
 import pytest
 from pydantic import BaseModel, ValidationError
 
@@ -74,6 +76,20 @@ def _tools_by_name() -> dict[str, object]:
     return {t.name: t for t in MEMBER.tools}
 
 
+def _annotate_host_base(hostname: str) -> dict[str, object]:
+    """Minimal valid kwargs for _AnnotateHostArgs, parameterised by hostname.
+
+    Centralised so the fixture-derived hostname flows in from one place and
+    each rejection test stays focused on the field it is exercising.
+    """
+    return {
+        "hostname": hostname,
+        "role": "api",
+        "priority": "high",
+        "notes": "Production REST API surface; warrants careful probing.",
+    }
+
+
 class TestOsintArgsSchemaContracts:
     @pytest.mark.parametrize("tool_name", sorted(_OSINT_SCHEMAS))
     def test_tool_wires_explicit_schema(self, tool_name: str) -> None:
@@ -121,6 +137,15 @@ class TestOsintArgsSchemaContracts:
 
 
 class TestSchemaAcceptReject:
+    """Accept / reject contract per schema.
+
+    The parametrize below carries cases that do not involve a hostname or
+    URL - those use the conftest ``victim_url`` / ``bystander_url`` /
+    ``callback_url`` domain fixtures via the dedicated test methods further
+    down, so test intent ("this is the in-scope target") is readable at the
+    call site rather than via opaque ``example.com`` literals.
+    """
+
     @pytest.mark.parametrize(
         ("schema_cls", "kwargs"),
         [
@@ -133,30 +158,8 @@ class TestSchemaAcceptReject:
                 {"status": 200, "tech": "wordpress", "host_contains": "admin", "limit": 25},
             ),
             (_ReconOpenPortsArgs, {}),
-            (_ReconOpenPortsArgs, {"host": "victim.example.com"}),
-            (_CertTransparencyArgs, {"domain": "example.com"}),
-            (_HistoricalUrlsArgs, {"domain": "example.com"}),
-            (
-                _ProbeHostnamesArgs,
-                {"hostnames": ["api.example.com"], "programme_handle": "example"},
-            ),
-            (
-                _DetectTakeoverCandidatesArgs,
-                {"hostnames": ["legacy.example.com"], "programme_handle": "example"},
-            ),
             (_OsintLookupCweArgs, {"query": "xss"}),
             (_OsintLookupOwaspArgs, {"query": "csrf"}),
-            (
-                _AnnotateHostArgs,
-                {
-                    "hostname": "api.example.com",
-                    "role": "api",
-                    "priority": "high",
-                    "notes": "Production REST API surface; warrants careful probing.",
-                    "detected_tech": ["nginx"],
-                    "programme_handle": "example",
-                },
-            ),
             (_UncoveredHostsArgs, {}),
             (_FinaliseReconArgs, {"programme_handle": "example"}),
         ],
@@ -167,6 +170,74 @@ class TestSchemaAcceptReject:
         """Known-good shapes pass model_validate without raising."""
         instance = schema_cls.model_validate(kwargs)
         assert isinstance(instance, schema_cls)
+
+    # URL / hostname-taking schemas use the conftest domain fixtures so test
+    # intent is readable at the call site. Each schema below has a dedicated
+    # method rather than a parametrize entry because parametrize literals
+    # cannot consume fixtures.
+
+    def test_recon_open_ports_accepts_victim_host(self, victim_url: str) -> None:
+        """Recon Open Ports accepts a real hostname filter."""
+        host = urlparse(victim_url).hostname
+        _ReconOpenPortsArgs.model_validate({"host": host})
+
+    def test_cert_transparency_accepts_victim_apex(self, victim_url: str) -> None:
+        """Certificate Transparency takes the apex domain of the in-scope target."""
+        host = urlparse(victim_url).hostname or ""
+        apex = host.split(".", 1)[-1] if "." in host else host
+        _CertTransparencyArgs.model_validate({"domain": apex})
+
+    def test_historical_urls_accepts_victim_apex(self, victim_url: str) -> None:
+        """Historical URL Discovery takes the apex domain of the in-scope target."""
+        host = urlparse(victim_url).hostname or ""
+        apex = host.split(".", 1)[-1] if "." in host else host
+        _HistoricalUrlsArgs.model_validate({"domain": apex})
+
+    def test_probe_hostnames_accepts_victim_hostname(self, victim_url: str) -> None:
+        """Probe Hostnames takes a list of hostnames plus the programme handle."""
+        _ProbeHostnamesArgs.model_validate(
+            {
+                "hostnames": [urlparse(victim_url).hostname],
+                "programme_handle": "example",
+            }
+        )
+
+    def test_detect_takeover_candidates_accepts_bystander_hostname(
+        self, bystander_url: str
+    ) -> None:
+        """Detect Takeover Candidates models the case where a CNAME dangles to a
+        bystander - the ``bystander_url`` fixture is the conventional handle
+        for an out-of-scope target."""
+        _DetectTakeoverCandidatesArgs.model_validate(
+            {
+                "hostnames": [urlparse(bystander_url).hostname],
+                "programme_handle": "example",
+            }
+        )
+
+    def test_annotate_host_accepts_victim_hostname(self, victim_url: str) -> None:
+        """Annotate Host takes a hostname plus role / priority / notes / tech."""
+        host = urlparse(victim_url).hostname or ""
+        _AnnotateHostArgs.model_validate(
+            {
+                **_annotate_host_base(host),
+                "detected_tech": ["nginx"],
+                "programme_handle": "example",
+            }
+        )
+
+    def test_llm_detection_accepts_populated_endpoint_list(self, endpoint) -> None:
+        """LLM Endpoint Detection accepts the realistic ``Endpoint`` shape.
+
+        The conftest ``endpoint`` fixture is the canonical Endpoint instance;
+        using it here exercises the Endpoint model's own validation path as
+        part of the schema contract.
+        """
+        instance = _LlmDetectionArgs.model_validate(
+            {"endpoints": [endpoint.model_dump(mode="json")]}
+        )
+        assert len(instance.endpoints) == 1
+        assert instance.endpoints[0].url == endpoint.url
 
     # Required-field rejections. Each schema below has at least one
     # required field; missing it must fail validation.
@@ -190,52 +261,29 @@ class TestSchemaAcceptReject:
         with pytest.raises(ValidationError):
             schema_cls.model_validate({})
 
-    def test_probe_hostnames_requires_both_hostnames_and_handle(self) -> None:
+    def test_probe_hostnames_requires_both_hostnames_and_handle(self, victim_url: str) -> None:
         """Both hostnames and programme_handle are required - one alone fails."""
+        host = urlparse(victim_url).hostname
         with pytest.raises(ValidationError):
-            _ProbeHostnamesArgs.model_validate({"hostnames": ["api.example.com"]})
+            _ProbeHostnamesArgs.model_validate({"hostnames": [host]})
         with pytest.raises(ValidationError):
             _ProbeHostnamesArgs.model_validate({"programme_handle": "example"})
 
-    def test_annotate_host_requires_core_fields(self) -> None:
+    def test_annotate_host_requires_core_fields(self, victim_url: str) -> None:
         """hostname / role / priority / notes are all required for Annotate Host."""
-        base: dict[str, object] = {
-            "hostname": "api.example.com",
-            "role": "api",
-            "priority": "high",
-            "notes": "Production REST API surface; warrants careful probing.",
-        }
+        base = _annotate_host_base(urlparse(victim_url).hostname or "")
         for missing in ("hostname", "role", "priority", "notes"):
             kwargs = {k: v for k, v in base.items() if k != missing}
             with pytest.raises(ValidationError):
                 _AnnotateHostArgs.model_validate(kwargs)
 
-    def test_llm_detection_accepts_populated_endpoint_list(self, endpoint) -> None:
-        """LLM Endpoint Detection schema accepts the realistic ``Endpoint`` shape.
-
-        The parametrize cases above cover empty-list and missing-field paths;
-        this one exercises a populated list with a real ``Endpoint`` (via the
-        canonical conftest fixture) so the Endpoint model's own validation
-        path is part of the contract test.
-        """
-        instance = _LlmDetectionArgs.model_validate(
-            {"endpoints": [endpoint.model_dump(mode="json")]}
-        )
-        assert len(instance.endpoints) == 1
-        assert instance.endpoints[0].url == endpoint.url
-
-    def test_annotate_host_rejects_unknown_role_and_priority(self) -> None:
+    def test_annotate_host_rejects_unknown_role_and_priority(self, victim_url: str) -> None:
         """role and priority are typed as HostRole / HostPriority StrEnums.
 
         Unknown values reject upstream of the wrapper rather than in the
         body's ``HostRole(role)`` / ``HostPriority(priority)`` coercion.
         """
-        base: dict[str, object] = {
-            "hostname": "api.example.com",
-            "role": "api",
-            "priority": "high",
-            "notes": "Production REST API surface; warrants careful probing.",
-        }
+        base = _annotate_host_base(urlparse(victim_url).hostname or "")
         with pytest.raises(ValidationError):
             _AnnotateHostArgs.model_validate({**base, "role": "not-a-real-role"})
         with pytest.raises(ValidationError):
