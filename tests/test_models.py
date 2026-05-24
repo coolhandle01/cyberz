@@ -10,6 +10,7 @@ from pydantic import BaseModel, ValidationError
 from models import (
     Endpoint,
     Hostname,
+    HttpUrl,
     RawFinding,
     ReconResult,
     Severity,
@@ -176,6 +177,55 @@ class TestHostname:
     def test_rejects_non_string(self):
         with pytest.raises(ValidationError):
             _HostnameProbe.model_validate({"value": 42})
+
+
+class _HttpUrlProbe(BaseModel):
+    """Thin probe model used to drive the HttpUrl validator in isolation."""
+
+    value: HttpUrl
+
+
+class TestHttpUrl:
+    def test_accepts_victim_url(self, victim_url):
+        assert _HttpUrlProbe(value=victim_url).value == victim_url
+
+    def test_accepts_victim_url_with_path(self, victim_url):
+        url = f"{victim_url}/api/users?id=1"
+        assert _HttpUrlProbe(value=url).value == url
+
+    def test_accepts_http_scheme(self, victim_url):
+        url = victim_url.replace("https://", "http://")
+        assert _HttpUrlProbe(value=url).value == url
+
+    def test_rejects_malformed(self, victim_url):
+        """Walks the malformed corpus, deriving each case from victim_url so
+        intent ("a deliberately broken URL based on the in-scope target") is
+        readable at the call site. The Hostname-component check inside
+        HttpUrl is exercised by the leading-hyphen case - a URL whose host
+        fails Hostname validation rejects too.
+        """
+        from urllib.parse import urlparse
+
+        host = urlparse(victim_url).hostname or ""
+        cases: list[tuple[str, str]] = [
+            ("", "empty"),
+            ("   ", "whitespace only"),
+            (host, "no scheme - bare hostname"),
+            (f"ftp://{host}", "non-http scheme"),
+            ("javascript:alert(1)", "javascript scheme"),
+            ("file:///etc/passwd", "file scheme"),
+            ("https://", "scheme with no host"),
+            ("https:///path", "scheme + path with no host"),
+            (f"https://-{host}", "hostname inside URL fails RFC 1123"),
+        ]
+        for value, label in cases:
+            with pytest.raises(ValidationError):
+                _HttpUrlProbe.model_validate({"value": value})
+            del label
+
+    def test_preserves_path_and_query(self, victim_url):
+        url = f"{victim_url}/search?q=hello&page=2#top"
+        assert _HttpUrlProbe(value=url).value == url
 
 
 class TestReconResult:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 import pytest
+from pydantic import ValidationError
 
 from models import (
     Endpoint,
@@ -86,10 +87,14 @@ class TestValidateInsight:
         assert report.ok is True
         assert all(i.severity != "error" for i in report.issues)
 
-    def test_rejects_empty_hostname(self, sweep, programme):
-        report = validate_insight(_good_insight(hostname=""), sweep, programme)
-        assert report.ok is False
-        assert any(i.section == "hostname" for i in report.issues)
+    def test_rejects_empty_hostname(self):
+        # Hostname is a typed-string with an upstream validator now, so the
+        # empty-hostname check fires at HostInsight construction time rather
+        # than inside validate_insight. The test asserts the contract has
+        # moved one layer up rather than re-asserting the (now-redundant)
+        # validate_insight branch.
+        with pytest.raises(ValidationError):
+            _good_insight(hostname="")
 
     def test_rejects_out_of_scope_hostname(self, sweep, programme, bystander_url):
         from urllib.parse import urlparse
@@ -167,12 +172,18 @@ class TestPersistence:
         loaded = HostInsight.model_validate_json(path.read_text())
         assert loaded.hostname == "api.example.com"
 
-    def test_save_insight_handles_special_chars_in_hostname(self, tmp_path, monkeypatch):
+    def test_insight_path_sanitises_special_chars(self, tmp_path, monkeypatch):
         monkeypatch.setattr("tools.recon_insights.runtime.run_dir", lambda: tmp_path)
-        # Hostnames in practice are RFC 1123, but defensively sanitise unusual chars.
-        ins = _good_insight(hostname="weird host/name.example.com")
-        path = save_insight(ins)
-        assert path.exists()
+        # HostInsight.hostname is now typed as Hostname so weird chars cannot
+        # reach save_insight through the model path - but insight_path itself
+        # still takes a bare ``str`` argument (used directly elsewhere), and
+        # its filesystem sanitisation contract is what this test guards.
+        from tools.recon_insights import insight_path
+
+        path = insight_path("weird host/name.example.com")
+        # / is sanitised to _ so the path stays inside the host_insights dir.
+        assert "/" not in path.name
+        assert path.parent.name == "host_insights"
 
     def test_load_insights_orders_by_hostname(self, tmp_path, monkeypatch):
         monkeypatch.setattr("tools.recon_insights.runtime.run_dir", lambda: tmp_path)
