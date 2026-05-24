@@ -293,37 +293,32 @@ class TestSchemaAcceptReject:
     # carries at least one ``Hostname`` field; passing a URL / port / path
     # rejects upstream, before the scope filter sees the value.
     # test_models.py's TestHostname covers the validator exhaustively;
-    # these cases assert the OSINT schemas actually wire it.
-    @pytest.mark.parametrize(
-        ("schema_cls", "field", "value", "base"),
-        [
-            (_CertTransparencyArgs, "domain", "https://example.com", {}),
-            (_HistoricalUrlsArgs, "domain", "example.com:8080", {}),
-            (_ReconOpenPortsArgs, "host", "example.com/path", {}),
+    # this method asserts the OSINT schemas actually wire it, with each
+    # malformed case derived from ``victim_url`` so the deliberately broken
+    # input is recognisably "the in-scope target, mis-shaped" rather than
+    # an opaque literal.
+    def test_hostname_field_rejects_malformed_input(self, victim_url: str) -> None:
+        host = urlparse(victim_url).hostname or ""
+        cases: list[tuple[type[BaseModel], str, object, dict[str, object]]] = [
+            (_CertTransparencyArgs, "domain", f"https://{host}", {}),
+            (_HistoricalUrlsArgs, "domain", f"{host}:8080", {}),
+            (_ReconOpenPortsArgs, "host", f"{host}/path", {}),
             (
                 _ProbeHostnamesArgs,
                 "hostnames",
-                ["https://api.example.com"],
+                [f"https://{host}"],
                 {"programme_handle": "example"},
             ),
             (
                 _DetectTakeoverCandidatesArgs,
                 "hostnames",
-                ["legacy.example.com:9000"],
+                [f"{host}:9000"],
                 {"programme_handle": "example"},
             ),
-        ],
-    )
-    def test_hostname_field_rejects_malformed_input(
-        self,
-        schema_cls: type[BaseModel],
-        field: str,
-        value: object,
-        base: dict[str, object],
-    ) -> None:
-        """Malformed hostname inputs reject at schema validation time."""
-        with pytest.raises(ValidationError):
-            schema_cls.model_validate({**base, field: value})
+        ]
+        for schema_cls, field, value, base in cases:
+            with pytest.raises(ValidationError):
+                schema_cls.model_validate({**base, field: value})
 
     def test_annotate_host_hostname_rejects_url(self, victim_url: str) -> None:
         """Annotate Host's hostname is Hostname-typed; passing the full URL fails."""
