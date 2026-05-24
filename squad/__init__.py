@@ -48,7 +48,7 @@ SQUAD_SKILLS_DIR = Path(__file__).parent / "skills"
 class CrewAITool(Protocol):
     """The shape every ``MEMBER.tools`` entry conforms to.
 
-    The decorators in use - the bare ``@tool``, ``@typed_tool``,
+    The decorators in use - the bare ``@tool``, ``@cyber_tool``,
     ``@pentest_tool``, ``@research_brief_tool`` - all produce CrewAI ``Tool``
     instances that carry ``name``, ``description``, and ``func``. This
     Protocol is the single shared surface those decorators expose, so the
@@ -70,7 +70,7 @@ class CrewAITool(Protocol):
     def func(self) -> Callable[..., object]: ...
 
 
-def typed_tool(
+def cyber_tool(
     name: str, *, args_schema: type[BaseModel]
 ) -> Callable[[Callable[..., object]], CrewAITool]:
     """The blessed cybersquad replacement for bare ``@crewai.tools.tool``.
@@ -83,10 +83,10 @@ def typed_tool(
     descriptions when picking the tool.
 
     ``pentest_tool`` and ``research_brief_tool`` compose on top of this
-    helper: they call ``typed_tool`` underneath and then layer their own
+    helper: they call ``cyber_tool`` underneath and then layer their own
     docstring-injection (OWASP categories for the pentest wrapper, brief
     formatting for the research one). Anything that does not need a
-    specialist wrapper uses ``@typed_tool`` directly.
+    specialist wrapper uses ``@cyber_tool`` directly.
     """
 
     def decorator(fn: Callable[..., object]) -> CrewAITool:
@@ -178,5 +178,5 @@ __all__ = [
     "read_attack_plan_tool",
     "read_run_filelist_tool",
     "read_run_file_tool",
-    "typed_tool",
+    "cyber_tool",
 ]

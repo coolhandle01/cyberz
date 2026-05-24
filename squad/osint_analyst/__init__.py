@@ -1,24 +1,22 @@
 """OSINT Analyst - maps the in-scope attack surface."""
 
-from __future__ import annotations
-
-import json
 from pathlib import Path
 
-from crewai.tools import tool
+from pydantic import BaseModel, Field
 
 import runtime
 from models import (
     Endpoint,
     EndpointPage,
     HostInsight,
+    Hostname,
     HostPriority,
     HostRole,
     LlmEndpoint,
     OpenPortsMap,
 )
 from models.h1 import Programme
-from squad import SquadMember, read_run_file_tool, read_run_filelist_tool
+from squad import SquadMember, cyber_tool, read_run_file_tool, read_run_filelist_tool
 from tools import http
 from tools.cwe_data import CWEEntry
 from tools.cwe_data import lookup as cwe_lookup
@@ -52,7 +50,21 @@ from tools.recon_insights import (
 )
 
 
-@tool("Run Initial Sweep")
+class _RunInitialSweepArgs(BaseModel):
+    """Explicit args_schema for the Run Initial Sweep tool (#148)."""
+
+    programme_handle: str = Field(
+        description=(
+            "Exact HackerOne programme handle as it appears in the URL"
+            " (lowercase, no slashes, no spaces). The sweep runs subfinder,"
+            " httpx, nmap, ffuf, and passive TLS / DNS checks against the"
+            " programme's structured scope - the handle is the authoritative"
+            " key the H1 API uses to look the scope up."
+        ),
+    )
+
+
+@cyber_tool("Run Initial Sweep", args_schema=_RunInitialSweepArgs)
 def run_initial_sweep_tool(programme_handle: str) -> str:
     """
     Run the initial OSINT sweep against the in-scope assets of the given
@@ -77,7 +89,30 @@ def run_initial_sweep_tool(programme_handle: str) -> str:
     return "sweep.json"
 
 
-@tool("Recon Subdomains")
+class _ReconSubdomainsArgs(BaseModel):
+    """Explicit args_schema for the OSINT Recon Subdomains tool (#148)."""
+
+    sweep_path: str = Field(
+        default="sweep.json",
+        description=(
+            "Relative path to the OA's in-progress sweep file. Defaults to"
+            " ``sweep.json`` (the canonical name written by Run Initial"
+            " Sweep). Override only when re-inspecting a sweep written"
+            " under a different name."
+        ),
+    )
+    host_filter: str | None = Field(
+        default=None,
+        description=(
+            "Case-insensitive substring match against each subdomain"
+            " (e.g. 'api' returns every subdomain containing 'api',"
+            " regardless of position). Omit or pass null to get the full"
+            " list. Useful for scoping a per-role annotation pass."
+        ),
+    )
+
+
+@cyber_tool("Recon Subdomains", args_schema=_ReconSubdomainsArgs)
 def recon_subdomains_tool(
     sweep_path: str = "sweep.json", host_filter: str | None = None
 ) -> list[str]:
@@ -90,7 +125,54 @@ def recon_subdomains_tool(
     return recon_subdomains(sweep_path, host_filter=host_filter)
 
 
-@tool("Recon Endpoints")
+class _ReconEndpointsArgs(BaseModel):
+    """Explicit args_schema for the OSINT Recon Endpoints tool (#148)."""
+
+    sweep_path: str = Field(
+        default="sweep.json",
+        description="Relative path to the OA's sweep file. Defaults to ``sweep.json``.",
+    )
+    status: int | None = Field(
+        default=None,
+        description=(
+            "Exact HTTP status code to filter by (e.g. 200 for live, 401 /"
+            " 403 for auth-shaped, 301 / 302 for redirectors). Omit or pass"
+            " null for any status."
+        ),
+    )
+    tech: str | None = Field(
+        default=None,
+        description=(
+            "Case-insensitive substring match against each endpoint's"
+            " technologies list (e.g. 'wordpress' matches 'WordPress 6.4')."
+            " Use when scoping a per-stack annotation pass."
+        ),
+    )
+    host_contains: str | None = Field(
+        default=None,
+        description=(
+            "Case-insensitive substring match against the endpoint URL. Use"
+            " to narrow to a hostname or path family."
+        ),
+    )
+    offset: int = Field(
+        default=0,
+        description=(
+            "Zero-based row offset for paging. Use with ``limit`` to walk large result sets."
+        ),
+    )
+    limit: int = Field(
+        default=50,
+        description=(
+            "Maximum number of endpoints to return in this page. The OA's"
+            " context budget rewards small pages; default 50 is usually"
+            " right - go larger only when the conjunctive filters above"
+            " already narrowed the result heavily."
+        ),
+    )
+
+
+@cyber_tool("Recon Endpoints", args_schema=_ReconEndpointsArgs)
 def recon_endpoints_tool(
     sweep_path: str = "sweep.json",
     status: int | None = None,
@@ -116,8 +198,28 @@ def recon_endpoints_tool(
     )
 
 
-@tool("Recon Open Ports")
-def recon_open_ports_tool(sweep_path: str = "sweep.json", host: str | None = None) -> OpenPortsMap:
+class _ReconOpenPortsArgs(BaseModel):
+    """Explicit args_schema for the OSINT Recon Open Ports tool (#148)."""
+
+    sweep_path: str = Field(
+        default="sweep.json",
+        description="Relative path to the OA's sweep file. Defaults to ``sweep.json``.",
+    )
+    host: Hostname | None = Field(
+        default=None,
+        description=(
+            "Exact hostname to restrict the result to (no wildcards, no"
+            " substring). Validated as an RFC 1123 hostname - URLs / ports"
+            " / paths reject upstream. Omit or pass null to get the full"
+            " per-host port map."
+        ),
+    )
+
+
+@cyber_tool("Recon Open Ports", args_schema=_ReconOpenPortsArgs)
+def recon_open_ports_tool(
+    sweep_path: str = "sweep.json", host: Hostname | None = None
+) -> OpenPortsMap:
     """
     Return the open-port map per host from the sweep. Passing a ``host``
     restricts the result to that single host. Use to surface non-HTTP
@@ -127,8 +229,22 @@ def recon_open_ports_tool(sweep_path: str = "sweep.json", host: str | None = Non
     return OpenPortsMap(hosts=recon_open_ports(sweep_path, host=host))
 
 
-@tool("Certificate Transparency Lookup")
-def cert_transparency_tool(domain: str) -> list[str]:
+class _CertTransparencyArgs(BaseModel):
+    """Explicit args_schema for the Certificate Transparency Lookup tool (#148)."""
+
+    domain: Hostname = Field(
+        description=(
+            "Apex domain to look up in crt.sh certificate transparency logs"
+            " (e.g. 'example.com'). Validated as an RFC 1123 hostname"
+            " (URLs / ports / paths reject upstream). Pass an apex, not a"
+            " subdomain - crt.sh returns the broader set when queried on"
+            " the apex."
+        ),
+    )
+
+
+@cyber_tool("Certificate Transparency Lookup", args_schema=_CertTransparencyArgs)
+def cert_transparency_tool(domain: Hostname) -> list[str]:
     """
     Query crt.sh certificate transparency logs to discover subdomains not
     found by active enumeration. Returns deduplicated hostnames. Feed
@@ -137,8 +253,22 @@ def cert_transparency_tool(domain: str) -> list[str]:
     return cert_transparency(domain)
 
 
-@tool("Historical URL Discovery")
-def historical_urls_tool(domain: str) -> list[str]:
+class _HistoricalUrlsArgs(BaseModel):
+    """Explicit args_schema for the Historical URL Discovery tool (#148)."""
+
+    domain: Hostname = Field(
+        description=(
+            "Domain to query waybackurls for (apex or subdomain). Validated"
+            " as an RFC 1123 hostname (URLs / ports / paths reject"
+            " upstream). Returns historical URLs the Wayback Machine has"
+            " archived. Many paths will be 404s today; feed candidates to"
+            " Probe Hostnames to confirm liveness before annotating."
+        ),
+    )
+
+
+@cyber_tool("Historical URL Discovery", args_schema=_HistoricalUrlsArgs)
+def historical_urls_tool(domain: Hostname) -> list[str]:
     """
     Use waybackurls to find historical endpoints for a domain from the
     Wayback Machine. Surfaces paths that may no longer be linked but still
@@ -147,22 +277,64 @@ def historical_urls_tool(domain: str) -> list[str]:
     return historical_urls(domain)
 
 
-@tool("LLM Endpoint Detection")
-def llm_detection_tool(endpoints_json: str) -> list[LlmEndpoint]:
+class _LlmDetectionArgs(BaseModel):
+    """Explicit args_schema for the LLM Endpoint Detection tool (#148)."""
+
+    endpoints: list[Endpoint] = Field(
+        description=(
+            "Live endpoint objects from the sweep (or a filtered subset)."
+            " Each entry needs ``url`` and ideally ``technologies``;"
+            " ``status_code`` is honoured if present. Pass the typed list"
+            " straight through from Recon Endpoints - do not stringify."
+        ),
+    )
+
+
+@cyber_tool("LLM Endpoint Detection", args_schema=_LlmDetectionArgs)
+def llm_detection_tool(endpoints: list[Endpoint]) -> list[LlmEndpoint]:
     """
     Scan a set of live endpoints for signals that they are backed by an LLM
     or AI assistant (URL path heuristics, OpenAI-format response keys,
     EventSource content-type, self-identification phrases). Pass the
-    sweep's endpoint list (or a filtered subset) as JSON. Returned hits
-    deserve a HIGH-priority annotation and a note pointing the Penetration
-    Tester at prompt-injection probes.
+    sweep's endpoint list (or a filtered subset) straight through from
+    Recon Endpoints. Returned hits deserve a HIGH-priority annotation and
+    a note pointing the Penetration Tester at prompt-injection probes.
     """
-    endpoints = [Endpoint.model_validate(e) for e in json.loads(endpoints_json)]
-    return [LlmEndpoint.model_validate(ep.model_dump()) for ep in detect_llm_endpoints(endpoints)]
+    # CrewAI's args_schema validation produces list[dict] from the LLM JSON
+    # before invoking us; re-validate so we always see ``Endpoint`` instances
+    # regardless of whether the caller is the runtime or a direct test invocation.
+    parsed = [Endpoint.model_validate(e) for e in endpoints]
+    return [LlmEndpoint.model_validate(ep.model_dump()) for ep in detect_llm_endpoints(parsed)]
 
 
-@tool("Probe Hostnames")
-def probe_hostnames_tool(hostnames: list[str], programme_handle: str) -> list[Endpoint]:
+class _ProbeHostnamesArgs(BaseModel):
+    """Explicit args_schema for the Probe Hostnames tool (#148)."""
+
+    hostnames: list[Hostname] = Field(
+        description=(
+            "Hostnames to re-probe with httpx for liveness, status code,"
+            " and technology fingerprinting. Each entry is validated as an"
+            " RFC 1123 hostname; URLs / ports / paths reject upstream"
+            " (catches the common 'agent handed us a URL when we asked for"
+            " a hostname' case before the scope filter silently drops it)."
+            " Typically the net-new ones surfaced by Certificate"
+            " Transparency or Historical URL Discovery that were missed by"
+            " the initial sweep. After this, each hostname is scope-"
+            "filtered against the programme before any HTTP traffic fires."
+        ),
+    )
+    programme_handle: str = Field(
+        description=(
+            "Exact HackerOne programme handle for the scope guard. Required"
+            " so the scope filter has the structured scope to check against;"
+            " the scope guard never probes outside scope, even for"
+            " fingerprinting."
+        ),
+    )
+
+
+@cyber_tool("Probe Hostnames", args_schema=_ProbeHostnamesArgs)
+def probe_hostnames_tool(hostnames: list[Hostname], programme_handle: str) -> list[Endpoint]:
     """
     Re-probe a list of hostnames with httpx to confirm liveness, capture
     status codes, and fingerprint technologies. Use this on hostnames
@@ -184,9 +356,32 @@ def probe_hostnames_tool(hostnames: list[str], programme_handle: str) -> list[En
     return list(probe_endpoints_impl(in_scope))
 
 
-@tool("Detect Takeover Candidates")
+class _DetectTakeoverCandidatesArgs(BaseModel):
+    """Explicit args_schema for the Detect Takeover Candidates tool (#148)."""
+
+    hostnames: list[Hostname] = Field(
+        description=(
+            "Hostnames to resolve via dnsx and flag for subdomain takeover."
+            " Each entry is validated as an RFC 1123 hostname; URLs / ports"
+            " / paths reject upstream. A candidate fires when the CNAME"
+            " points to a known-vulnerable provider (AWS S3, Heroku,"
+            " GitHub Pages, Azure, Vercel, Netlify, ...) or when the CNAME"
+            " chain dangles. Hostnames are scope-filtered before any DNS"
+            " traffic fires."
+        ),
+    )
+    programme_handle: str = Field(
+        description=(
+            "Exact HackerOne programme handle for the scope guard. The"
+            " resolver does not query outside the programme's structured"
+            " scope - the handle is the authoritative key."
+        ),
+    )
+
+
+@cyber_tool("Detect Takeover Candidates", args_schema=_DetectTakeoverCandidatesArgs)
 def detect_takeover_candidates_tool(
-    hostnames: list[str], programme_handle: str
+    hostnames: list[Hostname], programme_handle: str
 ) -> list[TakeoverCandidate]:
     """
     Resolve each hostname via dnsx and flag subdomain-takeover candidates.
@@ -214,7 +409,21 @@ def detect_takeover_candidates_tool(
     return list(detect_takeover_candidates(in_scope))
 
 
-@tool("Lookup CWE")
+class _OsintLookupCweArgs(BaseModel):
+    """Explicit args_schema for the OSINT Lookup CWE tool (#148)."""
+
+    query: str = Field(
+        description=(
+            "Free-text query against the Common Weakness Enumeration index."
+            " Matches CWE id, name, or description (case-insensitive"
+            " substring). Useful when annotating a host whose detected tech"
+            " has a well-known weakness class (e.g. 'WordPress' -> XSS /"
+            " SQLi; 'Spring Boot' -> SSTI / RCE)."
+        ),
+    )
+
+
+@cyber_tool("Lookup CWE", args_schema=_OsintLookupCweArgs)
 def lookup_cwe_tool(query: str) -> list[CWEEntry]:
     """
     Find Common Weakness Enumeration entries that match a query - useful
@@ -226,7 +435,20 @@ def lookup_cwe_tool(query: str) -> list[CWEEntry]:
     return list(cwe_lookup(query))
 
 
-@tool("Lookup OWASP Guidance")
+class _OsintLookupOwaspArgs(BaseModel):
+    """Explicit args_schema for the OSINT Lookup OWASP Guidance tool (#148)."""
+
+    query: str = Field(
+        description=(
+            "Free-text query against the OWASP Cheat Sheet index. Matches"
+            " on cheatsheet title and topic (case-insensitive substring)."
+            " Use to surface guidance the downstream VR can reason against"
+            " when building the attack plan."
+        ),
+    )
+
+
+@cyber_tool("Lookup OWASP Guidance", args_schema=_OsintLookupOwaspArgs)
 def lookup_owasp_tool(query: str) -> list[OWASPEntry]:
     """
     Find OWASP Cheat Sheet entries for a vuln class or topic - hint for
@@ -236,11 +458,70 @@ def lookup_owasp_tool(query: str) -> list[OWASPEntry]:
     return list(owasp_lookup(query))
 
 
-@tool("Annotate Host")
+class _AnnotateHostArgs(BaseModel):
+    """Explicit args_schema for the Annotate Host tool (#148)."""
+
+    hostname: Hostname = Field(
+        description=(
+            "Hostname to annotate. Must already be in the sweep, or have"
+            " been surfaced by Certificate Transparency / Historical URL"
+            " Discovery / Probe Hostnames. Validated as an RFC 1123"
+            " hostname (URLs / ports / paths reject upstream)."
+        ),
+    )
+    role: HostRole = Field(
+        description=(
+            "Functional role this host plays. Drives downstream"
+            " prioritisation - admin / auth hosts attract more probe"
+            " budget than static / cdn ones. The schema enforces the"
+            " enum upstream so an unknown role rejects before the"
+            " wrapper body runs."
+        ),
+    )
+    priority: HostPriority = Field(
+        description=(
+            "Curation signal the PT uses to allocate probe budget."
+            " ``high`` means 'spend probes here'; ``skip`` means 'do not"
+            " probe this even if reachable'. Must match the threat model"
+            " in the notes; the quality gate checks both."
+        ),
+    )
+    notes: str = Field(
+        description=(
+            ">= 30 characters (>= 60 for high-priority). Explain what the"
+            " host is, what tech runs on it, and why it matters (or why"
+            " not). Quality gate fires below the length threshold and"
+            " when the priority does not match the prose."
+        ),
+    )
+    detected_tech: list[str] | None = Field(
+        default=None,
+        description=(
+            "Ideally with versions ('Spring Boot 2.6.3' beats 'Spring"
+            " Boot'). The quality gate warns when the sweep saw tech the"
+            " annotation drops - the annotation is meant to be a curation"
+            " of what was seen, not an alternate inventory."
+        ),
+    )
+    sweep_path: str = Field(
+        default="sweep.json",
+        description="Relative path to the OA's sweep file. Defaults to ``sweep.json``.",
+    )
+    programme_handle: str | None = Field(
+        default=None,
+        description=(
+            "Exact HackerOne programme handle. Required - the scope guard"
+            " in ``validate_insight`` needs a real Programme to check"
+            " against. ``None`` raises ValueError."
+        ),
+    )
+
+
+@cyber_tool("Annotate Host", args_schema=_AnnotateHostArgs)
 def annotate_host_tool(
-    hostname: str,
-    role: str,
-    priority: str,
+    hostname: Hostname,
+    role: HostRole,
+    priority: HostPriority,
     notes: str,
     detected_tech: list[str] | None = None,
     sweep_path: str = "sweep.json",
@@ -283,7 +564,21 @@ def annotate_host_tool(
     )
 
 
-@tool("Uncovered Hosts")
+class _UncoveredHostsArgs(BaseModel):
+    """Explicit args_schema for the Uncovered Hosts tool (#148)."""
+
+    sweep_path: str = Field(
+        default="sweep.json",
+        description=(
+            "Relative path to the OA's sweep file. Defaults to"
+            " ``sweep.json``. Returns interesting-status hostnames (200,"
+            " 301, 302, 401, 403, ...) in the sweep that have no insight"
+            " yet - use as a checklist before Finalise Recon."
+        ),
+    )
+
+
+@cyber_tool("Uncovered Hosts", args_schema=_UncoveredHostsArgs)
 def uncovered_hosts_tool(sweep_path: str = "sweep.json") -> list[str]:
     """
     Return interesting-status hostnames in the sweep (200, 301, 302, 401,
@@ -296,7 +591,24 @@ def uncovered_hosts_tool(sweep_path: str = "sweep.json") -> list[str]:
     return uncovered_interesting_hosts(sweep, insights)
 
 
-@tool("Finalise Recon")
+class _FinaliseReconArgs(BaseModel):
+    """Explicit args_schema for the Finalise Recon tool (#148)."""
+
+    programme_handle: str = Field(
+        description=(
+            "Exact HackerOne programme handle. The scope guard re-validates"
+            " every insight against the programme's structured scope before"
+            " writing recon.json - a mismatch raises and the workspace"
+            " handle is not produced."
+        ),
+    )
+    sweep_path: str = Field(
+        default="sweep.json",
+        description="Relative path to the OA's sweep file. Defaults to ``sweep.json``.",
+    )
+
+
+@cyber_tool("Finalise Recon", args_schema=_FinaliseReconArgs)
 def finalise_recon_tool(
     programme_handle: str,
     sweep_path: str = "sweep.json",

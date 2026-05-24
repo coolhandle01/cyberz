@@ -5,10 +5,12 @@ tests/test_models.py - unit tests for models.py
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from models import (
     Endpoint,
+    Hostname,
+    HttpUrl,
     RawFinding,
     ReconResult,
     Severity,
@@ -88,6 +90,142 @@ class TestEndpoint:
         assert ep.status_code is None
         assert ep.technologies == []
         assert ep.parameters == []
+
+
+# Hostname is exercised through a throwaway pydantic model so the validator
+# fires the same way it does when carried on a real schema field. Stick to
+# pytest.raises(ValidationError) rather than the lower-level ValueError so
+# the test mirrors what schema callers will see.
+class _HostnameProbe(BaseModel):
+    """Thin probe model used to drive the Hostname validator in isolation."""
+
+    value: Hostname
+
+
+class TestHostname:
+    def test_accepts_victim_apex(self, victim_url):
+        # urlparse hostname is the canonical way to derive a Hostname-shaped
+        # string from a URL fixture; using the fixture keeps test intent
+        # ("the in-scope target") readable at the call site.
+        from urllib.parse import urlparse
+
+        host = urlparse(victim_url).hostname or ""
+        apex = host.split(".", 1)[-1]  # "example.com" from "victim.example.com"
+        assert _HostnameProbe(value=apex).value == apex
+
+    def test_accepts_victim_subdomain(self, victim_url):
+        from urllib.parse import urlparse
+
+        host = urlparse(victim_url).hostname or ""
+        assert _HostnameProbe(value=host).value == host
+
+    def test_accepts_single_label(self):
+        # ``localhost`` is the canonical single-label hostname; no URL fixture
+        # exposes one because the rest of the codebase doesn't reach for it.
+        assert _HostnameProbe(value="localhost").value == "localhost"
+
+    def test_accepts_numeric_labels(self):
+        # 10.0.0.1 looks IP-shaped but parses as a valid hostname per RFC 1123
+        # label rules (digits are allowed). The scope filter is the next layer
+        # that decides whether to accept it as an in-scope target.
+        assert _HostnameProbe(value="10.0.0.1").value == "10.0.0.1"
+
+    def test_lowercases_victim_host(self, victim_url):
+        from urllib.parse import urlparse
+
+        host = urlparse(victim_url).hostname or ""
+        assert _HostnameProbe(value=host.upper()).value == host
+
+    def test_strips_whitespace_around_victim_host(self, victim_url):
+        from urllib.parse import urlparse
+
+        host = urlparse(victim_url).hostname or ""
+        assert _HostnameProbe(value=f"  {host}  ").value == host
+
+    def test_rejects_malformed(self, victim_url):
+        """Walks the malformed corpus, deriving each case from victim_url
+        so test intent ("a deliberately broken version of the in-scope
+        target") is readable. Pytest parametrize literals cannot consume
+        fixtures, so a single dedicated method loops the corpus instead.
+        """
+        from urllib.parse import urlparse
+
+        host = urlparse(victim_url).hostname or ""
+        cases: list[tuple[str, str]] = [
+            ("", "empty"),
+            ("   ", "whitespace only"),
+            (f"https://{host}", "scheme present"),
+            (f"ftp://{host}", "non-http scheme"),
+            (f"{host}:8080", "port present"),
+            (f"{host}/path", "path present"),
+            (f"{host}/", "trailing slash"),
+            (f"-{host}", "leading hyphen"),
+            (f"{host}-", "trailing hyphen on label"),
+            (host.replace(".", "..", 1), "empty label"),
+            ("a" * 64 + f".{host}", "label > 63 chars"),
+            (".".join(["a"] * 200), "total > 253 chars"),
+            (host.replace(".", " .", 1), "space in label"),
+            (f"{host}\nextra", "newline injection"),
+        ]
+        for value, label in cases:
+            with pytest.raises(ValidationError, match=r".*"):
+                _HostnameProbe.model_validate({"value": value})
+            # ``label`` is unused at the assertion level but appears in the
+            # case tuple so a future debugger can identify which case failed.
+            del label
+
+    def test_rejects_non_string(self):
+        with pytest.raises(ValidationError):
+            _HostnameProbe.model_validate({"value": 42})
+
+
+class _HttpUrlProbe(BaseModel):
+    """Thin probe model used to drive the HttpUrl validator in isolation."""
+
+    value: HttpUrl
+
+
+class TestHttpUrl:
+    def test_accepts_victim_url(self, victim_url):
+        assert _HttpUrlProbe(value=victim_url).value == victim_url
+
+    def test_accepts_victim_url_with_path(self, victim_url):
+        url = f"{victim_url}/api/users?id=1"
+        assert _HttpUrlProbe(value=url).value == url
+
+    def test_accepts_http_scheme(self, victim_url):
+        url = victim_url.replace("https://", "http://")
+        assert _HttpUrlProbe(value=url).value == url
+
+    def test_rejects_malformed(self, victim_url):
+        """Walks the malformed corpus, deriving each case from victim_url so
+        intent ("a deliberately broken URL based on the in-scope target") is
+        readable at the call site. The Hostname-component check inside
+        HttpUrl is exercised by the leading-hyphen case - a URL whose host
+        fails Hostname validation rejects too.
+        """
+        from urllib.parse import urlparse
+
+        host = urlparse(victim_url).hostname or ""
+        cases: list[tuple[str, str]] = [
+            ("", "empty"),
+            ("   ", "whitespace only"),
+            (host, "no scheme - bare hostname"),
+            (f"ftp://{host}", "non-http scheme"),
+            ("javascript:alert(1)", "javascript scheme"),
+            ("file:///etc/passwd", "file scheme"),
+            ("https://", "scheme with no host"),
+            ("https:///path", "scheme + path with no host"),
+            (f"https://-{host}", "hostname inside URL fails RFC 1123"),
+        ]
+        for value, label in cases:
+            with pytest.raises(ValidationError):
+                _HttpUrlProbe.model_validate({"value": value})
+            del label
+
+    def test_preserves_path_and_query(self, victim_url):
+        url = f"{victim_url}/search?q=hello&page=2#top"
+        assert _HttpUrlProbe(value=url).value == url
 
 
 class TestReconResult:

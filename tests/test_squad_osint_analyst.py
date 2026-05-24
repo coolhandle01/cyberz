@@ -9,7 +9,6 @@ underlying helpers are exercised in their own dedicated test files.
 
 from __future__ import annotations
 
-import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -349,12 +348,15 @@ class TestOsintAnalystTools:
         from models import LlmEndpoint
         from squad.osint_analyst import llm_detection_tool
 
-        endpoints_json = json.dumps([endpoint.model_dump(mode="json")])
+        # CrewAI's args_schema validation hands us list[dict] at runtime;
+        # the both-shape adapter inside the wrapper accepts either Endpoint
+        # instances or dicts, so this exercises the dict path.
+        endpoints_payload = [endpoint.model_dump(mode="json")]
         with patch(
             "squad.osint_analyst.detect_llm_endpoints",
             return_value=[endpoint],
         ) as m:
-            result = llm_detection_tool.func(endpoints_json)
+            result = llm_detection_tool.func(endpoints_payload)
 
         assert result == [LlmEndpoint.model_validate(endpoint.model_dump())]
         assert len(m.call_args[0][0]) == 1

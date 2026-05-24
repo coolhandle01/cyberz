@@ -9,7 +9,8 @@ these types directly with the H1 API via tools/h1_api.py:
   - Programme is the hydrated detail shape;
   - DisclosureReport is the POST /reports payload (Technical Author -> Disclosure Coordinator);
   - SubmissionStatus enumerates H1's report state taxonomy;
-  - SubmissionResult is the outcome of POSTing a report to /reports.
+  - SubmissionResult is the outcome of POSTing a report to /reports;
+  - ProgrammeReportSummary is the compact slice returned by List Programme Reports.
 """
 
 from __future__ import annotations
@@ -19,7 +20,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
-from models import Severity, VerifiedVulnerability
+from models.finding import VerifiedVulnerability
+from models.primitives import Severity
 
 
 class ScopeType(StrEnum):
@@ -141,3 +143,18 @@ class SubmissionResult(BaseModel):
     h1_url: str | None = None
     submitted_at: datetime | None = None
     error: str | None = None
+
+
+class ProgrammeReportSummary(BaseModel):
+    """Compact summary of one HackerOne report listed against a programme.
+
+    Lives in models.h1 rather than models.finding because the shape mirrors
+    H1's /reports listing payload (every field is verbatim from the API)
+    and the consumer is the Technical Author's List Programme Reports tool
+    which already speaks h1-shape.
+    """
+
+    report_id: str | None = None
+    title: str | None = None
+    severity: str | None = None
+    state: str | None = None

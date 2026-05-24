@@ -12,10 +12,10 @@ from models import Endpoint, EndpointPage, OpenPortsMap, RawFinding, ReconResult
 from squad import (
     CrewAITool,
     SquadMember,
+    cyber_tool,
     read_attack_plan_tool,
     read_run_file_tool,
     read_run_filelist_tool,
-    typed_tool,
 )
 from tools import http
 from tools.cloud import (
@@ -87,12 +87,12 @@ def pentest_tool(
     check_fn: object = None,
     args_schema: type[BaseModel],
 ) -> Callable[[_PentestFn], _PentestTool]:
-    """Pentest-specialised wrapper. Composes ``typed_tool`` plus OWASP injection.
+    """Pentest-specialised wrapper. Composes ``cyber_tool`` plus OWASP injection.
 
-    ``typed_tool`` handles the schema override; ``pentest_tool`` layers the
+    ``cyber_tool`` handles the schema override; ``pentest_tool`` layers the
     OWASP categories from ``check_fn.owasp_categories`` into the agent-facing
     docstring. Every pentest probe goes through this wrapper, never bare
-    ``@tool`` and never raw ``@typed_tool`` - the OWASP framing is what the
+    ``@tool`` and never raw ``@cyber_tool`` - the OWASP framing is what the
     PT agent's role.md teaches it to reason against.
     """
 
@@ -102,7 +102,7 @@ def pentest_tool(
             if cats:
                 lines = "\n".join(f"  - {c}" for c in cats)
                 fn.__doc__ = (fn.__doc__ or "").rstrip() + f"\n\nOWASP Top 10:\n{lines}\n"
-        wrapped = typed_tool(name, args_schema=args_schema)(fn)
+        wrapped = cyber_tool(name, args_schema=args_schema)(fn)
         return cast(_PentestTool, wrapped)
 
     return decorator
@@ -817,7 +817,7 @@ class _S3CheckArgs(BaseModel):
     )
 
 
-@typed_tool("S3 Bucket Check", args_schema=_S3CheckArgs)
+@cyber_tool("S3 Bucket Check", args_schema=_S3CheckArgs)
 def s3_check_tool(recon_path: str) -> list[RawFinding]:
     """
     Check for publicly accessible or listable AWS S3 buckets derived from the
@@ -842,7 +842,7 @@ class _AzureStorageCheckArgs(BaseModel):
     )
 
 
-@typed_tool("Azure Blob Storage Check", args_schema=_AzureStorageCheckArgs)
+@cyber_tool("Azure Blob Storage Check", args_schema=_AzureStorageCheckArgs)
 def azure_storage_check_tool(recon_path: str) -> list[RawFinding]:
     """
     Check for publicly accessible Azure Blob Storage containers and exposed SAS
@@ -867,7 +867,7 @@ class _ElasticsearchCheckArgs(BaseModel):
     )
 
 
-@typed_tool("Unauthenticated Elasticsearch Check", args_schema=_ElasticsearchCheckArgs)
+@cyber_tool("Unauthenticated Elasticsearch Check", args_schema=_ElasticsearchCheckArgs)
 def elasticsearch_tool(recon_path: str) -> list[RawFinding]:
     """
     Check for an unauthenticated Elasticsearch instance on port 9200.
@@ -895,7 +895,7 @@ class _CouchdbCheckArgs(BaseModel):
     )
 
 
-@typed_tool("Unauthenticated CouchDB Check", args_schema=_CouchdbCheckArgs)
+@cyber_tool("Unauthenticated CouchDB Check", args_schema=_CouchdbCheckArgs)
 def couchdb_tool(recon_path: str) -> list[RawFinding]:
     """
     Check for an unauthenticated CouchDB instance on port 5984.
@@ -923,7 +923,7 @@ class _RedisCheckArgs(BaseModel):
     )
 
 
-@typed_tool("Unauthenticated Redis Check", args_schema=_RedisCheckArgs)
+@cyber_tool("Unauthenticated Redis Check", args_schema=_RedisCheckArgs)
 def redis_tool(recon_path: str) -> list[RawFinding]:
     """
     Check for an unauthenticated Redis instance on port 6379 via a PING command.
@@ -952,7 +952,7 @@ class _MongodbCheckArgs(BaseModel):
     )
 
 
-@typed_tool("Unauthenticated MongoDB Check", args_schema=_MongodbCheckArgs)
+@cyber_tool("Unauthenticated MongoDB Check", args_schema=_MongodbCheckArgs)
 def mongodb_tool(recon_path: str) -> list[RawFinding]:
     """
     Check for an unauthenticated MongoDB instance on port 27017.
@@ -983,7 +983,7 @@ class _PostgresqlCheckArgs(BaseModel):
     )
 
 
-@typed_tool("Exposed PostgreSQL Check", args_schema=_PostgresqlCheckArgs)
+@cyber_tool("Exposed PostgreSQL Check", args_schema=_PostgresqlCheckArgs)
 def postgresql_tool(recon_path: str) -> list[RawFinding]:
     """
     Check for PostgreSQL on port 5432. Returns CRITICAL if trust authentication
@@ -1013,7 +1013,7 @@ class _MysqlCheckArgs(BaseModel):
     )
 
 
-@typed_tool("Exposed MySQL/MariaDB Check", args_schema=_MysqlCheckArgs)
+@cyber_tool("Exposed MySQL/MariaDB Check", args_schema=_MysqlCheckArgs)
 def mysql_tool(recon_path: str) -> list[RawFinding]:
     """
     Check for MySQL or MariaDB on port 3306. Returns MEDIUM if the port is
@@ -1044,7 +1044,7 @@ class _SensitiveFilesArgs(BaseModel):
     )
 
 
-@typed_tool("Sensitive Files Check", args_schema=_SensitiveFilesArgs)
+@cyber_tool("Sensitive Files Check", args_schema=_SensitiveFilesArgs)
 def sensitive_files_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
     """
     Probe for exposed .git/HEAD, .env, phpinfo.php, Apache server-status, and
@@ -1073,7 +1073,7 @@ class _AdminPanelsArgs(BaseModel):
     )
 
 
-@typed_tool("Admin Panels Check", args_schema=_AdminPanelsArgs)
+@cyber_tool("Admin Panels Check", args_schema=_AdminPanelsArgs)
 def admin_panels_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
     """
     Probe common admin panel paths: /admin, /wp-admin, /phpmyadmin, /adminer,
@@ -1101,7 +1101,7 @@ class _CpanelArgs(BaseModel):
     )
 
 
-@typed_tool("cPanel/WHM Check", args_schema=_CpanelArgs)
+@cyber_tool("cPanel/WHM Check", args_schema=_CpanelArgs)
 def cpanel_tool(recon_path: str) -> list[RawFinding]:
     """
     Check for an exposed cPanel hosting control panel (ports 2082/2083) and
@@ -1127,7 +1127,7 @@ class _PleskArgs(BaseModel):
     )
 
 
-@typed_tool("Plesk Check", args_schema=_PleskArgs)
+@cyber_tool("Plesk Check", args_schema=_PleskArgs)
 def plesk_tool(recon_path: str) -> list[RawFinding]:
     """
     Check for an exposed Plesk web hosting control panel on ports 8880 (HTTP)
@@ -1151,7 +1151,7 @@ class _DirectadminArgs(BaseModel):
     )
 
 
-@typed_tool("DirectAdmin Check", args_schema=_DirectadminArgs)
+@cyber_tool("DirectAdmin Check", args_schema=_DirectadminArgs)
 def directadmin_tool(recon_path: str) -> list[RawFinding]:
     """
     Check for an exposed DirectAdmin hosting control panel on port 2222.
@@ -1174,7 +1174,7 @@ class _WebminArgs(BaseModel):
     )
 
 
-@typed_tool("Webmin Check", args_schema=_WebminArgs)
+@cyber_tool("Webmin Check", args_schema=_WebminArgs)
 def webmin_tool(recon_path: str) -> list[RawFinding]:
     """
     Check for an exposed Webmin Linux server administration panel on port 10000.
@@ -1198,7 +1198,7 @@ class _GrafanaArgs(BaseModel):
     )
 
 
-@typed_tool("Grafana Check", args_schema=_GrafanaArgs)
+@cyber_tool("Grafana Check", args_schema=_GrafanaArgs)
 def grafana_tool(recon_path: str) -> list[RawFinding]:
     """
     Check for an exposed Grafana metrics dashboard on port 3000 and via /grafana
@@ -1224,7 +1224,7 @@ class _KibanaArgs(BaseModel):
     )
 
 
-@typed_tool("Kibana Check", args_schema=_KibanaArgs)
+@cyber_tool("Kibana Check", args_schema=_KibanaArgs)
 def kibana_tool(recon_path: str) -> list[RawFinding]:
     """
     Check for an exposed Kibana log/data visualisation dashboard on port 5601 and
@@ -1250,7 +1250,7 @@ class _PortainerArgs(BaseModel):
     )
 
 
-@typed_tool("Portainer Check", args_schema=_PortainerArgs)
+@cyber_tool("Portainer Check", args_schema=_PortainerArgs)
 def portainer_tool(recon_path: str) -> list[RawFinding]:
     """
     Check for an exposed Portainer Docker management UI on port 9000 and via
@@ -1277,7 +1277,7 @@ class _ConsulVaultArgs(BaseModel):
     )
 
 
-@typed_tool("Consul/Vault Check", args_schema=_ConsulVaultArgs)
+@cyber_tool("Consul/Vault Check", args_schema=_ConsulVaultArgs)
 def consul_vault_tool(recon_path: str) -> list[RawFinding]:
     """
     Check for an exposed HashiCorp Consul UI (port 8500) or Vault UI (port 8200),
