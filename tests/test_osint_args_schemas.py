@@ -288,3 +288,50 @@ class TestSchemaAcceptReject:
             _AnnotateHostArgs.model_validate({**base, "role": "not-a-real-role"})
         with pytest.raises(ValidationError):
             _AnnotateHostArgs.model_validate({**base, "priority": "urgent"})
+
+    # Hostname-typed fields (#148 review feedback). Every schema below
+    # carries at least one ``Hostname`` field; passing a URL / port / path
+    # rejects upstream, before the scope filter sees the value.
+    # test_models.py's TestHostname covers the validator exhaustively;
+    # these cases assert the OSINT schemas actually wire it.
+    @pytest.mark.parametrize(
+        ("schema_cls", "field", "value", "base"),
+        [
+            (_CertTransparencyArgs, "domain", "https://example.com", {}),
+            (_HistoricalUrlsArgs, "domain", "example.com:8080", {}),
+            (_ReconOpenPortsArgs, "host", "example.com/path", {}),
+            (
+                _ProbeHostnamesArgs,
+                "hostnames",
+                ["https://api.example.com"],
+                {"programme_handle": "example"},
+            ),
+            (
+                _DetectTakeoverCandidatesArgs,
+                "hostnames",
+                ["legacy.example.com:9000"],
+                {"programme_handle": "example"},
+            ),
+        ],
+    )
+    def test_hostname_field_rejects_malformed_input(
+        self,
+        schema_cls: type[BaseModel],
+        field: str,
+        value: object,
+        base: dict[str, object],
+    ) -> None:
+        """Malformed hostname inputs reject at schema validation time."""
+        with pytest.raises(ValidationError):
+            schema_cls.model_validate({**base, field: value})
+
+    def test_annotate_host_hostname_rejects_url(self, victim_url: str) -> None:
+        """Annotate Host's hostname is Hostname-typed; passing the full URL fails."""
+        with pytest.raises(ValidationError):
+            _AnnotateHostArgs.model_validate(_annotate_host_base(victim_url))
+
+    def test_hostname_fields_lowercase_input(self, victim_url: str) -> None:
+        """Hostname validator lowercases - the schema returns the normalised form."""
+        host = (urlparse(victim_url).hostname or "").upper()
+        validated = _AnnotateHostArgs.model_validate(_annotate_host_base(host))
+        assert validated.hostname == host.lower()

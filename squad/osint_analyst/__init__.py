@@ -9,6 +9,7 @@ from models import (
     Endpoint,
     EndpointPage,
     HostInsight,
+    Hostname,
     HostPriority,
     HostRole,
     LlmEndpoint,
@@ -204,18 +205,21 @@ class _ReconOpenPortsArgs(BaseModel):
         default="sweep.json",
         description="Relative path to the OA's sweep file. Defaults to ``sweep.json``.",
     )
-    host: str | None = Field(
+    host: Hostname | None = Field(
         default=None,
         description=(
             "Exact hostname to restrict the result to (no wildcards, no"
-            " substring). Omit or pass null to get the full per-host port"
-            " map. Use to look up a single host before annotating."
+            " substring). Validated as an RFC 1123 hostname - URLs / ports"
+            " / paths reject upstream. Omit or pass null to get the full"
+            " per-host port map."
         ),
     )
 
 
 @cyber_tool("Recon Open Ports", args_schema=_ReconOpenPortsArgs)
-def recon_open_ports_tool(sweep_path: str = "sweep.json", host: str | None = None) -> OpenPortsMap:
+def recon_open_ports_tool(
+    sweep_path: str = "sweep.json", host: Hostname | None = None
+) -> OpenPortsMap:
     """
     Return the open-port map per host from the sweep. Passing a ``host``
     restricts the result to that single host. Use to surface non-HTTP
@@ -228,11 +232,11 @@ def recon_open_ports_tool(sweep_path: str = "sweep.json", host: str | None = Non
 class _CertTransparencyArgs(BaseModel):
     """Explicit args_schema for the Certificate Transparency Lookup tool (#148)."""
 
-    domain: str = Field(
+    domain: Hostname = Field(
         description=(
             "Apex domain to look up in crt.sh certificate transparency logs"
-            " (e.g. 'example.com'). Returns historical subdomains across all"
-            " certificates issued for the domain. Pass an apex, not a"
+            " (e.g. 'example.com'). Validated as an RFC 1123 hostname"
+            " (URLs / ports / paths reject upstream). Pass an apex, not a"
             " subdomain - crt.sh returns the broader set when queried on"
             " the apex."
         ),
@@ -240,7 +244,7 @@ class _CertTransparencyArgs(BaseModel):
 
 
 @cyber_tool("Certificate Transparency Lookup", args_schema=_CertTransparencyArgs)
-def cert_transparency_tool(domain: str) -> list[str]:
+def cert_transparency_tool(domain: Hostname) -> list[str]:
     """
     Query crt.sh certificate transparency logs to discover subdomains not
     found by active enumeration. Returns deduplicated hostnames. Feed
@@ -252,18 +256,19 @@ def cert_transparency_tool(domain: str) -> list[str]:
 class _HistoricalUrlsArgs(BaseModel):
     """Explicit args_schema for the Historical URL Discovery tool (#148)."""
 
-    domain: str = Field(
+    domain: Hostname = Field(
         description=(
-            "Domain to query waybackurls for (apex or subdomain). Returns"
-            " historical URLs the Wayback Machine has archived. Many paths"
-            " will be 404s today; feed candidates to Probe Hostnames to"
-            " confirm liveness before annotating."
+            "Domain to query waybackurls for (apex or subdomain). Validated"
+            " as an RFC 1123 hostname (URLs / ports / paths reject"
+            " upstream). Returns historical URLs the Wayback Machine has"
+            " archived. Many paths will be 404s today; feed candidates to"
+            " Probe Hostnames to confirm liveness before annotating."
         ),
     )
 
 
 @cyber_tool("Historical URL Discovery", args_schema=_HistoricalUrlsArgs)
-def historical_urls_tool(domain: str) -> list[str]:
+def historical_urls_tool(domain: Hostname) -> list[str]:
     """
     Use waybackurls to find historical endpoints for a domain from the
     Wayback Machine. Surfaces paths that may no longer be linked but still
@@ -305,15 +310,17 @@ def llm_detection_tool(endpoints: list[Endpoint]) -> list[LlmEndpoint]:
 class _ProbeHostnamesArgs(BaseModel):
     """Explicit args_schema for the Probe Hostnames tool (#148)."""
 
-    hostnames: list[str] = Field(
+    hostnames: list[Hostname] = Field(
         description=(
             "Hostnames to re-probe with httpx for liveness, status code,"
-            " and technology fingerprinting. Typically the net-new ones"
-            " surfaced by Certificate Transparency or Historical URL"
-            " Discovery that were missed by the initial sweep. Each"
-            " hostname is scope-filtered against the programme before"
-            " any HTTP traffic fires - out-of-scope hostnames are"
-            " dropped silently."
+            " and technology fingerprinting. Each entry is validated as an"
+            " RFC 1123 hostname; URLs / ports / paths reject upstream"
+            " (catches the common 'agent handed us a URL when we asked for"
+            " a hostname' case before the scope filter silently drops it)."
+            " Typically the net-new ones surfaced by Certificate"
+            " Transparency or Historical URL Discovery that were missed by"
+            " the initial sweep. After this, each hostname is scope-"
+            "filtered against the programme before any HTTP traffic fires."
         ),
     )
     programme_handle: str = Field(
@@ -327,7 +334,7 @@ class _ProbeHostnamesArgs(BaseModel):
 
 
 @cyber_tool("Probe Hostnames", args_schema=_ProbeHostnamesArgs)
-def probe_hostnames_tool(hostnames: list[str], programme_handle: str) -> list[Endpoint]:
+def probe_hostnames_tool(hostnames: list[Hostname], programme_handle: str) -> list[Endpoint]:
     """
     Re-probe a list of hostnames with httpx to confirm liveness, capture
     status codes, and fingerprint technologies. Use this on hostnames
@@ -352,13 +359,15 @@ def probe_hostnames_tool(hostnames: list[str], programme_handle: str) -> list[En
 class _DetectTakeoverCandidatesArgs(BaseModel):
     """Explicit args_schema for the Detect Takeover Candidates tool (#148)."""
 
-    hostnames: list[str] = Field(
+    hostnames: list[Hostname] = Field(
         description=(
             "Hostnames to resolve via dnsx and flag for subdomain takeover."
-            " A candidate fires when the CNAME points to a known-vulnerable"
-            " provider (AWS S3, Heroku, GitHub Pages, Azure, Vercel,"
-            " Netlify, ...) or when the CNAME chain dangles. Hostnames are"
-            " scope-filtered before any DNS traffic fires."
+            " Each entry is validated as an RFC 1123 hostname; URLs / ports"
+            " / paths reject upstream. A candidate fires when the CNAME"
+            " points to a known-vulnerable provider (AWS S3, Heroku,"
+            " GitHub Pages, Azure, Vercel, Netlify, ...) or when the CNAME"
+            " chain dangles. Hostnames are scope-filtered before any DNS"
+            " traffic fires."
         ),
     )
     programme_handle: str = Field(
@@ -372,7 +381,7 @@ class _DetectTakeoverCandidatesArgs(BaseModel):
 
 @cyber_tool("Detect Takeover Candidates", args_schema=_DetectTakeoverCandidatesArgs)
 def detect_takeover_candidates_tool(
-    hostnames: list[str], programme_handle: str
+    hostnames: list[Hostname], programme_handle: str
 ) -> list[TakeoverCandidate]:
     """
     Resolve each hostname via dnsx and flag subdomain-takeover candidates.
@@ -452,11 +461,12 @@ def lookup_owasp_tool(query: str) -> list[OWASPEntry]:
 class _AnnotateHostArgs(BaseModel):
     """Explicit args_schema for the Annotate Host tool (#148)."""
 
-    hostname: str = Field(
+    hostname: Hostname = Field(
         description=(
             "Hostname to annotate. Must already be in the sweep, or have"
             " been surfaced by Certificate Transparency / Historical URL"
-            " Discovery / Probe Hostnames. Lowercased before save."
+            " Discovery / Probe Hostnames. Validated as an RFC 1123"
+            " hostname (URLs / ports / paths reject upstream)."
         ),
     )
     role: HostRole = Field(
@@ -509,7 +519,7 @@ class _AnnotateHostArgs(BaseModel):
 
 @cyber_tool("Annotate Host", args_schema=_AnnotateHostArgs)
 def annotate_host_tool(
-    hostname: str,
+    hostname: Hostname,
     role: HostRole,
     priority: HostPriority,
     notes: str,

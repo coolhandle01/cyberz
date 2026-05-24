@@ -5,10 +5,11 @@ tests/test_models.py - unit tests for models.py
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from models import (
     Endpoint,
+    Hostname,
     RawFinding,
     ReconResult,
     Severity,
@@ -88,6 +89,72 @@ class TestEndpoint:
         assert ep.status_code is None
         assert ep.technologies == []
         assert ep.parameters == []
+
+
+# Hostname is exercised through a throwaway pydantic model so the validator
+# fires the same way it does when carried on a real schema field. Stick to
+# pytest.raises(ValidationError) rather than the lower-level ValueError so
+# the test mirrors what schema callers will see.
+class _HostnameProbe(BaseModel):
+    """Thin probe model used to drive the Hostname validator in isolation."""
+
+    value: Hostname
+
+
+class TestHostname:
+    def test_accepts_apex(self):
+        assert _HostnameProbe(value="example.com").value == "example.com"
+
+    def test_accepts_subdomain_from_victim_fixture(self, victim_url):
+        # urlparse hostname is the canonical way to derive a Hostname-shaped
+        # string from a URL fixture; using the fixture keeps test intent
+        # ("the in-scope target") readable at the call site.
+        from urllib.parse import urlparse
+
+        host = urlparse(victim_url).hostname or ""
+        assert _HostnameProbe(value=host).value == host
+
+    def test_accepts_single_label(self):
+        assert _HostnameProbe(value="localhost").value == "localhost"
+
+    def test_accepts_numeric_labels(self):
+        # 10.0.0.1 looks IP-shaped but parses as a valid hostname per RFC 1123
+        # label rules (digits are allowed). The scope filter is the next layer
+        # that decides whether to accept it as an in-scope target.
+        assert _HostnameProbe(value="10.0.0.1").value == "10.0.0.1"
+
+    def test_lowercases(self):
+        assert _HostnameProbe(value="API.Example.COM").value == "api.example.com"
+
+    def test_strips_whitespace(self):
+        assert _HostnameProbe(value="  api.example.com  ").value == "api.example.com"
+
+    @pytest.mark.parametrize(
+        "garbage",
+        [
+            "",
+            "   ",
+            "https://example.com",  # scheme
+            "ftp://example.com",  # scheme
+            "example.com:8080",  # port
+            "example.com/path",  # path
+            "example.com/",  # trailing slash
+            "-example.com",  # leading hyphen
+            "example.com-",  # trailing hyphen on label
+            "exa..mple.com",  # empty label
+            "a" * 64 + ".com",  # label > 63 chars
+            ".".join(["a"] * 200),  # total > 253 chars
+            "exa mple.com",  # space in label
+            "example.com\nextra",  # newline injection
+        ],
+    )
+    def test_rejects_malformed(self, garbage):
+        with pytest.raises(ValidationError):
+            _HostnameProbe(value=garbage)
+
+    def test_rejects_non_string(self):
+        with pytest.raises(ValidationError):
+            _HostnameProbe.model_validate({"value": 42})
 
 
 class TestReconResult:
