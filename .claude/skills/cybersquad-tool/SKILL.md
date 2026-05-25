@@ -36,12 +36,12 @@ Why this matters: every tool's contract is what the LLM reads when picking the t
 
 Rules:
 
-- Class name is underscore-prefixed `_<ToolName>Args`. The per-agent contract tests (`tests/test_pt_args_schemas.py`, `tests/test_osint_args_schemas.py`, `tests/test_pm_args_schemas.py`, `tests/test_dc_args_schemas.py`, and the parallel `_<AGENT>_SCHEMAS` mappings #150 will add for VR / TA) discover schemas via this prefix.
+- Class name is underscore-prefixed `_<ToolName>Args`. Each agent has a contract test under `tests/squad/<agent>/test_args_schemas.py` that walks `MEMBER.tools`, asserts every typed-tool schema is the expected explicit class, and enforces a closed-world `_<AGENT>_SCHEMAS` mapping. New typed tools are discovered via the private-prefix class name; a missing mapping entry fires the test before reviewers see the PR.
 - Every field carries a `Field(description=...)` phrased as agent-facing targeting guidance ("fire when open_ports shows X", "prioritise endpoints where Y"), not type information the schema already encodes.
 - Field types mirror the wrapper signature exactly. StrEnum filters stay typed (`list[<StrEnum>] | None`), never `list[str]`. Hostname-shaped fields use the `Hostname` typed-string from `models.primitives`, never bare `str` (see "Typed string primitives" below).
 - Schema lives inline in the same module as the wrapper, directly above the decorator. Do not import from a separate file.
 
-`@pentest_tool` composes on top of `@cyber_tool`: pentest probes still use `@pentest_tool` so the OWASP injection layer runs, and the `args_schema=` argument flows through. `@research_brief_tool` will compose the same way once #150 lands.
+Specialist wrappers compose on top of `@cyber_tool`: `@pentest_tool` (pentest probes - layers OWASP categories from `check_fn.owasp_categories` into the docstring) and `@research_brief_tool` (Vulnerability Researcher - layers `PROBE_VOCABULARY` and `RECON_EVIDENCE_KINDS`) both call `cyber_tool` underneath and pass `args_schema=` through.
 
 ## Typed string primitives
 
@@ -98,7 +98,7 @@ def ssrf_probe_tool(
 def ssrf_probe_tool(endpoints: list[Endpoint], payloads: list[str] | None = None) -> ...:
 ```
 
-The legacy `endpoints_json: str` pattern was retired in #139 once CrewAI's args-schema validation grew up enough to accept `list[<Model>]` directly; the last surviving instance (OSINT's `llm_detection_tool`) was migrated in #148. Today the LLM-side wire format is still JSON, but `args_schema.model_validate(kwargs).model_dump()` happens inside CrewAI before the function is called, so the wrapper just receives `list[dict]` and re-validates via `_parse_endpoints`. The agent sees a typed Endpoint schema instead of "pass a JSON string" - never reintroduce the JSON-string parameter for structured data.
+The legacy `endpoints_json: str` parameter pattern is retired: pass the typed `list[<Model>]` directly. The LLM-side wire format is still JSON, but `args_schema.model_validate(kwargs).model_dump()` happens inside CrewAI before the function is called, so the wrapper receives `list[dict]` and re-validates via `_parse_endpoints` (the both-shapes adapter that accepts either a model instance or a dict). The agent sees a typed Endpoint schema instead of "pass a JSON string" - never reintroduce the JSON-string parameter for structured data.
 
 ## Workspace artifacts: writer and reader ship together
 
@@ -110,7 +110,7 @@ Any file an agent writes for the next agent to read needs both halves of the con
 | `finalise_research(plan)` -> `attack_plan.json` | `read_attack_plan_tool` -> `AttackPlan` |
 | `finalise_triage(...)` -> `verified.json` | (Technical Author's typed reader) |
 
-The reader returns the typed model; downstream agents work against the schema, not raw bytes. A writer landing without a typed reader is the gap PR #138 addresses - do not repeat it.
+The reader returns the typed model; downstream agents work against the schema, not raw bytes. Never land a writer without the matching typed reader.
 
 ## Where tools live
 
@@ -136,14 +136,14 @@ Dependency layers flow `primitives -> finding -> h1 -> asset`; modules import on
 
 ## The `SquadMember.tools` registry
 
-`SquadMember.tools` is typed `list[CrewAITool]` (the `CrewAITool` Protocol in `squad/__init__.py`). The local `_PentestTool` / `_ResearchBriefTool` Protocols inherit from it, so the registry is properly typed end-to-end. The contract test in `tests/test_squad_tool_contracts.py` walks every `MEMBER.tools` entry and asserts return-type annotations - skill stays in AI context, test stays in CI.
+`SquadMember.tools` is typed `list[CrewAITool]` (the `CrewAITool` Protocol in `squad/__init__.py`). The local `_PentestTool` / `_ResearchBriefTool` Protocols inherit from it, so the registry is properly typed end-to-end. The cross-agent contract test walks every `MEMBER.tools` entry and asserts return-type annotations - skill stays in AI context, test stays in CI.
 
 ## Anti-patterns to catch
 
 - `[f.model_dump() for f in check_X(...)]` in any wrapper body - drop the comprehension, just `return list(check_X(...))`.
 - Return annotation of `dict` for a structured payload that has a pydantic shape already.
 - Bare `list` (no inner type) as a return annotation - either it is `list[str]` for a flat handle list, or it is `list[<Model>]` for structured rows.
-- `@tool("...")` from `crewai.tools` for a new wrapper. Use `@cyber_tool` (or `@pentest_tool` for probes) so `args_schema` is enforced. Bare `@tool` survives only on workspace wrappers still on the #150 backlog.
+- `@tool("...")` from `crewai.tools` for a new wrapper. Use `@cyber_tool` (or the appropriate specialist wrapper for probes / research briefs) so `args_schema` is enforced.
 - An `args_schema` class with a field that lacks `Field(description=...)`. The whole point of the explicit path is per-field guidance; an empty description is the same gap the inferred path had.
 - A field typed `str` whose value is a hostname (`hostname: str`, `host: str`, `domain: str`) or a URL (`url: str`, `endpoint: str`). Use `Hostname` / `HttpUrl` from `models.primitives` - the typed primitives reject mis-shaped values upstream.
 - A `dict[str, ...]` whose keys are hostnames - type the key as `dict[Hostname, ...]` so the validator fires on the keys too.
@@ -153,10 +153,10 @@ Dependency layers flow `primitives -> finding -> h1 -> asset`; modules import on
 
 ## Canonical examples
 
-Cross-agent intent matters: this skill applies to every agent's `@cyber_tool` / `@pentest_tool` wrappers, not just the pentester's. The codebase is mid-migration (#139 typed returns, #143 / #146 / #147 / #148 / #149 explicit args_schemas) - PT, OSINT, PM, and DC are fully migrated; VR and TA are on the #150 backlog.
+These rules apply to every agent's `@cyber_tool` / `@pentest_tool` / `@research_brief_tool` wrappers, not just the pentester's.
 
-- `squad/penetration_tester/__init__.py` and `squad/osint_analyst/__init__.py` are the migration's tip. Every `@cyber_tool` and `@pentest_tool` carries an explicit `_<ToolName>Args` schema directly above the wrapper, with `Field(description=...)` on every field. Pentest probes (`ssrf_probe_tool`, `idor_probe_tool`) are the shortest StrEnum examples; cloud / infra wrappers (`s3_check_tool`, `mongodb_tool`) show the bare `recon_path: str`; OSINT (`probe_hostnames_tool`, `annotate_host_tool`) show the `Hostname` composition.
-- `squad/penetration_tester/__init__.py` `recon_endpoints_tool` returns `EndpointPage` - the canonical typed-return example. The wrapper lives on PT but it reads OSINT's recon output, so the pattern is cross-agent.
+- `squad/penetration_tester/__init__.py` and `squad/osint_analyst/__init__.py` are the largest reference surfaces. Each wrapper carries an explicit `_<ToolName>Args` schema directly above the decorator with `Field(description=...)` on every field. Pentest probes (`ssrf_probe_tool`, `idor_probe_tool`) are the shortest StrEnum examples; cloud / infra wrappers (`s3_check_tool`, `mongodb_tool`) show the bare `recon_path: str`; OSINT (`probe_hostnames_tool`, `annotate_host_tool`) show `Hostname` composition.
+- `squad/penetration_tester/__init__.py` `recon_endpoints_tool` returns `EndpointPage` - the canonical typed-return example. The wrapper lives on PT but reads OSINT's recon output, so the pattern is cross-agent.
 - `squad/workspace_tools.py` `read_attack_plan_tool` returns `AttackPlan` - mirror this shape on any new workspace reader (typed return, no `dict`).
 - The workspace-handle string family demonstrates the `str` exception (writer returns the filename, next agent passes it to a typed reader):
   - `Finalise Recon` (`squad/osint_analyst/__init__.py`) -> `"recon.json"`
@@ -174,7 +174,7 @@ This skill *deliberately diverges* from upstream in two places. Being honest abo
 
 Upstream's architectural take is that structured data belongs on the *task* (`output_pydantic` / `output_json`), and tools just return text-fodder for the LLM's reasoning. We put pydantic on tools because:
 
-- The #139 contract test needs introspectable return annotations to enforce the rule.
+- The cross-agent contract test that walks every `MEMBER.tools` entry needs introspectable return annotations to enforce the rule.
 - Tests call `tool.func(...)` directly and want a typed return.
 - `mypy` verifies cross-tool wiring (e.g. that `read_attack_plan_tool` actually returns what `Finalise Research` wrote).
 - Probe tools return small, structured `RawFinding` lists - flattening them to text loses the structure agents reason over.

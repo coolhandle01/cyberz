@@ -12,7 +12,7 @@ from tools.h1_api import h1
 
 
 class _BrowseProgrammesArgs(BaseModel):
-    """Explicit args_schema for the Browse HackerOne Programmes tool (#149)."""
+    """Explicit args_schema for the Browse HackerOne Programmes tool."""
 
     asset_type: ScopeType | None = Field(
         default=None,
@@ -130,7 +130,7 @@ def browse_programmes_tool(
 
 
 class _HydrateProgrammeArgs(BaseModel):
-    """Explicit args_schema for the Hydrate HackerOne Programme tool (#149)."""
+    """Explicit args_schema for the Hydrate HackerOne Programme tool."""
 
     handle: str = Field(
         description=(
@@ -163,7 +163,7 @@ def hydrate_programme_tool(handle: str) -> Programme:
 
 
 class _SaveProgrammeArgs(BaseModel):
-    """Explicit args_schema for the Save Selected Programme tool (#149)."""
+    """Explicit args_schema for the Save Selected Programme tool."""
 
     handle: str = Field(
         description=(

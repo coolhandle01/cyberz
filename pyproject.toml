@@ -50,10 +50,19 @@ py-modules = ["config", "models", "tasks", "crew", "main", "runtime"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# importlib import mode lets test files share basenames across subdirs
+# (tests/squad/programme_manager/test_tools.py and tests/squad/
+# disclosure_coordinator/test_tools.py) without forcing an __init__.py
+# in every subdir. The default "prepend" mode collides on duplicate
+# basenames; "importlib" is the modern pytest recommendation for
+# nested test layouts. pythonpath is required because importlib mode
+# does not implicitly prepend the rootdir to sys.path.
+pythonpath = ["."]
 addopts = [
     "--strict-markers",
     "--tb=short",
     "-q",
+    "--import-mode=importlib",
 ]
 markers = [
     "unit: fast, no I/O, no external calls",

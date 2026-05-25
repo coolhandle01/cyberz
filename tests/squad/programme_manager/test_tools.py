@@ -1,10 +1,11 @@
 """
-tests/test_squad_programme_manager.py - exercise the @tool wrappers on the
-Programme Manager.
+Behavioural tests for the Programme Manager's @tool wrappers.
 
-The wrappers are thin: unmarshal JSON, call into tools/* helpers, serialise
-the result. Coverage here is regression coverage of the wrapping itself; the
-underlying helpers are exercised in their own dedicated test files.
+The wrappers are thin: deserialise inputs, call into tools/* helpers,
+return the result. Coverage here is regression coverage of the
+wrapping itself; the underlying helpers are exercised in their own
+dedicated test files. The args_schema contract for the same tools
+lives in the sibling ``test_args_schemas.py``.
 """
 
 from __future__ import annotations

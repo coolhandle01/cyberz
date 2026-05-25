@@ -13,7 +13,7 @@ from tools.report_tools import save_report
 
 
 class _SubmitReportArgs(BaseModel):
-    """Explicit args_schema for the Submit Report tool (#149).
+    """Explicit args_schema for the Submit Report tool.
 
     IRREVERSIBLE: a successful call publishes a report to hackerone.com.
     Once filed the report is visible to the programme's triage team and
@@ -57,7 +57,7 @@ def submit_report_tool(report: DisclosureReport) -> SubmissionResult:
 
 
 class _CheckDuplicateArgs(BaseModel):
-    """Explicit args_schema for the Check H1 Duplicate tool (#149)."""
+    """Explicit args_schema for the Check H1 Duplicate tool."""
 
     programme_handle: str = Field(
         description=(

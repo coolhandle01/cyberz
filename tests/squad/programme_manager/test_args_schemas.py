@@ -1,10 +1,7 @@
 """
-tests/test_pm_args_schemas.py - contract tests for the explicit Pydantic
-``args_schema`` every Programme Manager ``@cyber_tool`` wrapper carries.
-
-Sibling of ``test_pt_args_schemas.py`` and ``test_osint_args_schemas.py``:
-same shape of structural and accept/reject checks, scoped to the
-Programme Manager's tool surface. Closes #149 for PM.
+Contract tests for the Programme Manager's explicit Pydantic
+``args_schema`` classes - one of the per-agent test pairs (sibling
+under ``tests/squad/<agent>/test_args_schemas.py``).
 
 The PM's tools are the highest-stakes targeting surface in the squad: a
 mis-call picks the wrong programme, and downstream every probe runs
@@ -13,8 +10,8 @@ most-mis-called field type in the codebase, so the per-field
 descriptions enforced here are the primary signal the LLM reads.
 
 The wrappers do not call the H1 API at validation time - the existing
-H1 behavioural tests in test_squad_programme_manager.py keep their
-mocking; this file only exercises the schema contract.
+H1 behavioural tests in ``test_tools.py`` keep their mocking; this
+file only exercises the schema contract.
 """
 
 from __future__ import annotations
@@ -62,7 +59,7 @@ class TestPmArgsSchemaContracts:
         ids=sorted(_PM_SCHEMAS),
     )
     def test_every_field_has_description(self, tool_name: str, schema_cls: type[BaseModel]) -> None:
-        """Per #149: every field on every PM typed-tool schema carries a description."""
+        """Every field on every PM typed-tool schema carries a description."""
         for field_name, field_info in schema_cls.model_fields.items():
             desc = field_info.description
             assert desc, f"{tool_name}::{field_name} missing Field(description=...)"
@@ -131,14 +128,14 @@ class TestSchemaAcceptReject:
         assert isinstance(instance, schema_cls)
 
     def test_browse_rejects_unknown_asset_type(self) -> None:
-        """Per #149 review: ``asset_type`` is a StrEnum; H1's documented
-        types are the only acceptable values."""
+        """``asset_type`` is a StrEnum; H1's documented types are the only
+        acceptable values."""
         with pytest.raises(ValidationError):
             _BrowseProgrammesArgs.model_validate({"asset_type": "not-a-real-type"})
 
     def test_browse_rejects_unknown_submission_state(self) -> None:
-        """Per #149 review: ``submission_state`` is a StrEnum scoped to
-        the documented H1 filter values (open / disabled / paused)."""
+        """``submission_state`` is a StrEnum scoped to the documented H1
+        filter values (open / disabled / paused)."""
         with pytest.raises(ValidationError):
             _BrowseProgrammesArgs.model_validate({"submission_state": "closed"})
 

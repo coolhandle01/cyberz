@@ -1,25 +1,22 @@
 """
-tests/test_dc_args_schemas.py - contract tests for the explicit Pydantic
-``args_schema`` every Disclosure Coordinator ``@cyber_tool`` wrapper
-carries.
-
-Sibling of ``test_pt_args_schemas.py``, ``test_osint_args_schemas.py``,
-and ``test_pm_args_schemas.py``: same shape of structural and
-accept/reject checks, scoped to the DC's tool surface. Closes #149 for DC.
+Contract tests for the Disclosure Coordinator's explicit Pydantic
+``args_schema`` classes - one of the per-agent test pairs (sibling
+under ``tests/squad/<agent>/test_args_schemas.py``).
 
 The DC is the only agent whose tools have an irreversible public
 side-effect - ``Submit Report`` files a report on hackerone.com that the
 programme's triage team sees and the operator cannot silently retract.
 The per-field description for ``report`` names the consequence; the
-contract test ensures the description is present and non-empty.
+contract test ensures the description is present and that the
+irreversibility wording survives any future rewording.
 
 The two workspace tools on the DC (``List Run Files``, ``Read Run
-File``) intentionally keep the signature-inferred schema and are out of
-scope here - #150 covers them.
+File``) intentionally keep the signature-inferred schema and are out
+of scope here.
 
 The wrappers do not call the H1 API at validation time - the existing
-H1 behavioural tests in test_squad_disclosure_coordinator.py keep their
-mocking; this file only exercises the schema contract.
+H1 behavioural tests in ``test_tools.py`` keep their mocking; this
+file only exercises the schema contract.
 """
 
 from __future__ import annotations
@@ -38,7 +35,7 @@ pytestmark = pytest.mark.unit
 
 # Tool-name -> explicit schema class. Covers every DC @cyber_tool wrapper.
 # The two workspace readers (``List Run Files``, ``Read Run File``) on
-# the DC keep the inferred schema and are out of scope - #150 owns them.
+# the DC keep the signature-inferred schema and are out of scope.
 _DC_SCHEMAS: dict[str, type[BaseModel]] = {
     "Submit Report": _SubmitReportArgs,
     "Check H1 Duplicate": _CheckDuplicateArgs,
@@ -66,7 +63,7 @@ class TestDcArgsSchemaContracts:
         ids=sorted(_DC_SCHEMAS),
     )
     def test_every_field_has_description(self, tool_name: str, schema_cls: type[BaseModel]) -> None:
-        """Per #149: every field on every DC typed-tool schema carries a description."""
+        """Every field on every DC typed-tool schema carries a description."""
         for field_name, field_info in schema_cls.model_fields.items():
             desc = field_info.description
             assert desc, f"{tool_name}::{field_name} missing Field(description=...)"
@@ -96,8 +93,8 @@ class TestDcArgsSchemaContracts:
         )
 
     def test_submit_report_description_names_irreversibility(self) -> None:
-        """Per the #149 acceptance criterion: the irreversible operation's
-        field description must name the consequence of a mis-call.
+        """The irreversible operation's field description must name the
+        consequence of a mis-call.
 
         The agent reading ``Submit Report``'s schema needs to know that a
         wrong ``programme_handle`` inside the payload publishes a report
