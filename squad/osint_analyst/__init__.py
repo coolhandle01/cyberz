@@ -6,9 +6,11 @@ cohesive responsibility:
 - ``discovery`` - sweep + slicers + passive expansion (cert
   transparency, historical URLs, LLM endpoint detection) + active
   hostname probes + takeover detection. The "what is the surface"
-  half. Imports the shared ``load_programme`` from
-  ``squad.workspace_tools`` (was a per-agent ``_helpers.py`` before
-  the dedupe).
+  half. The two active-probe wrappers (``Probe Hostnames``, ``Detect
+  Takeover Candidates``) use ``@cyber_tool(scope_filter=...)`` so the
+  programme scope guard runs in the wrapper rather than inline in the
+  body; the shared ``current_programme`` reader lives in
+  ``squad.workspace_tools``.
 - ``curation`` - lookup (CWE / OWASP) + ``Annotate Host`` +
   ``Uncovered Hosts`` + ``Finalise Recon``. The "what do we record
   about the surface" half.

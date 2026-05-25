@@ -4,45 +4,44 @@ Two halves:
 
 - ``@cyber_tool`` wrappers around the workspace artefact IO (``List
   Run Files``, ``Read Run File``, ``Read Attack Plan``).
-- ``load_programme(programme_handle)`` - the shared programme-loader
-  helper used by every agent that needs a parsed ``Programme`` to
-  reason against (OSINT's curation + active-probe tools, VR triage).
-  Lives here because it is the workspace's other authoritative
-  context: the run directory tells us what we wrote, and this loader
-  tells us who we wrote it about.
+- ``current_programme()`` - the shared programme-loader used by every
+  agent (and by ``@cyber_tool(scope_filter=...)``) that needs the
+  parsed ``Programme`` to reason against. Reads from
+  ``<run_dir>/programme.json`` - the snapshot the Programme Manager's
+  ``Save Selected Programme`` tool writes at the top of every run.
+  No H1 API call: the workspace is the authoritative source once a
+  programme has been selected.
 """
 
 from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+import runtime
 from models import RunFile, RunFileContent
 from models.attack import AttackPlan
 from models.h1 import Programme
 from squad import cyber_tool
-from tools import http, workspace
-from tools.h1_api import h1
+from tools import workspace
 from tools.research_tools import attack_plan_path, load_attack_plan
 
 
-def load_programme(programme_handle: str | None) -> Programme:
-    """Fetch and parse the Programme for the current run.
+def current_programme() -> Programme:
+    """Return the Programme selected for the current run.
 
-    Centralised here (rather than duplicated as a private helper in
-    each agent's package) because the programme is workspace-level
-    state - every agent that needs to scope-check against the
-    selected programme calls this. ``programme_handle`` is required:
-    a None / empty handle is a hard error rather than a silent fall-
-    through to the run directory's metadata, because the scope guard
-    needs the parsed ``Programme`` model and the H1 API is the
-    authoritative source for it.
+    Reads ``<run_dir>/programme.json`` - written by the Programme
+    Manager's ``Save Selected Programme`` tool at run start
+    (``squad/programme_manager/__init__.py``). Every downstream agent
+    and every ``@cyber_tool(scope_filter=...)`` wrapper sources its
+    Programme through this function rather than hitting the H1 API
+    again: the workspace snapshot is the contract.
+
+    Raises ``FileNotFoundError`` if the file is missing - that means
+    the PM has not run yet, and any caller reaching this code path is
+    out of pipeline order.
     """
-    if not programme_handle:
-        raise ValueError("programme_handle is required")
-    http.set_programme(programme_handle)
-    policy = h1.get_programme_policy(programme_handle)
-    scope = h1.get_structured_scope(programme_handle)
-    return h1.parse_programme(policy["data"], scope)
+    path = runtime.run_dir() / "programme.json"
+    return Programme.model_validate_json(path.read_text(encoding="utf-8"))
 
 
 class _ListRunFilesArgs(BaseModel):

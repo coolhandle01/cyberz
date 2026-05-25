@@ -26,6 +26,8 @@ Assembly (LLM wiring, pipeline order, approval gates) lives in crew.py / tasks.p
 
 from __future__ import annotations
 
+import functools
+import inspect
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -74,8 +76,14 @@ class SquadTool(Protocol):
     def func(self) -> Callable[..., object]: ...
 
 
+ScopeFilter = tuple[str, Callable[..., object]]
+
+
 def cyber_tool(
-    name: str, *, args_schema: type[BaseModel]
+    name: str,
+    *,
+    args_schema: type[BaseModel],
+    scope_filter: ScopeFilter | None = None,
 ) -> Callable[[Callable[..., object]], SquadTool]:
     """The blessed cybersquad replacement for bare ``@crewai.tools.tool``.
 
@@ -91,14 +99,61 @@ def cyber_tool(
     docstring-injection (OWASP categories for the pentest wrapper, brief
     formatting for the research one). Anything that does not need a
     specialist wrapper uses ``@cyber_tool`` directly.
+
+    ``scope_filter=(field_name, filter_fn)`` lifts the in-line scope
+    guard out of every "agent picked a target, run something external
+    against it" tool body. When set, the wrapper validates args via
+    ``args_schema`` (CrewAI's path), then - if the named field is non-
+    empty - calls ``filter_fn(values, current_programme())`` and
+    replaces the field's value with the filtered list before invoking
+    the body. The ``Programme`` is sourced from
+    ``squad.workspace_tools.current_programme()`` (which reads
+    ``<run_dir>/programme.json``), so the wrapper carries the
+    workspace-state lookup and the body just runs the tool. Bodies
+    must still handle an empty filtered list - the wrapper does not
+    short-circuit on empty.
     """
 
     def decorator(fn: Callable[..., object]) -> SquadTool:
-        wrapped = tool(name)(fn)
+        target = _apply_scope_filter(fn, scope_filter) if scope_filter else fn
+        wrapped = tool(name)(target)
         wrapped.args_schema = args_schema
         return cast(SquadTool, wrapped)
 
     return decorator
+
+
+def _apply_scope_filter(
+    fn: Callable[..., object], scope_filter: ScopeFilter
+) -> Callable[..., object]:
+    """Wrap ``fn`` so the named field is run through ``filter_fn`` first.
+
+    Kept out of ``cyber_tool``'s body so the decorator's closure is small
+    and the wrapping is testable on its own. The lookup of
+    ``current_programme`` is deferred to call time to avoid the
+    ``squad.workspace_tools`` -> ``squad`` import cycle that would fire
+    at decoration time otherwise.
+
+    ``inspect.signature.bind_partial`` resolves the named field whether
+    the caller passes it positionally or by keyword - CrewAI's runtime
+    path uses kwargs (built from ``args_schema``), but direct
+    ``tool.func(value)`` test invocations pass positionally and the
+    wrapper has to cover both shapes.
+    """
+    field_name, filter_fn = scope_filter
+    sig = inspect.signature(fn)
+
+    @functools.wraps(fn)
+    def guarded(*args: object, **kwargs: object) -> object:
+        bound = sig.bind_partial(*args, **kwargs)
+        values = bound.arguments.get(field_name)
+        if values:
+            from squad.workspace_tools import current_programme
+
+            bound.arguments[field_name] = filter_fn(values, current_programme())
+        return fn(*bound.args, **bound.kwargs)
+
+    return guarded
 
 
 # Shared workspace wrappers are imported after ``cyber_tool`` is defined,
