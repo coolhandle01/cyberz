@@ -21,7 +21,7 @@ from models import (
     ReconFinalisationError,
 )
 from squad import cyber_tool
-from squad.workspace_tools import load_programme as _load_programme
+from squad.workspace_tools import current_programme
 from tools.cwe_data import lookup as cwe_lookup
 from tools.owasp_data import lookup as owasp_lookup
 from tools.recon_insights import (
@@ -175,7 +175,11 @@ def annotate_host_tool(
     validation.ok is false.
     """
     sweep = load_sweep_impl(sweep_path)
-    programme = _load_programme(programme_handle)
+    # FIXME(#156): drop ``programme_handle`` from schema+signature - it
+    # duplicates ``runtime.programme_handle`` and is unused here now that
+    # the Programme is sourced from the workspace.
+    _ = programme_handle
+    programme = current_programme()
 
     insight = HostInsight(
         hostname=hostname.strip().lower(),
@@ -247,7 +251,11 @@ def finalise_recon_tool(
     errors, or if the surface is non-empty but no host has been marked
     HIGH priority. Returns the bare filename ``recon.json`` on success.
     """
-    programme = _load_programme(programme_handle)
+    # FIXME(#156): drop ``programme_handle`` from schema+signature - it
+    # duplicates ``runtime.programme_handle`` and is unused here now that
+    # the Programme is sourced from the workspace.
+    _ = programme_handle
+    programme = current_programme()
     try:
         path = finalise_recon(programme, sweep_filename=sweep_path)
     except ReconFinalisationError as exc:

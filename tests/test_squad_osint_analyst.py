@@ -40,14 +40,18 @@ class TestOsintAnalystTools:
 
     @staticmethod
     def _patch_programme(programme):
+        """Stub ``current_programme()`` at every site that imports it.
+
+        The wrapper-level ``scope_filter`` looks up
+        ``squad.workspace_tools.current_programme`` at call time (lazy
+        import in the decorator closure), so patching that name covers
+        the active-probe tools. The curation tools do a module-load
+        ``from squad.workspace_tools import current_programme``, so
+        their local alias has to be patched directly.
+        """
         return [
-            patch("squad.workspace_tools.http.set_programme"),
-            patch(
-                "squad.workspace_tools.h1.get_programme_policy",
-                return_value={"data": {}},
-            ),
-            patch("squad.workspace_tools.h1.get_structured_scope", return_value={}),
-            patch("squad.workspace_tools.h1.parse_programme", return_value=programme),
+            patch("squad.workspace_tools.current_programme", return_value=programme),
+            patch("squad.osint_analyst.curation.current_programme", return_value=programme),
         ]
 
     def test_annotate_host_tool_writes_insight_and_returns_validation(
@@ -177,13 +181,17 @@ class TestOsintAnalystTools:
                 p.stop()
 
     def test_probe_hostnames_tool(self, programme, endpoint) -> None:
+        """Happy path: in-scope hostname passes the wrapper's scope filter,
+        the body fires, the endpoint is returned.
+
+        Exercises the real ``filter_in_scope`` against the fixture
+        programme (in-scope: ``example.com`` + ``*.example.com``) -
+        ``api.example.com`` matches the wildcard, so the wrapper hands
+        the body the cleaned hostname.
+        """
         from squad.osint_analyst import probe_hostnames_tool
 
         patches = self._patch_programme(programme) + [
-            patch(
-                "squad.osint_analyst.discovery.filter_in_scope_impl",
-                return_value=["api.example.com"],
-            ),
             patch(
                 "squad.osint_analyst.discovery.probe_endpoints_impl",
                 return_value=[endpoint],
@@ -192,9 +200,7 @@ class TestOsintAnalystTools:
         for p in patches:
             p.start()
         try:
-            result = probe_hostnames_tool.func(
-                ["api.example.com"], programme_handle="test-programme"
-            )
+            result = probe_hostnames_tool.func(["api.example.com"])
         finally:
             for p in reversed(patches):
                 p.stop()
@@ -203,11 +209,21 @@ class TestOsintAnalystTools:
         assert result[0].url == endpoint.url
 
     def test_probe_hostnames_tool_empty_list(self) -> None:
+        """Empty input short-circuits in the body without touching the
+        workspace - no ``current_programme()`` lookup, no run dir read."""
         from squad.osint_analyst import probe_hostnames_tool
 
-        assert probe_hostnames_tool.func([], programme_handle="test-programme") == []
+        assert probe_hostnames_tool.func([]) == []
 
     def test_probe_hostnames_tool_drops_out_of_scope(self, programme, bystander_url) -> None:
+        """Out-of-scope hostnames are dropped by the wrapper before the body fires.
+
+        Asserts on the real scope-guard path: the fixture programme's
+        structured scope (``example.com`` + ``*.example.com``) does not
+        cover ``bystander.example.org``, so the wrapper's
+        ``scope_filter`` empties the list and ``probe_endpoints_impl``
+        is never called.
+        """
         from urllib.parse import urlparse
 
         from squad.osint_analyst import probe_hostnames_tool
@@ -215,16 +231,12 @@ class TestOsintAnalystTools:
         oos_host = urlparse(bystander_url).hostname
         mprobe = MagicMock()
         patches = self._patch_programme(programme) + [
-            patch(
-                "squad.osint_analyst.discovery.filter_in_scope_impl",
-                return_value=[],
-            ),
             patch("squad.osint_analyst.discovery.probe_endpoints_impl", mprobe),
         ]
         for p in patches:
             p.start()
         try:
-            result = probe_hostnames_tool.func([oos_host], programme_handle="test-programme")
+            result = probe_hostnames_tool.func([oos_host])
         finally:
             for p in reversed(patches):
                 p.stop()
@@ -244,10 +256,6 @@ class TestOsintAnalystTools:
         )
         patches = self._patch_programme(programme) + [
             patch(
-                "squad.osint_analyst.discovery.filter_in_scope_impl",
-                return_value=["legacy.example.com"],
-            ),
-            patch(
                 "squad.osint_analyst.discovery.detect_takeover_candidates",
                 return_value=[candidate],
             ),
@@ -255,9 +263,7 @@ class TestOsintAnalystTools:
         for p in patches:
             p.start()
         try:
-            result = detect_takeover_candidates_tool.func(
-                ["legacy.example.com"], programme_handle="test-programme"
-            )
+            result = detect_takeover_candidates_tool.func(["legacy.example.com"])
         finally:
             for p in reversed(patches):
                 p.stop()
@@ -268,11 +274,14 @@ class TestOsintAnalystTools:
     def test_detect_takeover_candidates_tool_empty(self) -> None:
         from squad.osint_analyst import detect_takeover_candidates_tool
 
-        assert detect_takeover_candidates_tool.func([], programme_handle="test-programme") == []
+        assert detect_takeover_candidates_tool.func([]) == []
 
     def test_detect_takeover_candidates_tool_drops_out_of_scope(
         self, programme, bystander_url
     ) -> None:
+        """Same scope-guard contract as ``test_probe_hostnames_tool_drops_out_of_scope``,
+        on the DNS side: the wrapper drops the out-of-scope hostname
+        before any DNS traffic fires."""
         from urllib.parse import urlparse
 
         from squad.osint_analyst import detect_takeover_candidates_tool
@@ -280,18 +289,12 @@ class TestOsintAnalystTools:
         oos_host = urlparse(bystander_url).hostname
         mdetect = MagicMock()
         patches = self._patch_programme(programme) + [
-            patch(
-                "squad.osint_analyst.discovery.filter_in_scope_impl",
-                return_value=[],
-            ),
             patch("squad.osint_analyst.discovery.detect_takeover_candidates", mdetect),
         ]
         for p in patches:
             p.start()
         try:
-            result = detect_takeover_candidates_tool.func(
-                [oos_host], programme_handle="test-programme"
-            )
+            result = detect_takeover_candidates_tool.func([oos_host])
         finally:
             for p in reversed(patches):
                 p.stop()

@@ -205,25 +205,23 @@ class TestSchemaAcceptReject:
         _HistoricalUrlsArgs.model_validate({"domain": apex})
 
     def test_probe_hostnames_accepts_victim_hostname(self, victim_url: str) -> None:
-        """Probe Hostnames takes a list of hostnames plus the programme handle."""
-        _ProbeHostnamesArgs.model_validate(
-            {
-                "hostnames": [urlparse(victim_url).hostname],
-                "programme_handle": "example",
-            }
-        )
+        """Probe Hostnames takes a list of hostnames - no programme handle.
+
+        The wrapper-level ``scope_filter`` sources the Programme from
+        the workspace (``current_programme()`` -> ``programme.json``),
+        so the schema does not require a per-call handle.
+        """
+        _ProbeHostnamesArgs.model_validate({"hostnames": [urlparse(victim_url).hostname]})
 
     def test_detect_takeover_candidates_accepts_bystander_hostname(
         self, bystander_url: str
     ) -> None:
         """Detect Takeover Candidates models the case where a CNAME dangles to a
         bystander - the ``bystander_url`` fixture is the conventional handle
-        for an out-of-scope target."""
+        for an out-of-scope target. The wrapper-level scope filter drops
+        the bystander before any DNS traffic fires."""
         _DetectTakeoverCandidatesArgs.model_validate(
-            {
-                "hostnames": [urlparse(bystander_url).hostname],
-                "programme_handle": "example",
-            }
+            {"hostnames": [urlparse(bystander_url).hostname]}
         )
 
     def test_annotate_host_accepts_victim_hostname(self, victim_url: str) -> None:
@@ -258,8 +256,8 @@ class TestSchemaAcceptReject:
             _CertTransparencyArgs,  # domain required
             _HistoricalUrlsArgs,  # domain required
             _LlmDetectionArgs,  # endpoints required
-            _ProbeHostnamesArgs,  # hostnames + programme_handle required
-            _DetectTakeoverCandidatesArgs,  # hostnames + programme_handle required
+            _ProbeHostnamesArgs,  # hostnames required (scope_filter sources Programme)
+            _DetectTakeoverCandidatesArgs,  # hostnames required (scope_filter sources Programme)
             _OsintLookupCweArgs,  # query required
             _OsintLookupOwaspArgs,  # query required
             _AnnotateHostArgs,  # hostname / role / priority / notes / programme_handle required
@@ -270,14 +268,6 @@ class TestSchemaAcceptReject:
         """At least one required field is missing: model_validate must fail."""
         with pytest.raises(ValidationError):
             schema_cls.model_validate({})
-
-    def test_probe_hostnames_requires_both_hostnames_and_handle(self, victim_url: str) -> None:
-        """Both hostnames and programme_handle are required - one alone fails."""
-        host = urlparse(victim_url).hostname
-        with pytest.raises(ValidationError):
-            _ProbeHostnamesArgs.model_validate({"hostnames": [host]})
-        with pytest.raises(ValidationError):
-            _ProbeHostnamesArgs.model_validate({"programme_handle": "example"})
 
     def test_annotate_host_requires_core_fields(self, victim_url: str) -> None:
         """hostname / role / priority / notes / programme_handle are all required."""
@@ -313,18 +303,8 @@ class TestSchemaAcceptReject:
             (_CertTransparencyArgs, "domain", f"https://{host}", {}),
             (_HistoricalUrlsArgs, "domain", f"{host}:8080", {}),
             (_ReconOpenPortsArgs, "host", f"{host}/path", {}),
-            (
-                _ProbeHostnamesArgs,
-                "hostnames",
-                [f"https://{host}"],
-                {"programme_handle": "example"},
-            ),
-            (
-                _DetectTakeoverCandidatesArgs,
-                "hostnames",
-                [f"{host}:9000"],
-                {"programme_handle": "example"},
-            ),
+            (_ProbeHostnamesArgs, "hostnames", [f"https://{host}"], {}),
+            (_DetectTakeoverCandidatesArgs, "hostnames", [f"{host}:9000"], {}),
         ]
         for schema_cls, field, value, base in cases:
             with pytest.raises(ValidationError):

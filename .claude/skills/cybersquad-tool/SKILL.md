@@ -43,6 +43,43 @@ Rules:
 
 Specialist wrappers compose on top of `@cyber_tool`: `@pentest_tool` (pentest probes - layers OWASP categories from `check_fn.owasp_categories` into the docstring) and `@research_brief_tool` (Vulnerability Researcher - layers `PROBE_VOCABULARY` and `RECON_EVIDENCE_KINDS`) both call `cyber_tool` underneath and pass `args_schema=` through.
 
+### Scope guards belong on the wrapper, not in the body
+
+Any tool that takes an agent-supplied target (hostname, endpoint, URL) and runs an external scan / attack against it declares the guard on the decorator, not inline in the body:
+
+```python
+from squad import cyber_tool
+from squad.workspace_tools import current_programme  # noqa: F401  (loaded lazily)
+
+def _normalise_and_filter_hostnames(
+    hostnames: list[Hostname], programme: Programme
+) -> list[Hostname]:
+    cleaned = [h.strip().lower() for h in hostnames if h.strip()]
+    return filter_in_scope(cleaned, programme)
+
+
+@cyber_tool(
+    "Probe Hostnames",
+    args_schema=_ProbeHostnamesArgs,
+    scope_filter=("hostnames", _normalise_and_filter_hostnames),
+)
+def probe_hostnames_tool(hostnames: list[Hostname]) -> list[Endpoint]:
+    """The wrapper has already dropped out-of-scope hostnames; the body
+    just runs the probe."""
+    if not hostnames:
+        return []
+    return list(probe_endpoints_impl(hostnames))
+```
+
+Mechanics: when `scope_filter=(field_name, filter_fn)` is set, the wrapper validates args via `args_schema`, looks up the named field, and - if non-empty - calls `filter_fn(values, current_programme())` to replace the field's value before invoking the body. The `Programme` is read from `<run_dir>/programme.json` (the snapshot the PM's `Save Selected Programme` writes at run start), so the body never carries `programme_handle` as a parameter and the LLM cannot mis-thread it mid-run.
+
+Rules:
+
+- The `filter_fn` lives at module scope, not as a lambda. Multiple tools sharing the same shape (e.g. `Probe Hostnames` and `Detect Takeover Candidates` both normalise + scope-check hostnames) share one helper, not one per call site.
+- The body must still handle an empty filtered list. The wrapper does not short-circuit on empty; it forwards the empty list and the body decides.
+- Bodies skip the redundant `if not values: return []` guard only when the upstream typed input is already scope-filtered (e.g. PT wrappers that take `list[Endpoint]` from `recon.json`, which `Finalise Recon` already filtered).
+- Do not duplicate the wrapper-level guard inside the body. The whole point of lifting it out is that the contract lives at the wrapper site where reviewers can see it.
+
 ## Typed string primitives
 
 `models.primitives` carries the typed-string layer every higher-level model composes:
@@ -150,6 +187,8 @@ Dependency layers flow `primitives -> finding -> h1 -> asset`; modules import on
 - Adding a new model directly to `models/__init__.py`. The package is split per domain; put it in the matching module and let the re-export carry it.
 - New workspace writer with no typed reader.
 - `from squad.workspace_tools import ...` in a consumer instead of `from squad import ...` - the re-export exists so the import path stays stable when shared tools move.
+- Inline scope dance in a tool body that takes agent-supplied targets (the `_load_programme + filter_in_scope` pattern). Lift it onto the decorator via `scope_filter=(field_name, filter_fn)` so the guarantee lives at the wrapper site.
+- A new `programme_handle: str` field on an args_schema for a tool whose body would only thread it into `current_programme()` or `filter_in_scope`. Workspace state (`runtime.programme_handle` / `<run_dir>/programme.json`) is the contract; the per-call handle is duplication.
 
 ## Canonical examples
 

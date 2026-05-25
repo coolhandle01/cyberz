@@ -19,8 +19,8 @@ from models import (
     OpenPortsMap,
     TakeoverCandidate,
 )
+from models.h1 import Programme
 from squad import cyber_tool
-from squad.workspace_tools import load_programme as _load_programme
 from tools import http
 from tools.h1_api import h1
 from tools.recon import (
@@ -294,6 +294,22 @@ def llm_detection_tool(endpoints: list[Endpoint]) -> list[LlmEndpoint]:
     return [LlmEndpoint.model_validate(ep.model_dump()) for ep in detect_llm_endpoints(parsed)]
 
 
+def _normalise_and_filter_hostnames(
+    hostnames: list[Hostname], programme: Programme
+) -> list[Hostname]:
+    """Strip / lowercase before delegating to the canonical scope filter.
+
+    Wraps ``tools.recon.scope.filter_in_scope`` (imported as
+    ``filter_in_scope_impl``) with the input-shaping the two OSINT
+    probe tools used to do inline. Lives at module scope - rather than
+    as a lambda passed to ``scope_filter=...`` - so the ``Probe
+    Hostnames`` and ``Detect Takeover Candidates`` wrappers share the
+    same normalisation step exactly once.
+    """
+    cleaned = [h.strip().lower() for h in hostnames if h.strip()]
+    return filter_in_scope_impl(cleaned, programme)
+
+
 class _ProbeHostnamesArgs(BaseModel):
     """Explicit args_schema for the Probe Hostnames tool."""
 
@@ -306,41 +322,35 @@ class _ProbeHostnamesArgs(BaseModel):
             " a hostname' case before the scope filter silently drops it)."
             " Typically the net-new ones surfaced by Certificate"
             " Transparency or Historical URL Discovery that were missed by"
-            " the initial sweep. After this, each hostname is scope-"
-            "filtered against the programme before any HTTP traffic fires."
-        ),
-    )
-    programme_handle: str = Field(
-        description=(
-            "Exact HackerOne programme handle for the scope guard. Required"
-            " so the scope filter has the structured scope to check against;"
-            " the scope guard never probes outside scope, even for"
-            " fingerprinting."
+            " the initial sweep. The wrapper's scope filter drops any"
+            " hostname outside the selected programme's structured scope"
+            " before HTTP traffic fires."
         ),
     )
 
 
-@cyber_tool("Probe Hostnames", args_schema=_ProbeHostnamesArgs)
-def probe_hostnames_tool(hostnames: list[Hostname], programme_handle: str) -> list[Endpoint]:
+@cyber_tool(
+    "Probe Hostnames",
+    args_schema=_ProbeHostnamesArgs,
+    scope_filter=("hostnames", _normalise_and_filter_hostnames),
+)
+def probe_hostnames_tool(hostnames: list[Hostname]) -> list[Endpoint]:
     """
     Re-probe a list of hostnames with httpx to confirm liveness, capture
     status codes, and fingerprint technologies. Use this on hostnames
     surfaced by Certificate Transparency or Historical URL Discovery that
     were not in the initial sweep.
 
-    The hostnames are filtered against the programme's structured scope
-    before any HTTP traffic is generated; out-of-scope hostnames are
-    dropped silently (we never probe outside scope, even for fingerprinting).
-    Returns a list of Endpoint with {url, status_code, technologies,
-    parameters}. Net-new endpoints can then be annotated with Annotate Host.
+    The wrapper scope-filters the hostnames against the selected
+    programme's structured scope before this body runs; out-of-scope
+    hostnames are dropped silently (we never probe outside scope, even
+    for fingerprinting). Returns a list of Endpoint with {url,
+    status_code, technologies, parameters}. Net-new endpoints can then
+    be annotated with Annotate Host.
     """
     if not hostnames:
         return []
-    programme = _load_programme(programme_handle)
-    in_scope = filter_in_scope_impl([h.strip().lower() for h in hostnames if h.strip()], programme)
-    if not in_scope:
-        return []
-    return list(probe_endpoints_impl(in_scope))
+    return list(probe_endpoints_impl(hostnames))
 
 
 class _DetectTakeoverCandidatesArgs(BaseModel):
@@ -353,22 +363,20 @@ class _DetectTakeoverCandidatesArgs(BaseModel):
             " / paths reject upstream. A candidate fires when the CNAME"
             " points to a known-vulnerable provider (AWS S3, Heroku,"
             " GitHub Pages, Azure, Vercel, Netlify, ...) or when the CNAME"
-            " chain dangles. Hostnames are scope-filtered before any DNS"
-            " traffic fires."
-        ),
-    )
-    programme_handle: str = Field(
-        description=(
-            "Exact HackerOne programme handle for the scope guard. The"
-            " resolver does not query outside the programme's structured"
-            " scope - the handle is the authoritative key."
+            " chain dangles. The wrapper's scope filter drops any hostname"
+            " outside the selected programme's structured scope before any"
+            " DNS traffic fires."
         ),
     )
 
 
-@cyber_tool("Detect Takeover Candidates", args_schema=_DetectTakeoverCandidatesArgs)
+@cyber_tool(
+    "Detect Takeover Candidates",
+    args_schema=_DetectTakeoverCandidatesArgs,
+    scope_filter=("hostnames", _normalise_and_filter_hostnames),
+)
 def detect_takeover_candidates_tool(
-    hostnames: list[Hostname], programme_handle: str
+    hostnames: list[Hostname],
 ) -> list[TakeoverCandidate]:
     """
     Resolve each hostname via dnsx and flag subdomain-takeover candidates.
@@ -385,12 +393,9 @@ def detect_takeover_candidates_tool(
     the "no such bucket" / "no such app" / "there isn't a GitHub Pages
     site here" body fingerprint).
 
-    Hostnames are scope-filtered before any DNS traffic is generated.
+    The wrapper scope-filters the hostnames against the selected
+    programme's structured scope before this body runs.
     """
     if not hostnames:
         return []
-    programme = _load_programme(programme_handle)
-    in_scope = filter_in_scope_impl([h.strip().lower() for h in hostnames if h.strip()], programme)
-    if not in_scope:
-        return []
-    return list(detect_takeover_candidates(in_scope))
+    return list(detect_takeover_candidates(hostnames))
