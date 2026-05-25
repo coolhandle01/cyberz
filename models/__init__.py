@@ -21,7 +21,9 @@ across every consumer.
 |                    | ``InsightValidationReport``, ``ReconFinalisationError`` |
 | ``models.metrics`` | ``RunMetrics`` |
 | ``models.h1`` | HackerOne shapes incl. ``ProgrammeReportSummary`` |
-| ``models.attack`` | ``AttackPlan``, ``AttackPlanItem`` |
+| ``models.attack`` | ``AttackPlan``, ``AttackPlanItem``, |
+|                   | ``AttackPlanValidationIssue``, ``AttackPlanValidationReport``, |
+|                   | ``AttackPlanFinalisationError`` |
 | ``models.triage`` | ``AuthoredAssessment``, ``SeverityDecision`` |
 | ``models.report`` | ``AuthoredDraft`` |
 
@@ -43,6 +45,13 @@ from models.asset import (
     OpenPortsMap,
     ReconResult,
 )
+from models.attack import (
+    AttackPlan,
+    AttackPlanFinalisationError,
+    AttackPlanItem,
+    AttackPlanValidationIssue,
+    AttackPlanValidationReport,
+)
 from models.cve import CveEntry
 from models.cwe import CWEEntry
 from models.dns import TakeoverCandidate
@@ -62,6 +71,11 @@ from models.triage import AuthoredAssessment, SeverityDecision
 from models.workspace import RunFile, RunFileContent
 
 __all__ = [
+    "AttackPlan",
+    "AttackPlanFinalisationError",
+    "AttackPlanItem",
+    "AttackPlanValidationIssue",
+    "AttackPlanValidationReport",
     "AuthoredAssessment",
     "AuthoredDraft",
     "CWEEntry",
