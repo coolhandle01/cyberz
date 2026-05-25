@@ -245,11 +245,29 @@ class _DraftReportArgs(BaseModel):
     )
     steps_to_reproduce: list[str] = Field(
         description=(
-            "Numbered list a triager can follow verbatim. The validator"
-            " refuses steps under 10 characters - each step must be"
-            " concrete enough to act on without guessing."
+            "Minimal numbered list a triager can replay verbatim against"
+            " the live target to reproduce the finding. Each entry is"
+            " one reproduction step naming the tool used, the command /"
+            " request, the expected response excerpt, and (where the"
+            " marker is buried in a large payload) a pointer to the"
+            " supporting evidence so the triager can verify the claim"
+            " without re-running discovery. Example shape per step:"
+            " ``Use sqlmap to confirm injection at /search?q. Run:"
+            " ``sqlmap -u 'https://victim.example.com/search?q=test'"
+            " --batch``. The ``[INFO]`` line citing ``boolean-based"
+            " blind`` appears in the response and is captured in the"
+            " attached evidence (grep ``boolean-based blind`` in the"
+            " sanitised log).`` The validator refuses steps under 10"
+            " characters - prefer one fully-formed step over several"
+            " stubs."
         ),
     )
+    # FIXME: the supporting-evidence / replay-log handoff this step list
+    # references is sketched in the per-step "attached evidence" pointer
+    # above but not yet a workspace-typed artefact. Triagers verify the
+    # claims by re-running discovery against the live target until that
+    # lands - track in a follow-up issue rather than expanding the scope
+    # of #150.
     evidence: str = Field(
         description=(
             "PRE-SANITISED tool output / HTTP excerpt. Run ``Sanitise"
@@ -275,6 +293,11 @@ class _DraftReportArgs(BaseModel):
             " Guidance`` to find the matching URL."
         ),
     )
+    # FIXME: there is no typed primitive for a CVSS 3.1 vector string yet
+    # (the validator format-checks downstream); a ``CvssVector`` primitive
+    # alongside ``Hostname`` / ``HttpUrl`` in ``models.primitives`` would
+    # reject malformed vectors at args_schema validation time rather than
+    # at score-compute time. Out of scope for #150 - file as a follow-up.
     cvss_vector: str = Field(
         description=(
             "Full CVSS 3.1 vector. The wrapper recomputes ``cvss_score``"
@@ -283,6 +306,10 @@ class _DraftReportArgs(BaseModel):
             " upstream to double-check."
         ),
     )
+    # FIXME: ``cwe_id`` is a bare ``int``; ``CWEEntry`` (in ``tools/cwe_data``)
+    # is the typed row but there is no ``CweId`` primitive that constrains
+    # to the catalogue. Follow-up: add the typed primitive so an unknown id
+    # rejects at args_schema validation time.
     cwe_id: int = Field(
         description=(
             "Numeric CWE identifier matching the entry from ``Lookup"

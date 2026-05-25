@@ -308,7 +308,11 @@ class TestSchemaAcceptReject:
                 },
             ),
             (_PtReconOpenPortsArgs, {"recon_path": "recon.json"}),
-            (_PtReconOpenPortsArgs, {"recon_path": "recon.json", "host": "api.example.com"}),
+            # The host-restricted ``Recon Open Ports`` acceptance case lives
+            # in a dedicated test method below (``test_recon_open_ports_*``)
+            # because the ``host`` field is now ``Hostname``-typed and the
+            # fixture-derived hostname makes test intent ("in-scope target")
+            # readable at the call site rather than via an opaque literal.
             (_SaveFindingsArgs, {"findings": []}),
             # Shared workspace acceptance cases (#150). List Run Files and
             # Read Attack Plan take no parameters - the empty payload is the
@@ -432,3 +436,23 @@ class TestSchemaAcceptReject:
         parameter is the schema reject before findings.json is written."""
         with pytest.raises(ValidationError):
             _SaveFindingsArgs.model_validate({"findings": [{"not_a_real_field": "x"}]})
+
+    def test_recon_open_ports_accepts_victim_host(self, victim_url: str) -> None:
+        """``Recon Open Ports`` accepts a bare hostname filter.
+
+        The ``host`` field is ``Hostname``-typed; using the ``victim_url``
+        fixture (the conftest's in-scope-target handle) and stripping the
+        scheme keeps the test intent readable at the call site rather than
+        via an opaque ``api.example.com`` literal.
+        """
+        from urllib.parse import urlparse
+
+        host = urlparse(victim_url).hostname
+        _PtReconOpenPortsArgs.model_validate({"recon_path": "recon.json", "host": host})
+
+    def test_recon_open_ports_rejects_url_in_host(self, victim_url: str) -> None:
+        """The ``Hostname`` primitive rejects a URL where a bare hostname
+        is expected - ``victim_url`` carries the ``https://`` scheme, so
+        passing it directly trips the validator upstream of the wrapper."""
+        with pytest.raises(ValidationError):
+            _PtReconOpenPortsArgs.model_validate({"recon_path": "recon.json", "host": victim_url})

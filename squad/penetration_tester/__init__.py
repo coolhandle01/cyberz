@@ -7,7 +7,7 @@ from typing import Protocol, cast
 
 from pydantic import BaseModel, Field
 
-from models import Endpoint, EndpointPage, OpenPortsMap, RawFinding, ReconResult
+from models import Endpoint, EndpointPage, Hostname, OpenPortsMap, RawFinding, ReconResult
 from squad import (
     CrewAITool,
     SquadMember,
@@ -1769,9 +1769,12 @@ class _PtReconSubdomainsArgs(BaseModel):
     recon_path: str = Field(
         description=(
             "Relative path to the OSINT Analyst's ``recon.json`` in the"
-            " current run directory. The PT receives the handle"
-            " (typically ``recon.json``) from the OA's ``Finalise"
-            " Recon`` call - pass it through directly."
+            " current run directory (the typed artefact ``Finalise"
+            " Recon`` wrote). The slicer reads the ``subdomains`` field"
+            " - in-scope hostnames the OA surfaced via subfinder, cert"
+            " transparency, and historical-URL discovery. Pass"
+            " ``recon.json`` (the canonical filename) unless a"
+            " non-default writer produced it."
         ),
     )
     host_filter: str | None = Field(
@@ -1804,8 +1807,11 @@ class _PtReconEndpointsArgs(BaseModel):
     recon_path: str = Field(
         description=(
             "Relative path to the OSINT Analyst's ``recon.json`` in the"
-            " current run directory. Same semantics as on ``Recon"
-            " Subdomains``."
+            " current run directory (the typed artefact ``Finalise"
+            " Recon`` wrote). The slicer reads the ``endpoints`` field"
+            " - the per-URL records httpx / ffuf / LLM-endpoint"
+            " detection produced - and applies the filters below"
+            " server-side before returning an ``EndpointPage``."
         ),
     )
     status: int | None = Field(
@@ -1816,6 +1822,7 @@ class _PtReconEndpointsArgs(BaseModel):
             " (None) to skip the filter."
         ),
     )
+    # FIXME #83 this should be a list of Frameworks
     tech: str | None = Field(
         default=None,
         description=(
@@ -1890,18 +1897,22 @@ class _PtReconOpenPortsArgs(BaseModel):
     recon_path: str = Field(
         description=(
             "Relative path to the OSINT Analyst's ``recon.json`` in the"
-            " current run directory. Same semantics as on ``Recon"
-            " Subdomains``."
+            " current run directory (the typed artefact ``Finalise"
+            " Recon`` wrote). The slicer reads the ``open_ports`` field"
+            " - the per-host port map nmap produced - and returns it"
+            " filtered to a single host or in full."
         ),
     )
-    host: str | None = Field(
+    host: Hostname | None = Field(
         default=None,
         description=(
-            "Optional hostname to restrict the open-port map to a"
-            " single host. Useful when deciding which port-specific"
-            " probe to run against one target (Elasticsearch on 9200,"
-            " Redis on 6379, MongoDB on 27017, etc.). Omit (None) to"
-            " return the per-host map for every scanned host."
+            "Optional bare hostname (RFC 1123, no scheme / port / path)"
+            " to restrict the open-port map to a single target. Useful"
+            " when deciding which port-specific probe to run against"
+            " one host (Elasticsearch on 9200, Redis on 6379, MongoDB"
+            " on 27017, etc.). The typed primitive rejects URLs and"
+            " ``host:port`` strings upstream of the wrapper. Omit"
+            " (None) to return the per-host map for every scanned host."
         ),
     )
 
