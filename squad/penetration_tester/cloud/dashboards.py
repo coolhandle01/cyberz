@@ -26,7 +26,6 @@ from tools.cloud import (
     check_portainer_paths,
     check_portainer_ports,
 )
-from tools.recon.scope import filter_endpoints_in_scope, filter_in_scope
 
 
 class _GrafanaPortArgs(BaseModel):
@@ -43,11 +42,7 @@ class _GrafanaPortArgs(BaseModel):
     )
 
 
-@cyber_tool(
-    "Grafana Port Check",
-    args_schema=_GrafanaPortArgs,
-    scope_filter=("hostnames", filter_in_scope),
-)
+@cyber_tool("Grafana Port Check", args_schema=_GrafanaPortArgs)
 def grafana_port_check_tool(hostnames: list[Hostname]) -> list[RawFinding]:
     """
     Check for an exposed Grafana metrics dashboard on port 3000 on each
@@ -74,11 +69,7 @@ class _GrafanaPathArgs(BaseModel):
     )
 
 
-@cyber_tool(
-    "Grafana Path Check",
-    args_schema=_GrafanaPathArgs,
-    scope_filter=("endpoints", filter_endpoints_in_scope),
-)
+@cyber_tool("Grafana Path Check", args_schema=_GrafanaPathArgs)
 def grafana_path_check_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
     """
     Check for Grafana reverse-proxied at /grafana on each supplied origin.
@@ -103,11 +94,7 @@ class _KibanaPortArgs(BaseModel):
     )
 
 
-@cyber_tool(
-    "Kibana Port Check",
-    args_schema=_KibanaPortArgs,
-    scope_filter=("hostnames", filter_in_scope),
-)
+@cyber_tool("Kibana Port Check", args_schema=_KibanaPortArgs)
 def kibana_port_check_tool(hostnames: list[Hostname]) -> list[RawFinding]:
     """
     Check for an exposed Kibana log / data visualisation dashboard on
@@ -134,11 +121,7 @@ class _KibanaPathArgs(BaseModel):
     )
 
 
-@cyber_tool(
-    "Kibana Path Check",
-    args_schema=_KibanaPathArgs,
-    scope_filter=("endpoints", filter_endpoints_in_scope),
-)
+@cyber_tool("Kibana Path Check", args_schema=_KibanaPathArgs)
 def kibana_path_check_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
     """
     Check for Kibana reverse-proxied at /kibana on each supplied origin.
@@ -163,11 +146,7 @@ class _PortainerPortArgs(BaseModel):
     )
 
 
-@cyber_tool(
-    "Portainer Port Check",
-    args_schema=_PortainerPortArgs,
-    scope_filter=("hostnames", filter_in_scope),
-)
+@cyber_tool("Portainer Port Check", args_schema=_PortainerPortArgs)
 def portainer_port_check_tool(hostnames: list[Hostname]) -> list[RawFinding]:
     """
     Check for an exposed Portainer Docker management UI on port 9000 on
@@ -194,11 +173,7 @@ class _PortainerPathArgs(BaseModel):
     )
 
 
-@cyber_tool(
-    "Portainer Path Check",
-    args_schema=_PortainerPathArgs,
-    scope_filter=("endpoints", filter_endpoints_in_scope),
-)
+@cyber_tool("Portainer Path Check", args_schema=_PortainerPathArgs)
 def portainer_path_check_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
     """
     Check for Portainer reverse-proxied at /portainer on each supplied

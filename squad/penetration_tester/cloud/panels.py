@@ -13,7 +13,6 @@ from pydantic import BaseModel, Field
 from models import Hostname, RawFinding
 from squad import cyber_tool
 from tools.cloud import check_cpanel, check_directadmin, check_plesk, check_webmin
-from tools.recon.scope import filter_in_scope
 
 
 class _CpanelArgs(BaseModel):
@@ -30,11 +29,7 @@ class _CpanelArgs(BaseModel):
     )
 
 
-@cyber_tool(
-    "cPanel/WHM Check",
-    args_schema=_CpanelArgs,
-    scope_filter=("hostnames", filter_in_scope),
-)
+@cyber_tool("cPanel/WHM Check", args_schema=_CpanelArgs)
 def cpanel_tool(hostnames: list[Hostname]) -> list[RawFinding]:
     """
     Check for an exposed cPanel hosting control panel (ports 2082/2083)
@@ -62,11 +57,7 @@ class _PleskArgs(BaseModel):
     )
 
 
-@cyber_tool(
-    "Plesk Check",
-    args_schema=_PleskArgs,
-    scope_filter=("hostnames", filter_in_scope),
-)
+@cyber_tool("Plesk Check", args_schema=_PleskArgs)
 def plesk_tool(hostnames: list[Hostname]) -> list[RawFinding]:
     """
     Check for an exposed Plesk web hosting control panel on ports 8880
@@ -91,11 +82,7 @@ class _DirectadminArgs(BaseModel):
     )
 
 
-@cyber_tool(
-    "DirectAdmin Check",
-    args_schema=_DirectadminArgs,
-    scope_filter=("hostnames", filter_in_scope),
-)
+@cyber_tool("DirectAdmin Check", args_schema=_DirectadminArgs)
 def directadmin_tool(hostnames: list[Hostname]) -> list[RawFinding]:
     """
     Check for an exposed DirectAdmin hosting control panel on port 2222
@@ -119,11 +106,7 @@ class _WebminArgs(BaseModel):
     )
 
 
-@cyber_tool(
-    "Webmin Check",
-    args_schema=_WebminArgs,
-    scope_filter=("hostnames", filter_in_scope),
-)
+@cyber_tool("Webmin Check", args_schema=_WebminArgs)
 def webmin_tool(hostnames: list[Hostname]) -> list[RawFinding]:
     """
     Check for an exposed Webmin Linux server administration panel on port

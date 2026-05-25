@@ -19,7 +19,6 @@ from models import (
     OpenPortsMap,
     TakeoverCandidate,
 )
-from models.h1 import Programme
 from squad import cyber_tool
 from squad.workspace_tools import current_programme
 from tools.recon import (
@@ -31,7 +30,6 @@ from tools.recon import (
 )
 from tools.recon import probe_endpoints as probe_endpoints_impl
 from tools.recon.query import recon_endpoints, recon_open_ports, recon_subdomains
-from tools.recon.scope import filter_in_scope as filter_in_scope_impl
 
 
 class _RunInitialSweepArgs(BaseModel):
@@ -287,22 +285,6 @@ def llm_detection_tool(endpoints: list[Endpoint]) -> list[LlmEndpoint]:
     return [LlmEndpoint.model_validate(ep.model_dump()) for ep in detect_llm_endpoints(parsed)]
 
 
-def _normalise_and_filter_hostnames(
-    hostnames: list[Hostname], programme: Programme
-) -> list[Hostname]:
-    """Strip / lowercase before delegating to the canonical scope filter.
-
-    Wraps ``tools.recon.scope.filter_in_scope`` (imported as
-    ``filter_in_scope_impl``) with the input-shaping the two OSINT
-    probe tools used to do inline. Lives at module scope - rather than
-    as a lambda passed to ``scope_filter=...`` - so the ``Probe
-    Hostnames`` and ``Detect Takeover Candidates`` wrappers share the
-    same normalisation step exactly once.
-    """
-    cleaned = [h.strip().lower() for h in hostnames if h.strip()]
-    return filter_in_scope_impl(cleaned, programme)
-
-
 class _ProbeHostnamesArgs(BaseModel):
     """Explicit args_schema for the Probe Hostnames tool."""
 
@@ -322,11 +304,7 @@ class _ProbeHostnamesArgs(BaseModel):
     )
 
 
-@cyber_tool(
-    "Probe Hostnames",
-    args_schema=_ProbeHostnamesArgs,
-    scope_filter=("hostnames", _normalise_and_filter_hostnames),
-)
+@cyber_tool("Probe Hostnames", args_schema=_ProbeHostnamesArgs)
 def probe_hostnames_tool(hostnames: list[Hostname]) -> list[Endpoint]:
     """
     Re-probe a list of hostnames with httpx to confirm liveness, capture
@@ -363,11 +341,7 @@ class _DetectTakeoverCandidatesArgs(BaseModel):
     )
 
 
-@cyber_tool(
-    "Detect Takeover Candidates",
-    args_schema=_DetectTakeoverCandidatesArgs,
-    scope_filter=("hostnames", _normalise_and_filter_hostnames),
-)
+@cyber_tool("Detect Takeover Candidates", args_schema=_DetectTakeoverCandidatesArgs)
 def detect_takeover_candidates_tool(
     hostnames: list[Hostname],
 ) -> list[TakeoverCandidate]:

@@ -252,7 +252,7 @@ class TestOsintAnalystTools:
         assert result == sentinel
         m.assert_called_once_with("example.com")
 
-    def test_llm_detection_tool(self, endpoint) -> None:
+    def test_llm_detection_tool(self, programme_in_workspace, endpoint) -> None:
         from models import LlmEndpoint
         from squad.osint_analyst import llm_detection_tool
 

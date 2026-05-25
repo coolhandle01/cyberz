@@ -22,7 +22,6 @@ from tools.cloud import (
     check_postgresql,
     check_redis,
 )
-from tools.recon.scope import filter_in_scope
 
 
 class _ElasticsearchCheckArgs(BaseModel):
@@ -39,11 +38,7 @@ class _ElasticsearchCheckArgs(BaseModel):
     )
 
 
-@cyber_tool(
-    "Unauthenticated Elasticsearch Check",
-    args_schema=_ElasticsearchCheckArgs,
-    scope_filter=("hostnames", filter_in_scope),
-)
+@cyber_tool("Unauthenticated Elasticsearch Check", args_schema=_ElasticsearchCheckArgs)
 def elasticsearch_tool(hostnames: list[Hostname]) -> list[RawFinding]:
     """
     Check for an unauthenticated Elasticsearch instance on port 9200 on each
@@ -73,11 +68,7 @@ class _CouchdbCheckArgs(BaseModel):
     )
 
 
-@cyber_tool(
-    "Unauthenticated CouchDB Check",
-    args_schema=_CouchdbCheckArgs,
-    scope_filter=("hostnames", filter_in_scope),
-)
+@cyber_tool("Unauthenticated CouchDB Check", args_schema=_CouchdbCheckArgs)
 def couchdb_tool(hostnames: list[Hostname]) -> list[RawFinding]:
     """
     Check for an unauthenticated CouchDB instance on port 5984 on each
@@ -105,11 +96,7 @@ class _RedisCheckArgs(BaseModel):
     )
 
 
-@cyber_tool(
-    "Unauthenticated Redis Check",
-    args_schema=_RedisCheckArgs,
-    scope_filter=("hostnames", filter_in_scope),
-)
+@cyber_tool("Unauthenticated Redis Check", args_schema=_RedisCheckArgs)
 def redis_tool(hostnames: list[Hostname]) -> list[RawFinding]:
     """
     Check for an unauthenticated Redis instance on port 6379 via a PING
@@ -138,11 +125,7 @@ class _MongodbCheckArgs(BaseModel):
     )
 
 
-@cyber_tool(
-    "Unauthenticated MongoDB Check",
-    args_schema=_MongodbCheckArgs,
-    scope_filter=("hostnames", filter_in_scope),
-)
+@cyber_tool("Unauthenticated MongoDB Check", args_schema=_MongodbCheckArgs)
 def mongodb_tool(hostnames: list[Hostname]) -> list[RawFinding]:
     """
     Check for an unauthenticated MongoDB instance on port 27017 on each
@@ -173,11 +156,7 @@ class _PostgresqlCheckArgs(BaseModel):
     )
 
 
-@cyber_tool(
-    "Exposed PostgreSQL Check",
-    args_schema=_PostgresqlCheckArgs,
-    scope_filter=("hostnames", filter_in_scope),
-)
+@cyber_tool("Exposed PostgreSQL Check", args_schema=_PostgresqlCheckArgs)
 def postgresql_tool(hostnames: list[Hostname]) -> list[RawFinding]:
     """
     Check for PostgreSQL on port 5432 on each supplied hostname. Returns
@@ -208,11 +187,7 @@ class _MysqlCheckArgs(BaseModel):
     )
 
 
-@cyber_tool(
-    "Exposed MySQL/MariaDB Check",
-    args_schema=_MysqlCheckArgs,
-    scope_filter=("hostnames", filter_in_scope),
-)
+@cyber_tool("Exposed MySQL/MariaDB Check", args_schema=_MysqlCheckArgs)
 def mysql_tool(hostnames: list[Hostname]) -> list[RawFinding]:
     """
     Check for MySQL or MariaDB on port 3306 on each supplied hostname.

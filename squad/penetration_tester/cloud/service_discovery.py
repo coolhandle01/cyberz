@@ -15,7 +15,6 @@ from models import Endpoint, Hostname, RawFinding
 from squad import cyber_tool
 from squad.penetration_tester._decorator import _parse_endpoints
 from tools.cloud import check_consul_vault_paths, check_consul_vault_ports
-from tools.recon.scope import filter_endpoints_in_scope, filter_in_scope
 
 
 class _ConsulVaultPortArgs(BaseModel):
@@ -32,11 +31,7 @@ class _ConsulVaultPortArgs(BaseModel):
     )
 
 
-@cyber_tool(
-    "Consul/Vault Port Check",
-    args_schema=_ConsulVaultPortArgs,
-    scope_filter=("hostnames", filter_in_scope),
-)
+@cyber_tool("Consul/Vault Port Check", args_schema=_ConsulVaultPortArgs)
 def consul_vault_port_check_tool(hostnames: list[Hostname]) -> list[RawFinding]:
     """
     Check for an exposed HashiCorp Consul UI (port 8500) or Vault UI
@@ -64,11 +59,7 @@ class _ConsulVaultPathArgs(BaseModel):
     )
 
 
-@cyber_tool(
-    "Consul/Vault Path Check",
-    args_schema=_ConsulVaultPathArgs,
-    scope_filter=("endpoints", filter_endpoints_in_scope),
-)
+@cyber_tool("Consul/Vault Path Check", args_schema=_ConsulVaultPathArgs)
 def consul_vault_path_check_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
     """
     Check for HashiCorp Consul / Vault reverse-proxied at /consul/ui or

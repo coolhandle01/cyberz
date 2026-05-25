@@ -7,10 +7,10 @@ cohesive responsibility:
   transparency, historical URLs, LLM endpoint detection) + active
   hostname probes + takeover detection. The "what is the surface"
   half. The two active-probe wrappers (``Probe Hostnames``, ``Detect
-  Takeover Candidates``) use ``@cyber_tool(scope_filter=...)`` so the
-  programme scope guard runs in the wrapper rather than inline in the
-  body; the shared ``current_programme`` reader lives in
-  ``squad.workspace_tools``.
+  Takeover Candidates``) take ``list[Hostname]``; ``@cyber_tool``
+  auto-detects the typed-target field and runs the programme scope
+  guard in the wrapper rather than inline in the body. The shared
+  ``current_programme`` reader lives in ``squad.workspace_tools``.
 - ``curation`` - lookup (CWE / OWASP) + ``Annotate Host`` +
   ``Uncovered Hosts`` + ``Finalise Recon``. The "what do we record
   about the surface" half.

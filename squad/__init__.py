@@ -31,7 +31,7 @@ import inspect
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Protocol, cast, runtime_checkable
+from typing import Protocol, cast, get_args, get_origin, runtime_checkable
 
 from crewai import Agent, Task
 from crewai.tools import tool
@@ -76,14 +76,10 @@ class SquadTool(Protocol):
     def func(self) -> Callable[..., object]: ...
 
 
-ScopeFilter = tuple[str, Callable[..., object]]
-
-
 def cyber_tool(
     name: str,
     *,
     args_schema: type[BaseModel],
-    scope_filter: ScopeFilter | None = None,
 ) -> Callable[[Callable[..., object]], SquadTool]:
     """The blessed cybersquad replacement for bare ``@crewai.tools.tool``.
 
@@ -100,22 +96,17 @@ def cyber_tool(
     formatting for the research one). Anything that does not need a
     specialist wrapper uses ``@cyber_tool`` directly.
 
-    ``scope_filter=(field_name, filter_fn)`` lifts the in-line scope
-    guard out of every "agent picked a target, run something external
-    against it" tool body. When set, the wrapper validates args via
-    ``args_schema`` (CrewAI's path), then - if the named field is non-
-    empty - calls ``filter_fn(values, current_programme())`` and
-    replaces the field's value with the filtered list before invoking
-    the body. The ``Programme`` is sourced from
-    ``squad.workspace_tools.current_programme()`` (which reads
-    ``<run_dir>/programme.json``), so the wrapper carries the
-    workspace-state lookup and the body just runs the tool. Bodies
-    must still handle an empty filtered list - the wrapper does not
-    short-circuit on empty.
+    Scope safety is built in. Any ``args_schema`` field typed as a
+    cybersquad target primitive - ``Hostname`` / ``list[Hostname]`` or
+    ``Endpoint`` / ``list[Endpoint]`` - is automatically scope-filtered
+    against ``<run_dir>/programme.json`` before the body sees it. The
+    typed parameter IS the opt-in signal; there is no per-tool
+    parameter to forget. Fields typed as anything else (``str``,
+    StrEnum filters, recon paths, ...) pass through unchanged.
     """
 
     def decorator(fn: Callable[..., object]) -> SquadTool:
-        target = _apply_scope_filter(fn, scope_filter) if scope_filter else fn
+        target = _apply_scope_filter(fn, args_schema)
         wrapped = tool(name)(target)
         wrapped.args_schema = args_schema
         return cast(SquadTool, wrapped)
@@ -123,16 +114,53 @@ def cyber_tool(
     return decorator
 
 
-def _apply_scope_filter(
-    fn: Callable[..., object], scope_filter: ScopeFilter
-) -> Callable[..., object]:
-    """Wrap ``fn`` so the named field is run through ``filter_fn`` first.
+def _scope_filter_for_field(annotation: object) -> Callable[..., object] | None:
+    """Pick the scope filter for an args_schema field's annotation.
 
-    Kept out of ``cyber_tool``'s body so the decorator's closure is small
-    and the wrapping is testable on its own. The lookup of
-    ``current_programme`` is deferred to call time to avoid the
-    ``squad.workspace_tools`` -> ``squad`` import cycle that would fire
-    at decoration time otherwise.
+    Returns ``filter_in_scope`` for ``Hostname`` / ``list[Hostname]``,
+    ``filter_endpoints_in_scope`` for ``Endpoint`` / ``list[Endpoint]``,
+    or ``None`` for any other annotation. The cybersquad target
+    primitives are identity-comparable (``Hostname`` is a single
+    ``Annotated[...]`` alias imported by every consumer) so ``is``
+    checks work without unwrapping the ``Annotated`` machinery.
+
+    Lazy imports break the import cycle: ``models`` and ``tools``
+    import nothing from ``squad``; we resolve them at decoration time.
+    """
+    from models import Endpoint, Hostname
+    from tools.recon.scope import filter_endpoints_in_scope, filter_in_scope
+
+    if annotation is Hostname:
+        return filter_in_scope
+    if annotation is Endpoint:
+        return filter_endpoints_in_scope
+
+    if get_origin(annotation) is list:
+        inner_args = get_args(annotation)
+        if inner_args:
+            inner = inner_args[0]
+            if inner is Hostname:
+                return filter_in_scope
+            if inner is Endpoint:
+                return filter_endpoints_in_scope
+
+    return None
+
+
+def _apply_scope_filter(
+    fn: Callable[..., object], args_schema: type[BaseModel]
+) -> Callable[..., object]:
+    """Wrap ``fn`` so every typed-target field is scope-filtered first.
+
+    Auto-detects ``Hostname`` / ``list[Hostname]`` / ``Endpoint`` /
+    ``list[Endpoint]`` fields on ``args_schema`` and wraps ``fn`` so
+    each runs through the matching filter
+    (``filter_in_scope`` / ``filter_endpoints_in_scope``) against
+    ``current_programme()`` before the body sees it. Fields with any
+    other annotation pass through unchanged. The wrapper returns ``fn``
+    unchanged when ``args_schema`` has no typed-target fields, so the
+    Programme lookup is paid for only when something actually needs
+    filtering.
 
     ``inspect.signature.bind_partial`` resolves the named field whether
     the caller passes it positionally or by keyword - CrewAI's runtime
@@ -140,17 +168,29 @@ def _apply_scope_filter(
     ``tool.func(value)`` test invocations pass positionally and the
     wrapper has to cover both shapes.
     """
-    field_name, filter_fn = scope_filter
+    target_fields: dict[str, Callable[..., object]] = {}
+    for field_name, field_info in args_schema.model_fields.items():
+        filter_fn = _scope_filter_for_field(field_info.annotation)
+        if filter_fn is not None:
+            target_fields[field_name] = filter_fn
+
+    if not target_fields:
+        return fn
+
     sig = inspect.signature(fn)
 
     @functools.wraps(fn)
     def guarded(*args: object, **kwargs: object) -> object:
         bound = sig.bind_partial(*args, **kwargs)
-        values = bound.arguments.get(field_name)
-        if values:
-            from squad.workspace_tools import current_programme
+        programme = None
+        for field_name, filter_fn in target_fields.items():
+            values = bound.arguments.get(field_name)
+            if values:
+                if programme is None:
+                    from squad.workspace_tools import current_programme
 
-            bound.arguments[field_name] = filter_fn(values, current_programme())
+                    programme = current_programme()
+                bound.arguments[field_name] = filter_fn(values, programme)
         return fn(*bound.args, **bound.kwargs)
 
     return guarded

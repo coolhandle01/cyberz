@@ -22,7 +22,7 @@ pytestmark = pytest.mark.unit
 
 
 class TestPenetrationTesterTools:
-    def test_nuclei_scan_tool(self, endpoint, raw_finding_low) -> None:
+    def test_nuclei_scan_tool(self, programme_in_workspace, endpoint, raw_finding_low) -> None:
         from squad.penetration_tester import nuclei_scan_tool
 
         with patch(
@@ -33,7 +33,7 @@ class TestPenetrationTesterTools:
 
         assert result == [raw_finding_low]
 
-    def test_sqlmap_tool(self, endpoint, raw_finding_low) -> None:
+    def test_sqlmap_tool(self, programme_in_workspace, endpoint, raw_finding_low) -> None:
         from squad.penetration_tester import sqlmap_tool
 
         with patch(
@@ -80,7 +80,7 @@ class TestPenetrationTesterTools:
 
         assert result == [raw_finding_low]
 
-    def test_ssrf_probe_tool(self, endpoint, raw_finding_low) -> None:
+    def test_ssrf_probe_tool(self, programme_in_workspace, endpoint, raw_finding_low) -> None:
         from squad.penetration_tester import ssrf_probe_tool
 
         with patch(

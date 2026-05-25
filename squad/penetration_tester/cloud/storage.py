@@ -20,7 +20,6 @@ from squad import cyber_tool
 from squad.penetration_tester._decorator import _parse_endpoints
 from tools.cloud.aws import check_s3_buckets
 from tools.cloud.azure import check_azure_blob_containers, check_azure_sas_tokens
-from tools.recon.scope import filter_endpoints_in_scope, filter_in_scope
 
 
 class _S3CheckArgs(BaseModel):
@@ -38,11 +37,7 @@ class _S3CheckArgs(BaseModel):
     )
 
 
-@cyber_tool(
-    "S3 Bucket Check",
-    args_schema=_S3CheckArgs,
-    scope_filter=("hostnames", filter_in_scope),
-)
+@cyber_tool("S3 Bucket Check", args_schema=_S3CheckArgs)
 def s3_check_tool(hostnames: list[Hostname]) -> list[RawFinding]:
     """
     Check each supplied S3 hostname for public listing or accessibility.
@@ -70,11 +65,7 @@ class _AzureBlobContainerArgs(BaseModel):
     )
 
 
-@cyber_tool(
-    "Azure Blob Container Check",
-    args_schema=_AzureBlobContainerArgs,
-    scope_filter=("hostnames", filter_in_scope),
-)
+@cyber_tool("Azure Blob Container Check", args_schema=_AzureBlobContainerArgs)
 def azure_blob_container_check_tool(hostnames: list[Hostname]) -> list[RawFinding]:
     """
     Check each supplied Azure Blob hostname for publicly listable
@@ -103,11 +94,7 @@ class _AzureSasTokenArgs(BaseModel):
     )
 
 
-@cyber_tool(
-    "Azure SAS Token Check",
-    args_schema=_AzureSasTokenArgs,
-    scope_filter=("endpoints", filter_endpoints_in_scope),
-)
+@cyber_tool("Azure SAS Token Check", args_schema=_AzureSasTokenArgs)
 def azure_sas_token_check_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
     """
     Scan each supplied endpoint URL for embedded Azure SAS-token query

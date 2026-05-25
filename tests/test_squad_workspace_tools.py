@@ -2,7 +2,7 @@
 tests/test_squad_workspace_tools.py - exercise the shared workspace @tool
 wrappers (``read_run_filelist_tool`` / ``read_run_file_tool`` /
 ``read_attack_plan_tool``) plus the ``current_programme()`` reader and the
-``@cyber_tool(scope_filter=...)`` mechanism that builds on it.
+``@cyber_tool`` auto-detected scope-filter mechanism that builds on it.
 
 The wrappers are thin: unmarshal JSON, call into tools/workspace helpers,
 serialise the result. Coverage here is regression coverage of the wrapping
@@ -15,10 +15,8 @@ behavioural tests because the workspace tools are shared rather than
 agent-scoped.
 """
 
-from __future__ import annotations
-
 import pytest
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
 pytestmark = pytest.mark.unit
 
@@ -91,78 +89,92 @@ class TestCurrentProgramme:
             current_programme()
 
 
-class TestCyberToolScopeFilter:
-    """``@cyber_tool(scope_filter=(field, fn))`` runs the filter before the body.
+# Module-scope stub args_schema classes for the auto-detection tests.
+# ``from __future__ import annotations`` makes every field annotation a
+# forward-ref string; Pydantic resolves those via the class's enclosing
+# module namespace when CrewAI's ``tool()`` triggers ``model_rebuild``.
+# A class defined inside a test method has no module namespace
+# ``Hostname`` lives in, so model_rebuild fails. Defining them here -
+# alongside the canonical ``Hostname`` import - keeps the resolver
+# happy and lets the test bodies stay narrow.
+from models import Hostname  # noqa: E402
 
-    Closes the wrapper-level scope-guard contract: every "agent picked
-    a target, run a scan / attack against it" tool can declare its
-    field + filter once, and the wrapper applies the guard exactly the
-    same way for every consumer. Tested against a minimal stub body
-    here; the OSINT-Analyst-side exercise of the same mechanism lives
-    in ``tests/test_squad_osint_analyst.py``.
+
+class _StubHostnamesArgs(BaseModel):
+    """Stub args_schema with a typed-target hostname list - the
+    auto-detection's primary trigger."""
+
+    hostnames: list[Hostname] = Field(description="Targets the wrapper filters.")
+
+
+class _StubReconPathArgs(BaseModel):
+    """Stub args_schema with no typed-target fields - the
+    auto-detection skips wrapping entirely for this shape."""
+
+    recon_path: str = Field(description="Workspace artefact handle.")
+
+
+class TestCyberToolScopeFilter:
+    """``@cyber_tool`` auto-detects typed-target fields and runs the
+    matching scope filter before the body.
+
+    The typed parameter IS the opt-in signal - any ``args_schema``
+    field annotated ``Hostname`` / ``list[Hostname]`` /
+    ``Endpoint`` / ``list[Endpoint]`` is auto-scope-filtered against
+    ``<run_dir>/programme.json``; no per-tool parameter to forget.
+    Fields with any other annotation pass through unchanged.
     """
 
-    def test_filter_runs_before_body(self, programme_in_workspace) -> None:
-        """``filter_fn(values, current_programme())`` rewrites the field's
-        value before the body sees it."""
-        from pydantic import BaseModel, Field
-
-        from models.h1 import Programme
+    def test_filter_runs_before_body(self, programme_in_workspace, target_apex) -> None:
+        """The auto-detected scope filter rewrites the typed-target field
+        before the body sees it."""
         from squad import cyber_tool
 
         seen_values: list[list[str]] = []
 
-        class _StubArgs(BaseModel):
-            targets: list[str] = Field(description="Targets the wrapper filters.")
-
-        def _keep_in_scope(values: list[str], prog: Programme) -> list[str]:
-            assert prog.handle == programme_in_workspace.handle
-            return [v for v in values if v.endswith(".example.com")]
-
-        @cyber_tool(
-            "Stub Scope-Guarded Tool",
-            args_schema=_StubArgs,
-            scope_filter=("targets", _keep_in_scope),
-        )
-        def stub_tool(targets: list[str]) -> list[str]:
+        @cyber_tool("Stub Hostname Tool", args_schema=_StubHostnamesArgs)
+        def stub_tool(hostnames: list[Hostname]) -> list[Hostname]:
             """Stub body that records what it was handed and returns it."""
-            seen_values.append(targets)
-            return targets
+            seen_values.append(hostnames)
+            return hostnames
 
-        result = stub_tool.func(targets=["api.example.com", "bystander.example.org"])
+        result = stub_tool.func(hostnames=[f"api.{target_apex}", "bystander.example.org"])
 
-        assert result == ["api.example.com"]
-        assert seen_values == [["api.example.com"]]
+        assert result == [f"api.{target_apex}"]
+        assert seen_values == [[f"api.{target_apex}"]]
 
     def test_empty_input_skips_programme_lookup(self) -> None:
-        """An empty field value short-circuits the wrapper - no ``current_programme()``
-        lookup, no run-dir read, body receives the empty list verbatim."""
-        from pydantic import BaseModel, Field
-
+        """An empty typed-target field short-circuits the wrapper - no
+        ``current_programme()`` lookup, no run-dir read, body receives
+        the empty list verbatim."""
         from squad import cyber_tool
 
-        class _StubArgs(BaseModel):
-            targets: list[str] = Field(description="Targets the wrapper filters.")
-
-        filter_calls: list[object] = []
-
-        def _filter(values: list[str], prog: object) -> list[str]:
-            filter_calls.append((values, prog))
-            return values
-
-        @cyber_tool(
-            "Stub Empty-Skip Tool",
-            args_schema=_StubArgs,
-            scope_filter=("targets", _filter),
-        )
-        def stub_tool(targets: list[str]) -> list[str]:
+        @cyber_tool("Stub Empty-Skip Tool", args_schema=_StubHostnamesArgs)
+        def stub_tool(hostnames: list[Hostname]) -> list[Hostname]:
             """Stub body that returns the input verbatim."""
-            return targets
+            return hostnames
 
         # No ``runtime.run_dir`` patch is required - the wrapper must
         # not reach for the workspace when the field is empty.
-        assert stub_tool.func(targets=[]) == []
-        assert filter_calls == []
+        assert stub_tool.func(hostnames=[]) == []
+
+    def test_no_typed_target_fields_skips_wrapping(self) -> None:
+        """When ``args_schema`` has no typed-target fields, the wrapper
+        does not wrap the body at all - no Programme lookup, no
+        rewriting, the body sees its kwargs verbatim. The
+        ``recon_path: str`` shape lives on tools that read workspace
+        artefacts; their input is a filename, not an agent-supplied
+        target, so scope-filtering is not the contract."""
+        from squad import cyber_tool
+
+        @cyber_tool("Stub Recon Reader", args_schema=_StubReconPathArgs)
+        def stub_tool(recon_path: str) -> str:
+            """Stub body that returns the input verbatim."""
+            return recon_path
+
+        # No ``programme_in_workspace`` / ``run_dir`` fixture - the
+        # wrapper must not reach for the workspace at all.
+        assert stub_tool.func(recon_path="recon.json") == "recon.json"
 
 
 # Tool-name -> explicit schema class. The workspace wrappers are shared

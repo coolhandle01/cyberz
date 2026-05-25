@@ -14,7 +14,6 @@ from models import Endpoint, RawFinding
 from squad import cyber_tool
 from squad.penetration_tester._decorator import _parse_endpoints
 from tools.cloud import check_admin_panels, check_sensitive_files
-from tools.recon.scope import filter_endpoints_in_scope
 
 
 class _SensitiveFilesArgs(BaseModel):
@@ -33,11 +32,7 @@ class _SensitiveFilesArgs(BaseModel):
     )
 
 
-@cyber_tool(
-    "Sensitive Files Check",
-    args_schema=_SensitiveFilesArgs,
-    scope_filter=("endpoints", filter_endpoints_in_scope),
-)
+@cyber_tool("Sensitive Files Check", args_schema=_SensitiveFilesArgs)
 def sensitive_files_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
     """
     Probe for exposed .git/HEAD, .env, phpinfo.php, Apache server-status,
@@ -66,11 +61,7 @@ class _AdminPanelsArgs(BaseModel):
     )
 
 
-@cyber_tool(
-    "Admin Panels Check",
-    args_schema=_AdminPanelsArgs,
-    scope_filter=("endpoints", filter_endpoints_in_scope),
-)
+@cyber_tool("Admin Panels Check", args_schema=_AdminPanelsArgs)
 def admin_panels_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
     """
     Probe common admin panel paths: /admin, /wp-admin, /phpmyadmin,
