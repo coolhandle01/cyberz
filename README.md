@@ -18,10 +18,12 @@ With `CYBERSQUAD_HUMAN_INPUT=true` (the default) the pipeline pauses after progr
 |---|---|---|
 | Programme Manager | Ranks H1 programmes by bounty value; verifies automated scanning is permitted | HackerOne API |
 | OSINT Analyst | Enumerates subdomains, live endpoints, open ports; passive TLS/DNS checks; network path tracing; LLM endpoint detection | subfinder, httpx, nmap, testssl.sh, dirfuzz, waybackurls, cert transparency, tracepath |
-| Penetration Tester | 30 targeted checks selected per-engagement based on recon evidence | nuclei (tag-filtered by technology), sqlmap, nosqli, prompt injection canary probe, CORS, SSRF, reflected XSS, SRI, header injection, host headers, JS source maps, error disclosure, sensitive files, admin panels, S3, Azure Blob, per-engine database checks (Elasticsearch, CouchDB, Redis, MongoDB, PostgreSQL, MySQL), branded panels (cPanel/WHM, Plesk, DirectAdmin, Webmin, Grafana, Kibana, Portainer, Consul/Vault) |
+| Penetration Tester | 50+ targeted checks selected per-engagement based on recon evidence | nuclei (tag-filtered by technology), sqlmap, nosqli, multi-variant probes (injection / auth / headers / disclosure / client-side / network / external families), CORS, SSRF, reflected XSS, SRI, header injection, host headers, JS source maps, error disclosure, sensitive files, admin panels, S3, Azure Blob, per-engine database checks (Elasticsearch, CouchDB, Redis, MongoDB, PostgreSQL, MySQL), branded panels (cPanel/WHM, Plesk, DirectAdmin, Webmin, Grafana, Kibana, Portainer, Consul/Vault) |
 | Vulnerability Researcher | Triages raw findings, assigns CVSS 3.1 scores, validates scope | - |
 | Technical Author | Renders complete HackerOne-format Markdown disclosure reports | - |
 | Disclosure Coordinator | Submits reports via H1 API and records submission metadata | HackerOne API |
+
+Agents do not pass artefacts inline. Each stage writes a typed JSON file to the run directory (`programme.json`, `sweep.json`, `recon.json`, `findings.json`, `verified.json`, `reports.json`) and the next agent reads it back through a Pydantic model. Mis-shaped values reject at the reader, not silently mid-pipeline. The in-flight programme handle is workspace state too - bound once at run start by `runtime.bind_programme(...)` and read by every tool that needs scope context. Every wrapper that takes agent-picked hosts runs them through `filter_in_scope()` at the decorator boundary before the body sees them.
 
 ---
 
@@ -124,36 +126,58 @@ cybersquad/
 +-- main.py            # CLI entrypoint
 +-- crew.py            # Assembles LLM, agents, tasks, and approval gates
 +-- tasks.py           # Pipeline wiring - context chaining and approval gates
++-- runtime.py         # Pipeline-scoped context (run_id, programme_handle)
 +-- config.py          # Env-var-backed configuration (singleton: config.*)
-+-- models.py          # Pydantic data contracts between agents
+|
++-- models/            # Pydantic data contracts between agents
+|   +-- primitives.py  # Typed strings (Hostname, HttpUrl) + Severity StrEnum
+|   +-- finding.py     # RawFinding (PT output)
+|   +-- triage.py      # TriageAssessment, VerifiedVulnerability (VR output)
+|   +-- report.py      # AuthoredDraft, DisclosureReport (TA / DC output)
+|   +-- h1.py          # Programme + ScopeItem + bounty table
+|   +-- ...            # asset, attack, cve, cwe, dns, insight, owasp, workspace
 |
 +-- squad/             # One sub-package per agent
-|   +-- __init__.py    # SquadMember dataclass + build_agent() / build_task() helpers
+|   +-- __init__.py    # @cyber_tool decorator, build_agent / build_task helpers
+|   +-- workspace_tools.py  # Shared read-only wrappers + current_programme()
 |   +-- <member>/
-|       +-- __init__.py        # @tool functions + MEMBER = SquadMember(...) constant
-|       +-- role.md            # Agent role line
-|       +-- goal.md            # Agent goal (edit to tune behaviour)
-|       +-- backstory.md       # Agent backstory
-|       +-- description.md     # Task description
-|       +-- expected_output.md # Task expected output
+|   |   +-- __init__.py        # @cyber_tool / @pentest_tool / @research_brief_tool wrappers
+|   |                          #   + MEMBER = SquadMember(...) constant
+|   |   +-- role.md            # Agent role line
+|   |   +-- goal.md            # Agent goal (edit to tune behaviour)
+|   |   +-- backstory.md       # Agent backstory
+|   |   +-- skills/<name>/SKILL.md   # Per-agent skills the runtime CrewAI sees
+|   |   +-- <task>/
+|   |       +-- description.md       # Task description (one folder per task)
+|   |       +-- expected_output.md   # Task expected output
+|   +-- penetration_tester/
+|       +-- probes/<family>.py # @pentest_tool wrappers (injection, auth, headers,
+|       |                      #   disclosure, client_side, network, external)
+|       +-- cloud/*.py         # Cloud-service @cyber_tool wrappers (S3, DBs, panels)
+|       +-- recon.py           # Recon-query @cyber_tool wrappers
 |
-+-- tools/
++-- tools/             # Tool implementations (the inner check_X helpers)
 |   +-- h1_api.py          # HackerOne REST client
+|   +-- http.py            # Programme-attributed HTTP session
+|   +-- workspace.py       # Run-dir path resolution + traversal guard
 |   +-- metrics.py         # Token usage and cost tracking
-|   +-- report_tools.py    # Markdown report renderer and file writer
-|   +-- recon/             # Recon: subfinder, httpx, nmap, TLS, DNS, dirfuzz,
-|   |                      #   waybackurls, cert transparency, traceroute, scope guard
-|   +-- pentest/           # Pentest: nuclei, sqlmap, CORS, SSRF, XSS, SRI,
-|   |                      #   header injection, source maps, error disclosure
-|   +-- cloud/             # Cloud: S3, Azure Blob, exposed services, admin panels,
-|   |   +-- databases/     #   per-engine DB checks (ES, CouchDB, Redis, MongoDB,
-|   |                      #   PostgreSQL, MySQL), branded panels (cPanel, Webmin, ...)
+|   +-- report_tools.py    # Markdown report renderer
+|   +-- triage_tools.py    # Per-finding validation + assessment persistence
+|   +-- research_tools.py  # Attack plan finalisation
+|   +-- recon/             # Recon helpers + scope guard (recon/scope.py)
+|   +-- pentest/           # Multi-variant probe helpers (StrEnum + check_X)
+|   +-- cloud/             # Cloud / DB check_X helpers
 |
-+-- tests/             # pytest unit tests (@pytest.mark.unit)
++-- tests/             # pytest unit tests (@pytest.mark.unit), 1530+ cases, 90% floor
++-- .claude/skills/    # Contributor skills (auto-loaded on file-path match)
 +-- proposals/         # Design proposals for upcoming features
++-- CLAUDE.md          # AI contributor guide (skills + conventions)
++-- CONTRIBUTING.md    # Universal contributor guide
 +-- pyproject.toml
 +-- .env.example
 ```
+
+The two-layer split (`squad/<member>/` for the `@`-decorated agent-facing wrappers, `tools/` for the underlying `check_X` and helper functions) keeps the LLM-visible contract narrow and lets the implementations evolve without breaking the agent boundary.
 
 ---
 
@@ -185,14 +209,23 @@ All five must pass. CI runs the same checks on every push.
 
 ### Adding a new agent
 
-1. Create `squad/<role>/` with `__init__.py` (declaring a `MEMBER = SquadMember(...)` constant) and the five prose files: `role.md`, `goal.md`, `backstory.md`, `description.md`, `expected_output.md`.
+1. Create `squad/<role>/` with:
+   - `__init__.py` declaring a `MEMBER = SquadMember(...)` constant
+   - The three Agent prose files at the member root: `role.md`, `goal.md`, `backstory.md`
+   - One `<task>/` subdirectory per pipeline task, each with `description.md` and `expected_output.md`
+   - Optional `skills/<name>/SKILL.md` for runtime skills the CrewAI agent should see
 2. Import `MEMBER` into `_SQUAD` in `crew.py`.
-3. Wire its task into `build_tasks()` in `tasks.py` with the correct `context` dependencies.
+3. Wire its task(s) into `build_tasks()` in `tasks.py` with the correct `context` dependencies.
 4. Add unit tests for any new tool functions.
 
 ### Tuning prompts
 
-Edit any of the five prose files in `squad/<member>/`: `role.md`, `goal.md`, `backstory.md` (Agent) or `description.md`, `expected_output.md` (Task). No Python changes required. Verify with `--dry-run` and note the rationale in your PR.
+Edit the Agent prose (`role.md` / `goal.md` / `backstory.md` at the member root) or the per-task prose (`<task>/description.md` / `expected_output.md`). No Python changes required. Verify with `--dry-run` and note the rationale in your PR.
+
+### Conventions
+
+- `CLAUDE.md` carries the AI-contributor guide and the `.claude/skills/` catalogue (auto-loaded on file-path matches via the `PreToolUse` hook).
+- `CONTRIBUTING.md` carries the universal rules: ASCII only, minimal diff, FIXME/TODO grammar, the CI parity stack.
 
 ---
 
@@ -201,7 +234,7 @@ Edit any of the five prose files in `squad/<member>/`: `role.md`, `goal.md`, `ba
 - **Branch naming** - `feat/`, `fix/`, `chore/`, or `docs/` prefixes.
 - **One concern per PR** - a new agent, a new tool, a config change - not all three.
 - **No secrets in code** - credentials belong in `.env` (gitignored). New config fields go in `config.py` and must be documented in `.env.example`.
-- **Scope and safety** - changes to scanning behaviour must preserve rate-limiting and the scope guard in `recon_tools.py`. `filter_in_scope()` is a hard safety boundary; do not weaken it.
+- **Scope and safety** - changes to scanning behaviour must preserve rate-limiting and the scope guard in `tools/recon/scope.py`. `filter_in_scope()` is a hard safety boundary; the `@cyber_tool(scope_filter=...)` decorator applies it at the wrapper layer before the body ever sees agent-picked hosts. Do not weaken it or move it body-side.
 
 ### CI jobs
 
