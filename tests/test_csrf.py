@@ -202,9 +202,9 @@ class TestCheckCSRF:
     # ------------------------------------------------------------------
 
     def test_detects_missing_csrf_token_medium(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/login", status_code=200)
+        ep = Endpoint(url=f"{target_url}/login", status_code=200)
 
         with (
             patch(
@@ -224,9 +224,9 @@ class TestCheckCSRF:
         assert "/submit" in tier1[0].evidence
 
     def test_no_finding_when_csrf_token_present(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/login", status_code=200)
+        ep = Endpoint(url=f"{target_url}/login", status_code=200)
 
         with patch(
             "requests.get",
@@ -239,9 +239,9 @@ class TestCheckCSRF:
         assert results == []
 
     def test_skips_non_html_responses(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/api/data", status_code=200)
+        ep = Endpoint(url=f"{target_url}/api/data", status_code=200)
 
         with patch(
             "requests.get",
@@ -254,8 +254,8 @@ class TestCheckCSRF:
         mock_get.assert_called_once()
         assert results == []
 
-    def test_skips_5xx_endpoints(self, victim_url: str) -> None:
-        ep = Endpoint(url=f"{victim_url}/broken", status_code=500)
+    def test_skips_5xx_endpoints(self, target_url: str) -> None:
+        ep = Endpoint(url=f"{target_url}/broken", status_code=500)
 
         with patch("requests.get") as mock_get:
             results = check_csrf([ep])
@@ -264,9 +264,9 @@ class TestCheckCSRF:
         assert results == []
 
     def test_skips_endpoints_with_get_forms_only(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/search", status_code=200)
+        ep = Endpoint(url=f"{target_url}/search", status_code=200)
 
         with patch(
             "requests.get",
@@ -279,9 +279,9 @@ class TestCheckCSRF:
         assert results == []
 
     def test_no_finding_on_page_with_no_forms(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/about", status_code=200)
+        ep = Endpoint(url=f"{target_url}/about", status_code=200)
 
         with patch(
             "requests.get",
@@ -293,8 +293,8 @@ class TestCheckCSRF:
 
         assert results == []
 
-    def test_network_exception_is_swallowed(self, victim_url: str) -> None:
-        ep = Endpoint(url=f"{victim_url}/login", status_code=200)
+    def test_network_exception_is_swallowed(self, target_url: str) -> None:
+        ep = Endpoint(url=f"{target_url}/login", status_code=200)
 
         with patch("requests.get", side_effect=OSError("connection refused")):
             results = check_csrf([ep])
@@ -302,11 +302,11 @@ class TestCheckCSRF:
         assert results == []
 
     def test_no_tier1_finding_when_xsrf_cookie_set(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
         # Angular-style cookie suppresses the missing-input finding (Tier 1)
         # but Tier 2 still runs - a per-view bypass could expose the endpoint.
-        ep = Endpoint(url=f"{victim_url}/login", status_code=200)
+        ep = Endpoint(url=f"{target_url}/login", status_code=200)
 
         with (
             patch(
@@ -324,10 +324,10 @@ class TestCheckCSRF:
         assert not any(r.severity_hint == Severity.MEDIUM for r in results)
 
     def test_no_tier1_finding_when_csrftoken_cookie_set(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
         # Django pattern - Tier 1 suppressed, Tier 2 still runs.
-        ep = Endpoint(url=f"{victim_url}/login", status_code=200)
+        ep = Endpoint(url=f"{target_url}/login", status_code=200)
 
         with (
             patch(
@@ -345,14 +345,14 @@ class TestCheckCSRF:
         assert not any(r.severity_hint == Severity.MEDIUM for r in results)
 
     def test_no_tier1_finding_when_csrf_meta_tag_present(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
         # Rails-style meta tag suppresses Tier 1 but Tier 2 still runs.
         html = (
             '<html><head><meta name="csrf-token" content="abc"></head>'
             "<body>" + _HTML_POST_NO_TOKEN + "</body></html>"
         )
-        ep = Endpoint(url=f"{victim_url}/login", status_code=200)
+        ep = Endpoint(url=f"{target_url}/login", status_code=200)
 
         with (
             patch(
@@ -368,10 +368,10 @@ class TestCheckCSRF:
         assert not any(r.severity_hint == Severity.MEDIUM for r in results)
 
     def test_tier2_fires_despite_csrf_cookie_bypass(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
         # Cookie present but endpoint accepts cross-origin POST (e.g. @csrf_exempt).
-        ep = Endpoint(url=f"{victim_url}/login", status_code=200)
+        ep = Endpoint(url=f"{target_url}/login", status_code=200)
 
         with (
             patch(
@@ -392,14 +392,14 @@ class TestCheckCSRF:
         assert not any(r.severity_hint == Severity.MEDIUM for r in results)
 
     def test_tier2_fires_despite_csrf_meta_tag_bypass(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
         # Meta tag present but endpoint accepts cross-origin POST (e.g. skip_before_action).
         html = (
             '<html><head><meta name="csrf-token" content="abc"></head>'
             "<body>" + _HTML_POST_NO_TOKEN + "</body></html>"
         )
-        ep = Endpoint(url=f"{victim_url}/login", status_code=200)
+        ep = Endpoint(url=f"{target_url}/login", status_code=200)
 
         with (
             patch(
@@ -417,10 +417,10 @@ class TestCheckCSRF:
         assert "skip_before_action" in tier2[0].evidence
 
     def test_session_cookies_do_not_suppress_finding(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
         # Cookies that aren't CSRF-related shouldn't act as a free pass.
-        ep = Endpoint(url=f"{victim_url}/login", status_code=200)
+        ep = Endpoint(url=f"{target_url}/login", status_code=200)
 
         with (
             patch(
@@ -443,9 +443,9 @@ class TestCheckCSRF:
     # ------------------------------------------------------------------
 
     def test_detects_origin_not_validated_high(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/login", status_code=200)
+        ep = Endpoint(url=f"{target_url}/login", status_code=200)
 
         with (
             patch(
@@ -464,10 +464,10 @@ class TestCheckCSRF:
         assert "evil.example.com" in tier2[0].evidence
 
     def test_no_high_finding_when_origin_validated(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
         # Evil origin gets 403, correct origin gets 200 -> origin is validated.
-        ep = Endpoint(url=f"{victim_url}/login", status_code=200)
+        ep = Endpoint(url=f"{target_url}/login", status_code=200)
 
         def fake_post(url: str, **kw: object) -> MagicMock:
             headers = kw.get("headers", {})
@@ -491,10 +491,10 @@ class TestCheckCSRF:
         assert tier2 == []
 
     def test_no_high_finding_when_both_non_2xx(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
         # Both origins rejected -> no HIGH finding (not exploitable).
-        ep = Endpoint(url=f"{victim_url}/login", status_code=200)
+        ep = Endpoint(url=f"{target_url}/login", status_code=200)
 
         with (
             patch(
@@ -511,11 +511,11 @@ class TestCheckCSRF:
         assert tier2 == []
 
     def test_tier2_runs_even_when_form_has_token(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
         # A form with a hidden CSRF token passes Tier 1, but Tier 2 still
         # probes for Origin validation - those are independent checks.
-        ep = Endpoint(url=f"{victim_url}/login", status_code=200)
+        ep = Endpoint(url=f"{target_url}/login", status_code=200)
 
         with (
             patch(
@@ -532,10 +532,10 @@ class TestCheckCSRF:
         assert not any(r.severity_hint == Severity.MEDIUM for r in results)
 
     def test_tier2_exception_is_swallowed(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
         # GET succeeds and Tier 1 fires, but Tier 2 POST raises.
-        ep = Endpoint(url=f"{victim_url}/login", status_code=200)
+        ep = Endpoint(url=f"{target_url}/login", status_code=200)
 
         with (
             patch(
@@ -557,14 +557,14 @@ class TestCheckCSRF:
     # ------------------------------------------------------------------
 
     def test_one_tier1_finding_per_endpoint(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
         # Page has two unprotected POST forms; still only one Tier-1 finding.
         html = """
         <form method="POST" action="/a"><input type="text" name="u"></form>
         <form method="POST" action="/b"><input type="text" name="v"></form>
         """
-        ep = Endpoint(url=f"{victim_url}/multi", status_code=200)
+        ep = Endpoint(url=f"{target_url}/multi", status_code=200)
 
         with (
             patch(
@@ -581,10 +581,10 @@ class TestCheckCSRF:
         assert len(tier1) == 1
 
     def test_deduplicates_same_url(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep1 = Endpoint(url=f"{victim_url}/login", status_code=200)
-        ep2 = Endpoint(url=f"{victim_url}/login", status_code=200)
+        ep1 = Endpoint(url=f"{target_url}/login", status_code=200)
+        ep2 = Endpoint(url=f"{target_url}/login", status_code=200)
 
         with (
             patch(
@@ -601,10 +601,10 @@ class TestCheckCSRF:
         assert len(tier1) == 1
 
     def test_multiple_distinct_endpoints_each_get_findings(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep1 = Endpoint(url=f"{victim_url}/login", status_code=200)
-        ep2 = Endpoint(url=f"{victim_url}/register", status_code=200)
+        ep1 = Endpoint(url=f"{target_url}/login", status_code=200)
+        ep2 = Endpoint(url=f"{target_url}/register", status_code=200)
 
         with (
             patch(
@@ -621,10 +621,10 @@ class TestCheckCSRF:
         assert len(tier1) == 2
 
     def test_endpoint_without_status_code_is_probed(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
         # status_code=None means recon did not record it - still probe.
-        ep = Endpoint(url=f"{victim_url}/login")
+        ep = Endpoint(url=f"{target_url}/login")
 
         with (
             patch(

@@ -35,17 +35,17 @@ class TestExtractDomain:
     def test_plain_domain(self):
         assert extract_domain("example.com") == "example.com"
 
-    def test_url_with_scheme(self):
-        assert extract_domain("https://example.com") == "example.com"
+    def test_url_with_scheme(self, target_apex):
+        assert extract_domain(f"https://{target_apex}") == "example.com"
 
-    def test_url_with_path(self):
-        assert extract_domain("https://api.example.com/v1/search") == "api.example.com"
+    def test_url_with_path(self, target_apex):
+        assert extract_domain(f"https://api.{target_apex}/v1/search") == "api.example.com"
 
     def test_subdomain(self):
         assert extract_domain("sub.example.com") == "sub.example.com"
 
-    def test_url_with_port(self):
-        assert extract_domain("https://example.com:8443") == "example.com"
+    def test_url_with_port(self, target_apex):
+        assert extract_domain(f"https://{target_apex}:8443") == "example.com"
 
 
 class TestSeedingConstants:
@@ -179,16 +179,16 @@ class TestEnumerateSubdomains:
 
 # probe_endpoints
 class TestProbeEndpoints:
-    def test_parses_httpx_json_output(self):
+    def test_parses_httpx_json_output(self, target_apex):
         import json
 
         mock_result = MagicMock()
         mock_result.stdout = "\n".join(
             [
                 json.dumps(
-                    {"url": "https://api.example.com", "status_code": 200, "tech": ["nginx"]}
+                    {"url": f"https://api.{target_apex}", "status_code": 200, "tech": ["nginx"]}
                 ),
-                json.dumps({"url": "https://admin.example.com", "status_code": 403, "tech": []}),
+                json.dumps({"url": f"https://admin.{target_apex}", "status_code": 403, "tech": []}),
             ]
         )
         mock_result.returncode = 0
@@ -200,14 +200,14 @@ class TestProbeEndpoints:
             result = probe_endpoints(["api.example.com", "admin.example.com"])
 
         assert len(result) == 2
-        assert result[0].url == "https://api.example.com"
+        assert result[0].url == f"https://api.{target_apex}"
         assert result[0].status_code == 200
         assert "nginx" in result[0].technologies
 
-    def test_skips_malformed_json_lines(self):
+    def test_skips_malformed_json_lines(self, target_apex):
         mock_result = MagicMock()
         mock_result.stdout = (
-            'not json\n{"url": "https://api.example.com", "status_code": 200, "tech": []}'
+            f'not json\n{{"url": "https://api.{target_apex}", "status_code": 200, "tech": []}}'
         )
         mock_result.returncode = 0
 
@@ -324,9 +324,9 @@ class TestCertTransparency:
 
 # historical_urls
 class TestHistoricalUrls:
-    def test_returns_urls_from_binary_output(self):
+    def test_returns_urls_from_binary_output(self, target_apex):
         mock_proc = MagicMock()
-        mock_proc.stdout = "https://example.com/old-path\nhttps://example.com/another\n"
+        mock_proc.stdout = f"https://{target_apex}/old-path\nhttps://example.com/another\n"
         mock_proc.returncode = 0
 
         with (
@@ -335,8 +335,8 @@ class TestHistoricalUrls:
         ):
             result = historical_urls("example.com")
 
-        assert "https://example.com/old-path" in result
-        assert "https://example.com/another" in result
+        assert f"https://{target_apex}/old-path" in result
+        assert f"https://{target_apex}/another" in result
 
     def test_missing_binary_raises(self):
         with patch("shutil.which", return_value=None):
@@ -370,11 +370,11 @@ class TestDiscoverPaths:
 
         return fake_run
 
-    def test_returns_discovered_endpoints(self):
-        endpoints = [Endpoint(url="https://example.com/", status_code=200)]
+    def test_returns_discovered_endpoints(self, target_apex):
+        endpoints = [Endpoint(url=f"https://{target_apex}/", status_code=200)]
         hits = [
-            {"url": "https://example.com/admin", "status": 200},
-            {"url": "https://example.com/api", "status": 200},
+            {"url": f"https://{target_apex}/admin", "status": 200},
+            {"url": f"https://{target_apex}/api", "status": 200},
         ]
         with (
             patch("shutil.which", return_value="/usr/bin/ffuf"),
@@ -383,17 +383,17 @@ class TestDiscoverPaths:
             result = discover_paths(endpoints)
 
         urls = [ep.url for ep in result]
-        assert "https://example.com/admin" in urls
-        assert "https://example.com/api" in urls
+        assert f"https://{target_apex}/admin" in urls
+        assert f"https://{target_apex}/api" in urls
 
-    def test_deduplicates_known_urls(self):
+    def test_deduplicates_known_urls(self, target_apex):
         endpoints = [
-            Endpoint(url="https://example.com/", status_code=200),
-            Endpoint(url="https://example.com/admin", status_code=200),
+            Endpoint(url=f"https://{target_apex}/", status_code=200),
+            Endpoint(url=f"https://{target_apex}/admin", status_code=200),
         ]
         hits = [
-            {"url": "https://example.com/admin", "status": 200},
-            {"url": "https://example.com/new-path", "status": 200},
+            {"url": f"https://{target_apex}/admin", "status": 200},
+            {"url": f"https://{target_apex}/new-path", "status": 200},
         ]
         with (
             patch("shutil.which", return_value="/usr/bin/ffuf"),
@@ -402,26 +402,26 @@ class TestDiscoverPaths:
             result = discover_paths(endpoints)
 
         urls = [ep.url for ep in result]
-        assert "https://example.com/admin" not in urls
-        assert "https://example.com/new-path" in urls
+        assert f"https://{target_apex}/admin" not in urls
+        assert f"https://{target_apex}/new-path" in urls
 
     def test_empty_endpoints_returns_empty(self):
         assert discover_paths([]) == []
 
-    def test_skips_endpoints_with_500_status(self):
-        endpoints = [Endpoint(url="https://example.com/", status_code=500)]
+    def test_skips_endpoints_with_500_status(self, target_apex):
+        endpoints = [Endpoint(url=f"https://{target_apex}/", status_code=500)]
         with patch("shutil.which", return_value="/usr/bin/ffuf"):
             result = discover_paths(endpoints)
         assert result == []
 
-    def test_missing_binary_raises_oserror(self):
-        endpoints = [Endpoint(url="https://example.com/", status_code=200)]
+    def test_missing_binary_raises_oserror(self, target_apex):
+        endpoints = [Endpoint(url=f"https://{target_apex}/", status_code=200)]
         with patch("shutil.which", return_value=None):
             with pytest.raises(OSError, match="ffuf"):
                 discover_paths(endpoints)
 
-    def test_ffuf_exception_is_swallowed(self):
-        endpoints = [Endpoint(url="https://example.com/", status_code=200)]
+    def test_ffuf_exception_is_swallowed(self, target_apex):
+        endpoints = [Endpoint(url=f"https://{target_apex}/", status_code=200)]
         with (
             patch("shutil.which", return_value="/usr/bin/ffuf"),
             patch("subprocess.run", side_effect=Exception("connection refused")),
@@ -429,9 +429,9 @@ class TestDiscoverPaths:
             result = discover_paths(endpoints)
         assert result == []
 
-    def test_respects_status_codes_from_results(self):
-        endpoints = [Endpoint(url="https://example.com/", status_code=200)]
-        hits = [{"url": "https://example.com/protected", "status": 403}]
+    def test_respects_status_codes_from_results(self, target_apex):
+        endpoints = [Endpoint(url=f"https://{target_apex}/", status_code=200)]
+        hits = [{"url": f"https://{target_apex}/protected", "status": 403}]
         with (
             patch("shutil.which", return_value="/usr/bin/ffuf"),
             patch("subprocess.run", side_effect=self._ffuf_side_effect(hits)),
@@ -441,8 +441,8 @@ class TestDiscoverPaths:
         assert len(result) == 1
         assert result[0].status_code == 403
 
-    def test_empty_ffuf_results_returns_empty(self):
-        endpoints = [Endpoint(url="https://example.com/", status_code=200)]
+    def test_empty_ffuf_results_returns_empty(self, target_apex):
+        endpoints = [Endpoint(url=f"https://{target_apex}/", status_code=200)]
         with (
             patch("shutil.which", return_value="/usr/bin/ffuf"),
             patch("subprocess.run", side_effect=self._ffuf_side_effect([])),

@@ -35,11 +35,11 @@ pytestmark = pytest.mark.unit
 
 
 @pytest.fixture()
-def minimal_recon(programme) -> ReconResult:
+def minimal_recon(programme, target_apex) -> ReconResult:
     return ReconResult(
         programme=programme,
         subdomains=["app.example.com"],
-        endpoints=[Endpoint(url="https://app.example.com/", status_code=200)],
+        endpoints=[Endpoint(url=f"https://app.{target_apex}/", status_code=200)],
         open_ports={},
         technologies=[],
     )
@@ -329,10 +329,10 @@ class TestCheckUnauthenticatedDatabases:
 
 
 class TestCheckSensitiveFiles:
-    def _make_eps(self):
-        return [Endpoint(url="https://app.example.com/", status_code=200)]
+    def _make_eps(self, target_apex):
+        return [Endpoint(url=f"https://app.{target_apex}/", status_code=200)]
 
-    def test_detects_git_head(self):
+    def test_detects_git_head(self, target_apex):
         def fake_get(url, **kwargs):
             resp = MagicMock()
             if "/.git/HEAD" in url:
@@ -344,13 +344,13 @@ class TestCheckSensitiveFiles:
             return resp
 
         with patch("requests.get", side_effect=fake_get):
-            results = check_sensitive_files(self._make_eps())
+            results = check_sensitive_files(self._make_eps(target_apex))
         git = [r for r in results if "Git Repository" in r.title]
         assert len(git) == 1
         assert git[0].severity_hint == Severity.HIGH
         assert git[0].vuln_class == "SensitiveFileExposed"
 
-    def test_detects_env_file(self):
+    def test_detects_env_file(self, target_apex):
         def fake_get(url, **kwargs):
             resp = MagicMock()
             if "/.env" in url and "git" not in url:
@@ -362,14 +362,14 @@ class TestCheckSensitiveFiles:
             return resp
 
         with patch("requests.get", side_effect=fake_get):
-            results = check_sensitive_files(self._make_eps())
+            results = check_sensitive_files(self._make_eps(target_apex))
         env = [r for r in results if ".env File" in r.title]
         assert len(env) == 1
 
-    def test_deduplicates_by_origin(self, victim_url: str):
+    def test_deduplicates_by_origin(self, target_url: str):
         endpoints = [
-            Endpoint(url=f"{victim_url}/page1", status_code=200),
-            Endpoint(url=f"{victim_url}/page2", status_code=200),
+            Endpoint(url=f"{target_url}/page1", status_code=200),
+            Endpoint(url=f"{target_url}/page2", status_code=200),
         ]
         call_count = 0
 
@@ -389,17 +389,17 @@ class TestCheckSensitiveFiles:
             ["/.git/HEAD", "/.env", "/phpinfo.php", "/server-status", "/.DS_Store"]
         )
 
-    def test_exception_is_swallowed(self):
+    def test_exception_is_swallowed(self, target_apex):
         with patch("requests.get", side_effect=Exception("timeout")):
-            results = check_sensitive_files(self._make_eps())
+            results = check_sensitive_files(self._make_eps(target_apex))
         assert results == []
 
 
 class TestCheckAdminPanels:
-    def _make_eps(self):
-        return [Endpoint(url="https://app.example.com/", status_code=200)]
+    def _make_eps(self, target_apex):
+        return [Endpoint(url=f"https://app.{target_apex}/", status_code=200)]
 
-    def test_detects_admin_panel(self):
+    def test_detects_admin_panel(self, target_apex):
         def fake_get(url, **kwargs):
             resp = MagicMock()
             if "/admin" in url:
@@ -411,13 +411,13 @@ class TestCheckAdminPanels:
             return resp
 
         with patch("requests.get", side_effect=fake_get):
-            results = check_admin_panels(self._make_eps())
+            results = check_admin_panels(self._make_eps(target_apex))
         panels = [r for r in results if "Admin Panel" in r.title]
         assert len(panels) >= 1
         assert panels[0].severity_hint == Severity.HIGH
         assert panels[0].vuln_class == "ExposedAdminPanel"
 
-    def test_no_finding_for_404(self):
+    def test_no_finding_for_404(self, target_apex):
         def always_404(url, **kwargs):
             resp = MagicMock()
             resp.status_code = 404
@@ -425,23 +425,23 @@ class TestCheckAdminPanels:
             return resp
 
         with patch("requests.get", side_effect=always_404):
-            results = check_admin_panels(self._make_eps())
+            results = check_admin_panels(self._make_eps(target_apex))
         assert results == []
 
-    def test_exception_is_swallowed(self):
+    def test_exception_is_swallowed(self, target_apex):
         with patch("requests.get", side_effect=Exception("refused")):
-            results = check_admin_panels(self._make_eps())
+            results = check_admin_panels(self._make_eps(target_apex))
         assert results == []
 
 
 class TestGranularPanels:
     """Spot-check each branded panel tool hits the right port."""
 
-    def _recon(self, programme):
+    def _recon(self, programme, target_apex):
         return ReconResult(
             programme=programme,
             subdomains=["app.example.com"],
-            endpoints=[Endpoint(url="https://app.example.com/", status_code=200)],
+            endpoints=[Endpoint(url=f"https://app.{target_apex}/", status_code=200)],
             open_ports={},
             technologies=[],
         )
@@ -462,57 +462,57 @@ class TestGranularPanels:
 
         return fake_get
 
-    def test_cpanel_port_2083(self, programme):
+    def test_cpanel_port_2083(self, programme, target_apex):
         with patch("requests.get", side_effect=self._port_mock(2083, "cPanel")):
-            results = check_cpanel(self._recon(programme))
+            results = check_cpanel(self._recon(programme, target_apex))
         assert any("cPanel" in r.title for r in results)
 
-    def test_whm_port_2087(self, programme):
+    def test_whm_port_2087(self, programme, target_apex):
         with patch("requests.get", side_effect=self._port_mock(2087, "WebHost Manager")):
-            results = check_cpanel(self._recon(programme))
+            results = check_cpanel(self._recon(programme, target_apex))
         assert any("WHM" in r.title for r in results)
 
-    def test_plesk_port_8443(self, programme):
+    def test_plesk_port_8443(self, programme, target_apex):
         with patch("requests.get", side_effect=self._port_mock(8443, "Plesk")):
-            results = check_plesk(self._recon(programme))
+            results = check_plesk(self._recon(programme, target_apex))
         assert any("Plesk" in r.title for r in results)
 
-    def test_directadmin_port_2222(self, programme):
+    def test_directadmin_port_2222(self, programme, target_apex):
         with patch("requests.get", side_effect=self._port_mock(2222, "DirectAdmin")):
-            results = check_directadmin(self._recon(programme))
+            results = check_directadmin(self._recon(programme, target_apex))
         assert any("DirectAdmin" in r.title for r in results)
 
-    def test_webmin_port_10000(self, programme):
+    def test_webmin_port_10000(self, programme, target_apex):
         with patch("requests.get", side_effect=self._port_mock(10000, "Webmin")):
-            results = check_webmin(self._recon(programme))
+            results = check_webmin(self._recon(programme, target_apex))
         assert any("Webmin" in r.title for r in results)
 
-    def test_grafana_port_3000(self, programme):
+    def test_grafana_port_3000(self, programme, target_apex):
         with patch("requests.get", side_effect=self._port_mock(3000, "Grafana")):
-            results = check_grafana(self._recon(programme))
+            results = check_grafana(self._recon(programme, target_apex))
         assert any("Grafana" in r.title for r in results)
 
-    def test_kibana_port_5601(self, programme):
+    def test_kibana_port_5601(self, programme, target_apex):
         with patch("requests.get", side_effect=self._port_mock(5601, "Kibana")):
-            results = check_kibana(self._recon(programme))
+            results = check_kibana(self._recon(programme, target_apex))
         assert any("Kibana" in r.title for r in results)
 
-    def test_portainer_port_9000(self, programme):
+    def test_portainer_port_9000(self, programme, target_apex):
         with patch("requests.get", side_effect=self._port_mock(9000, "Portainer")):
-            results = check_portainer(self._recon(programme))
+            results = check_portainer(self._recon(programme, target_apex))
         assert any("Portainer" in r.title for r in results)
 
-    def test_consul_port_8500(self, programme):
+    def test_consul_port_8500(self, programme, target_apex):
         with patch("requests.get", side_effect=self._port_mock(8500, "Consul")):
-            results = check_consul_vault(self._recon(programme))
+            results = check_consul_vault(self._recon(programme, target_apex))
         assert any("Consul" in r.title for r in results)
 
-    def test_vault_port_8200(self, programme):
+    def test_vault_port_8200(self, programme, target_apex):
         with patch("requests.get", side_effect=self._port_mock(8200, "Vault")):
-            results = check_consul_vault(self._recon(programme))
+            results = check_consul_vault(self._recon(programme, target_apex))
         assert any("Vault" in r.title for r in results)
 
-    def test_grafana_path_probe(self, programme):
+    def test_grafana_path_probe(self, programme, target_apex):
         """Grafana also probes /grafana on existing origins."""
 
         def fake_get(url, **kwargs):
@@ -526,10 +526,10 @@ class TestGranularPanels:
             return resp
 
         with patch("requests.get", side_effect=fake_get):
-            results = check_grafana(self._recon(programme))
+            results = check_grafana(self._recon(programme, target_apex))
         assert any("Grafana" in r.title for r in results)
 
-    def test_no_finding_when_all_404(self, programme):
+    def test_no_finding_when_all_404(self, programme, target_apex):
         def always_404(url, **kwargs):
             resp = MagicMock()
             resp.status_code = 404
@@ -547,9 +547,9 @@ class TestGranularPanels:
                 check_portainer,
                 check_consul_vault,
             ):
-                assert fn(self._recon(programme)) == []
+                assert fn(self._recon(programme, target_apex)) == []
 
-    def test_exception_is_swallowed(self, programme):
+    def test_exception_is_swallowed(self, programme, target_apex):
         with patch("requests.get", side_effect=Exception("refused")):
             for fn in (
                 check_cpanel,
@@ -561,4 +561,4 @@ class TestGranularPanels:
                 check_portainer,
                 check_consul_vault,
             ):
-                assert fn(self._recon(programme)) == []
+                assert fn(self._recon(programme, target_apex)) == []

@@ -117,7 +117,7 @@ def main() -> None:
         dry_run_summary(crew)
         return
 
-    runtime.run_id = datetime.now(UTC).strftime("%Y%m%d-%H%M%S") + "-" + uuid4().hex[:6]
+    runtime.bind_run_id(datetime.now(UTC).strftime("%Y%m%d-%H%M%S") + "-" + uuid4().hex[:6])
     started_at = datetime.now(UTC)
 
     console.rule("[bold]Bounty Squad[/bold]")

@@ -43,42 +43,96 @@ mkdir -p "$state_dir"
 # layer on top. Each branch is independent so a path can match more than one.
 matches=()
 
+# Pre-classify: paths under tests/ get the tests skills, never the
+# wrapper-author ones. `*` crosses `/` in case patterns, so without
+# this guard ``*/squad/*.py`` over-matches the ``tests/squad/<member>/``
+# mirror dirs and pulls cybersquad-tool / cybersquad-pentest-tool
+# into test edits where they do not apply.
 case "$file_path" in
-    */squad/__init__.py|*/squad/workspace_tools.py|*/squad/*/__init__.py)
-        matches+=(cybersquad-tool)
+    */tests/*) in_tests=1 ;;
+    *)         in_tests=0 ;;
+esac
+
+# Tool wrappers - generic -> specialist stacks so the specialist
+# appears later (more prominent) in context.
+#
+# cybersquad-tool covers any Python file under squad/ at any depth -
+# the catch-all pattern matches the 18+ wrapper files under
+# squad/<member>/<sub>/*.py (probes/, cloud/) alongside the member
+# __init__.py files and the workspace_tools shared layer. Decorator
+# implementation files (_decorator.py) are inclusive false positives:
+# they implement the conventions the skill enforces, so loading is
+# appropriate rather than noisy.
+if [ "$in_tests" = 0 ]; then
+    case "$file_path" in
+        */squad/*.py)
+            matches+=(cybersquad-tool)
+            ;;
+    esac
+    # cybersquad-pentest-tool covers the @pentest_tool wrapper surface
+    # (probes/) and its check_X helper layer (tools/pentest/). Cloud
+    # wrappers use @cyber_tool, not @pentest_tool, so they correctly
+    # stay on the universal skill only.
+    case "$file_path" in
+        */tools/pentest/*.py \
+        |*/squad/penetration_tester/__init__.py \
+        |*/squad/penetration_tester/_decorator.py \
+        |*/squad/penetration_tester/probes/*.py)
+            matches+=(cybersquad-pentest-tool)
+            ;;
+    esac
+    # cybersquad-prompteng stacks on cybersquad-tool with the
+    # communication layer - docstring-vs-Field division of labour,
+    # what to say in each, what NOT to say twice. Same trigger
+    # surface as cybersquad-tool so wrapper edits load mechanics +
+    # communication side by side, specialist last.
+    case "$file_path" in
+        */squad/*.py)
+            matches+=(cybersquad-prompteng)
+            ;;
+    esac
+fi
+
+# cybersquad-models covers the LLM-facing schema layer - typed primitives,
+# workspace artefact shapes, args_schema return models. Triggers on any
+# Python file under models/ at any depth.
+case "$file_path" in
+    */models/*.py)
+        matches+=(cybersquad-models)
         ;;
 esac
 
+# Pipeline plumbing - one skill per file; no stacking.
 case "$file_path" in
-    */tools/pentest/*|*/squad/penetration_tester/__init__.py)
-        matches+=(cybersquad-pentest-tool)
+    */runtime.py|*/main.py)
+        matches+=(cybersquad-runtime)
         ;;
 esac
-
-case "$file_path" in
-    */tests/*)
-        matches+=(cybersquad-test-fixtures)
-        ;;
-esac
-
-case "$file_path" in
-    */tests/features/*|*/tests/bdd/*)
-        matches+=(cybersquad-bdd)
-        ;;
-esac
-
 case "$file_path" in
     */crew.py)
         matches+=(cybersquad-agent-llm)
         ;;
 esac
-
 case "$file_path" in
     */tasks.py)
         matches+=(cybersquad-task)
         ;;
 esac
 
+# Tests - generic -> specialist stacks so BDD-specific guidance lands
+# on top of the shared-fixture catalogue for BDD edits.
+case "$file_path" in
+    */tests/*)
+        matches+=(cybersquad-test-fixtures)
+        ;;
+esac
+case "$file_path" in
+    */tests/features/*|*/tests/bdd/*)
+        matches+=(cybersquad-bdd)
+        ;;
+esac
+
+# Agent-facing prose (runtime CrewAI sees these, not Claude).
 case "$file_path" in
     */squad/skills/*/SKILL.md \
     |*/squad/*/skills/*/SKILL.md \

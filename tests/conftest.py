@@ -45,7 +45,7 @@ def _no_real_sleep(monkeypatch):
 # Domain fixtures
 #
 # Use these instead of ad-hoc hostnames so test intent is readable at a glance.
-# victim_url    - the scanning target (an app we are testing); in-scope per
+# target_url    - the scanning target (an app we are testing); in-scope per
 #                 the ``programme`` fixture's ``*.example.com`` wildcard rule.
 # bystander_url - an out-of-scope host on a different TLD. Use it whenever a
 #                 test exercises the scope guard - the name makes the intent
@@ -53,7 +53,7 @@ def _no_real_sleep(monkeypatch):
 # callback_url  - OOB receiver (a server we control, used for blind injection);
 #                 placeholder until #77 lands real interactsh infrastructure.
 @pytest.fixture()
-def victim_url() -> str:
+def target_url() -> str:
     return "https://victim.example.com"
 
 
@@ -68,35 +68,71 @@ def callback_url() -> str:
 
 
 @pytest.fixture()
-def make_html_page(victim_url: str):
+def make_html_page(target_url: str):
     """Factory for minimal HTML pages containing script tags.
 
     Returns a callable: make_html_page(scripts=[...]) -> str.
-    Defaults to a single <script> pointing at {victim_url}/app.js.
+    Defaults to a single <script> pointing at {target_url}/app.js.
     """
 
     def _make(scripts: list[str] | None = None) -> str:
-        _scripts = scripts if scripts is not None else [f"{victim_url}/app.js"]
+        _scripts = scripts if scripts is not None else [f"{target_url}/app.js"]
         tags = "".join(f'<script src="{s}"></script>' for s in _scripts)
         return f"<html><head>{tags}</head></html>"
 
     return _make
 
 
+@pytest.fixture()
+def run_dir(tmp_path, monkeypatch):
+    """Point ``runtime.run_dir()`` at this test's ``tmp_path``.
+
+    Every tool that reads / writes workspace artefacts resolves the
+    rundir through ``runtime.run_dir()``. Tests that exercise those
+    tools take this fixture to get a per-test rundir without patching
+    the function at every consumer's import alias
+    (``tools.workspace.runtime.run_dir`` / ``tools.triage_tools.runtime.run_dir``
+    / etc) - every consumer ``import runtime`` so a single setattr on
+    ``runtime.run_dir`` propagates to all of them.
+
+    Returns the ``Path`` so tests can read / write fixture files
+    against it directly.
+    """
+    monkeypatch.setattr("runtime.run_dir", lambda: tmp_path)
+    return tmp_path
+
+
 # Programme fixtures
 @pytest.fixture()
-def scope_item_url() -> ScopeItem:
+def target_apex(target_url: str) -> str:
+    """Apex domain derived from ``target_url``.
+
+    Every fixture that builds an in-scope ScopeItem, hostname, or URL
+    derives from this rather than embedding the apex literal. That way
+    flipping ``target_url`` (e.g. to point the suite at DVWA on
+    localhost) propagates through every dependent fixture - no
+    per-fixture hardcoded ``example.com`` left to chase.
+    """
+    from urllib.parse import urlparse
+
+    host = urlparse(target_url).hostname or ""
+    parts = host.split(".")
+    return ".".join(parts[-2:]) if len(parts) >= 2 else host
+
+
+@pytest.fixture()
+def scope_item_url(target_apex: str) -> ScopeItem:
     return ScopeItem(
-        asset_identifier="https://example.com",
+        asset_identifier=f"https://{target_apex}",
         asset_type=ScopeType.URL,
         eligible_for_bounty=True,
     )
 
 
 @pytest.fixture()
-def scope_item_wildcard() -> ScopeItem:
+def scope_item_wildcard(target_apex: str) -> ScopeItem:
     return ScopeItem(
-        asset_identifier="*.example.com",
+        asset_identifier=f"*.{target_apex}",
         asset_type=ScopeType.WILDCARD,
         eligible_for_bounty=True,
     )
@@ -119,11 +155,92 @@ def programme(scope_item_url, scope_item_wildcard) -> Programme:
     )
 
 
+@pytest.fixture()
+def programme_in_workspace(programme: Programme, run_dir, monkeypatch) -> Programme:
+    """Stage ``programme.json`` into the run directory and point runtime at it.
+
+    Reproduces what the PM's ``Save Selected Programme`` does at run
+    start: writes ``<run_dir>/programme.json`` and sets ``runtime`` so
+    every downstream consumer (``current_programme()``, the @cyber_tool
+    ``scope_filter`` wrapper, every tool that reads
+    ``runtime.programme_handle`` for HTTP attribution) sees the in-flight
+    programme without any per-test stubbing of the loader itself.
+
+    The artefact *is* the fixture: tests assert against the same shape
+    the next agent would actually consume.
+    """
+    (run_dir / "programme.json").write_text(programme.model_dump_json(), encoding="utf-8")
+    monkeypatch.setattr("runtime.programme_handle", programme.handle)
+    return programme
+
+
+@pytest.fixture()
+def dvwa_programme() -> Programme:
+    """A Programme shaped like Damn Vulnerable Web Application on localhost.
+
+    DVWA (https://github.com/digininja/DVWA) is the canonical
+    deliberately-vulnerable PHP/MySQL training target; the usual
+    deployment is a local Docker container exposed on ``http://localhost``.
+    A Programme-shaped fixture pointing at that lets BDD scenarios and
+    DVWA-targeted integration work read 'the squad targets DVWA'
+    against a fixture that maps to a real, runnable target rather than
+    a synthetic ``example.com`` that does not exist.
+
+    Bounty table mirrors the in-scope ``programme`` fixture's token
+    values so downstream consumers do not need to special-case a
+    zero-bounty programme; the comment is the documentation that DVWA
+    is not actually a paying programme.
+
+    FIXME(#121 Phase 3): piton for the DVWA sandboxed e2e work. Currently
+    unused - landed alongside the ``programme_in_workspace`` fixture in
+    #159 as scaffolding the BDD scenarios in Phase 3 will pick up. If
+    #121 Phase 3 is descoped or solves the runnable-target need a
+    different way, delete this fixture and ``dvwa_in_workspace`` below.
+    """
+    return Programme(
+        handle="dvwa-localhost",
+        name="Damn Vulnerable Web Application (localhost)",
+        url="https://hackerone.com/dvwa-localhost",
+        bounty_table={
+            Severity.LOW: 100,
+            Severity.MEDIUM: 500,
+            Severity.HIGH: 2000,
+            Severity.CRITICAL: 5000,
+        },
+        in_scope=[
+            ScopeItem(
+                asset_identifier="http://localhost",
+                asset_type=ScopeType.URL,
+                eligible_for_bounty=False,
+            ),
+            ScopeItem(
+                asset_identifier="http://127.0.0.1",
+                asset_type=ScopeType.URL,
+                eligible_for_bounty=False,
+            ),
+        ],
+        out_of_scope=[],
+    )
+
+
+@pytest.fixture()
+def dvwa_in_workspace(dvwa_programme: Programme, run_dir, monkeypatch) -> Programme:
+    """DVWA staged into the run dir - same shape as ``programme_in_workspace``
+    but the in-flight programme is DVWA, so BDD scenarios that point the
+    squad at DVWA exercise the artefact the runtime actually consumes.
+
+    FIXME(#121 Phase 3): see ``dvwa_programme`` above - this is the
+    workspace-staged counterpart waiting on the DVWA e2e scenarios."""
+    (run_dir / "programme.json").write_text(dvwa_programme.model_dump_json(), encoding="utf-8")
+    monkeypatch.setattr("runtime.programme_handle", dvwa_programme.handle)
+    return dvwa_programme
+
+
 # Recon fixtures
 @pytest.fixture()
-def endpoint() -> Endpoint:
+def endpoint(target_apex: str) -> Endpoint:
     return Endpoint(
-        url="https://api.example.com",
+        url=f"https://api.{target_apex}",
         status_code=200,
         technologies=["nginx", "React"],
         parameters=["q", "page"],
@@ -131,12 +248,12 @@ def endpoint() -> Endpoint:
 
 
 @pytest.fixture()
-def recon_result(programme, endpoint) -> ReconResult:
+def recon_result(programme, endpoint, target_apex: str) -> ReconResult:
     return ReconResult(
         programme=programme,
-        subdomains=["api.example.com", "admin.example.com"],
+        subdomains=[f"api.{target_apex}", f"admin.{target_apex}"],
         endpoints=[endpoint],
-        open_ports={"api.example.com": [80, 443]},
+        open_ports={f"api.{target_apex}": [80, 443]},
         technologies=["nginx", "React"],
         notes="Test recon result.",
     )
@@ -144,17 +261,17 @@ def recon_result(programme, endpoint) -> ReconResult:
 
 # Attack plan fixtures
 @pytest.fixture()
-def attack_plan_item() -> AttackPlanItem:
+def attack_plan_item(target_apex: str) -> AttackPlanItem:
     return AttackPlanItem(
         probe="CVE-2022-22965",
-        target="https://api.example.com",
+        target=f"https://api.{target_apex}",
         expected_ceiling=Severity.CRITICAL,
         rationale=(
             "Tomcat-served Spring Boot 2.3 detected in recon; test the standard "
             "POST payload and look for arbitrary file write in the webroot."
         ),
         recon_evidence=[
-            "api.example.com runs Tomcat 9.0",
+            f"api.{target_apex} runs Tomcat 9.0",
             "Spring Boot 2.3 banner observed on /actuator/info",
         ],
     )
@@ -173,11 +290,11 @@ def attack_plan(attack_plan_item) -> AttackPlan:
 
 # Vulnerability fixtures
 @pytest.fixture()
-def raw_finding_high() -> RawFinding:
+def raw_finding_high(target_apex: str) -> RawFinding:
     return RawFinding(
-        title="SQL Injection - https://api.example.com/search",
+        title=f"SQL Injection - https://api.{target_apex}/search",
         vuln_class="SQLi",
-        target="https://api.example.com/search",
+        target=f"https://api.{target_apex}/search",
         evidence="sqlmap identified injection at parameter 'q'",
         tool="sqlmap",
         severity_hint=Severity.HIGH,
@@ -185,11 +302,11 @@ def raw_finding_high() -> RawFinding:
 
 
 @pytest.fixture()
-def raw_finding_low() -> RawFinding:
+def raw_finding_low(target_apex: str) -> RawFinding:
     return RawFinding(
         title="Missing X-Frame-Options",
         vuln_class="Headers",
-        target="https://api.example.com",
+        target=f"https://api.{target_apex}",
         evidence="X-Frame-Options header absent",
         tool="nuclei",
         severity_hint=Severity.LOW,
@@ -210,17 +327,17 @@ def raw_finding_oos() -> RawFinding:
 
 
 @pytest.fixture()
-def verified_vuln() -> VerifiedVulnerability:
+def verified_vuln(target_apex: str) -> VerifiedVulnerability:
     return VerifiedVulnerability(
-        title="SQL Injection - https://api.example.com/search",
+        title=f"SQL Injection - https://api.{target_apex}/search",
         vuln_class="SQLi",
-        target="https://api.example.com/search",
+        target=f"https://api.{target_apex}/search",
         severity=Severity.HIGH,
         cvss_score=8.8,
         cvss_vector="CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H",
         description="A SQL injection vulnerability exists at the search endpoint.",
         steps_to_reproduce=[
-            "Navigate to https://api.example.com/search?q=test",
+            f"Navigate to https://api.{target_apex}/search?q=test",
             "Append a single quote to the q parameter",
             "Observe database error in the response",
         ],

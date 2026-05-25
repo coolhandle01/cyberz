@@ -16,12 +16,14 @@ With `CYBERSQUAD_HUMAN_INPUT=true` (the default) the pipeline pauses after progr
 
 | Agent | Responsibility | Tools |
 |---|---|---|
-| Programme Manager | Ranks H1 programmes by bounty value; verifies automated scanning is permitted | HackerOne API |
-| OSINT Analyst | Enumerates subdomains, live endpoints, open ports; passive TLS/DNS checks; network path tracing; LLM endpoint detection | subfinder, httpx, nmap, testssl.sh, dirfuzz, waybackurls, cert transparency, tracepath |
-| Penetration Tester | 30 targeted checks selected per-engagement based on recon evidence | nuclei (tag-filtered by technology), sqlmap, nosqli, prompt injection canary probe, CORS, SSRF, reflected XSS, SRI, header injection, host headers, JS source maps, error disclosure, sensitive files, admin panels, S3, Azure Blob, per-engine database checks (Elasticsearch, CouchDB, Redis, MongoDB, PostgreSQL, MySQL), branded panels (cPanel/WHM, Plesk, DirectAdmin, Webmin, Grafana, Kibana, Portainer, Consul/Vault) |
-| Vulnerability Researcher | Triages raw findings, assigns CVSS 3.1 scores, validates scope | - |
-| Technical Author | Renders complete HackerOne-format Markdown disclosure reports | - |
-| Disclosure Coordinator | Submits reports via H1 API and records submission metadata | HackerOne API |
+| Programme Manager | Ranks H1 programmes by bounty value; verifies automated scanning is permitted | Browse / Hydrate / Save Selected Programme (HackerOne API) |
+| OSINT Analyst | Enumerates subdomains, live endpoints, open ports; passive TLS/DNS checks; network path tracing; LLM endpoint detection | Run Initial Sweep, Recon Subdomains / Endpoints / Open Ports, Certificate Transparency Lookup, Historical URL Discovery, LLM Endpoint Detection, Annotate Host, Uncovered Hosts, Finalise Recon (backed by subfinder, httpx, nmap, testssl.sh, dirfuzz, waybackurls, cert transparency, tracepath) |
+| Penetration Tester | 50+ targeted checks selected per-engagement based on recon evidence | 7 multi-variant probe families (injection / auth / headers / disclosure / client-side / network / external) plus per-service `@cyber_tool` wrappers for cloud + DB checks; Save Findings persists the typed `RawFinding` chain. Backed by nuclei (tag-filtered by technology), sqlmap, nosqli, plus the cloud-service / panel / per-engine database catalogue (Elasticsearch, CouchDB, Redis, MongoDB, PostgreSQL, MySQL; cPanel/WHM, Plesk, DirectAdmin, Webmin, Grafana, Kibana, Portainer, Consul/Vault; S3, Azure Blob) |
+| Vulnerability Researcher | Triages raw findings, assigns CVSS 3.1 scores, validates scope | NVD CVE Lookup, List Programme Reports, Finalise Research (research task); List / Read Raw Findings, Calculate CVSS Score, Lookup CWE, Lookup OWASP Guidance, Assess Raw Finding, Discard Finding, Finalise Triage (triage task) |
+| Technical Author | Renders complete HackerOne-format Markdown disclosure reports | Sanitise Evidence, Lookup CWE, Lookup OWASP Guidance, Calculate CVSS Score, List Programme Reports, Draft Vulnerability Report, Finalise Reports |
+| Disclosure Coordinator | Submits reports via H1 API and records submission metadata | Submit Report, Check H1 Duplicate (HackerOne API) |
+
+Agents do not pass artefacts inline. Each stage writes a typed JSON file to the run directory (`programme.json`, `sweep.json`, `recon.json`, `findings.json`, `verified.json`, `reports.json`) and the next agent reads it back through a Pydantic model. Mis-shaped values reject at the reader, not silently mid-pipeline. The in-flight programme handle is workspace state too - bound once at run start by `runtime.bind_programme(...)` and read by every tool that needs scope context. Every wrapper that takes agent-picked hosts runs them through `filter_in_scope()` at the decorator boundary before the body sees them.
 
 ---
 
@@ -124,36 +126,58 @@ cybersquad/
 +-- main.py            # CLI entrypoint
 +-- crew.py            # Assembles LLM, agents, tasks, and approval gates
 +-- tasks.py           # Pipeline wiring - context chaining and approval gates
++-- runtime.py         # Pipeline-scoped context (run_id, programme_handle)
 +-- config.py          # Env-var-backed configuration (singleton: config.*)
-+-- models.py          # Pydantic data contracts between agents
+|
++-- models/            # Pydantic data contracts between agents
+|   +-- primitives.py  # Typed strings (Hostname, HttpUrl) + Severity StrEnum
+|   +-- finding.py     # RawFinding (PT output)
+|   +-- triage.py      # TriageAssessment, VerifiedVulnerability (VR output)
+|   +-- report.py      # AuthoredDraft, DisclosureReport (TA / DC output)
+|   +-- h1.py          # Programme + ScopeItem + bounty table
+|   +-- ...            # asset, attack, cve, cwe, dns, insight, owasp, workspace
 |
 +-- squad/             # One sub-package per agent
-|   +-- __init__.py    # SquadMember dataclass + build_agent() / build_task() helpers
+|   +-- __init__.py    # @cyber_tool decorator, build_agent / build_task helpers
+|   +-- workspace_tools.py  # Shared read-only wrappers + current_programme()
 |   +-- <member>/
-|       +-- __init__.py        # @tool functions + MEMBER = SquadMember(...) constant
-|       +-- role.md            # Agent role line
-|       +-- goal.md            # Agent goal (edit to tune behaviour)
-|       +-- backstory.md       # Agent backstory
-|       +-- description.md     # Task description
-|       +-- expected_output.md # Task expected output
+|   |   +-- __init__.py        # @cyber_tool / @pentest_tool / @research_brief_tool wrappers
+|   |                          #   + MEMBER = SquadMember(...) constant
+|   |   +-- role.md            # Agent role line
+|   |   +-- goal.md            # Agent goal (edit to tune behaviour)
+|   |   +-- backstory.md       # Agent backstory
+|   |   +-- skills/<name>/SKILL.md   # Per-agent skills the runtime CrewAI sees
+|   |   +-- <task>/
+|   |       +-- description.md       # Task description (one folder per task)
+|   |       +-- expected_output.md   # Task expected output
+|   +-- penetration_tester/
+|       +-- probes/<family>.py # @pentest_tool wrappers (injection, auth, headers,
+|       |                      #   disclosure, client_side, network, external)
+|       +-- cloud/*.py         # Cloud-service @cyber_tool wrappers (S3, DBs, panels)
+|       +-- recon.py           # Recon-query @cyber_tool wrappers
 |
-+-- tools/
++-- tools/             # Tool implementations (the inner check_X helpers)
 |   +-- h1_api.py          # HackerOne REST client
+|   +-- http.py            # Programme-attributed HTTP session
+|   +-- workspace.py       # Run-dir path resolution + traversal guard
 |   +-- metrics.py         # Token usage and cost tracking
-|   +-- report_tools.py    # Markdown report renderer and file writer
-|   +-- recon/             # Recon: subfinder, httpx, nmap, TLS, DNS, dirfuzz,
-|   |                      #   waybackurls, cert transparency, traceroute, scope guard
-|   +-- pentest/           # Pentest: nuclei, sqlmap, CORS, SSRF, XSS, SRI,
-|   |                      #   header injection, source maps, error disclosure
-|   +-- cloud/             # Cloud: S3, Azure Blob, exposed services, admin panels,
-|   |   +-- databases/     #   per-engine DB checks (ES, CouchDB, Redis, MongoDB,
-|   |                      #   PostgreSQL, MySQL), branded panels (cPanel, Webmin, ...)
+|   +-- report_tools.py    # Markdown report renderer
+|   +-- triage_tools.py    # Per-finding validation + assessment persistence
+|   +-- research_tools.py  # Attack plan finalisation
+|   +-- recon/             # Recon helpers + scope guard (recon/scope.py)
+|   +-- pentest/           # Multi-variant probe helpers (StrEnum + check_X)
+|   +-- cloud/             # Cloud / DB check_X helpers
 |
-+-- tests/             # pytest unit tests (@pytest.mark.unit)
++-- tests/             # pytest unit tests (@pytest.mark.unit), 1530+ cases, 90% floor
++-- .claude/skills/    # Contributor skills (auto-loaded on file-path match)
 +-- proposals/         # Design proposals for upcoming features
++-- CLAUDE.md          # AI contributor guide (skills + conventions)
++-- CONTRIBUTING.md    # Universal contributor guide
 +-- pyproject.toml
 +-- .env.example
 ```
+
+The two-layer split (`squad/<member>/` for the `@`-decorated agent-facing wrappers, `tools/` for the underlying `check_X` and helper functions) keeps the LLM-visible contract narrow and lets the implementations evolve without breaking the agent boundary.
 
 ---
 
@@ -185,14 +209,23 @@ All five must pass. CI runs the same checks on every push.
 
 ### Adding a new agent
 
-1. Create `squad/<role>/` with `__init__.py` (declaring a `MEMBER = SquadMember(...)` constant) and the five prose files: `role.md`, `goal.md`, `backstory.md`, `description.md`, `expected_output.md`.
+1. Create `squad/<role>/` with:
+   - `__init__.py` declaring a `MEMBER = SquadMember(...)` constant
+   - The three Agent prose files at the member root: `role.md`, `goal.md`, `backstory.md`
+   - One `<task>/` subdirectory per pipeline task, each with `description.md` and `expected_output.md`
+   - Optional `skills/<name>/SKILL.md` for runtime skills the CrewAI agent should see
 2. Import `MEMBER` into `_SQUAD` in `crew.py`.
-3. Wire its task into `build_tasks()` in `tasks.py` with the correct `context` dependencies.
+3. Wire its task(s) into `build_tasks()` in `tasks.py` with the correct `context` dependencies.
 4. Add unit tests for any new tool functions.
 
 ### Tuning prompts
 
-Edit any of the five prose files in `squad/<member>/`: `role.md`, `goal.md`, `backstory.md` (Agent) or `description.md`, `expected_output.md` (Task). No Python changes required. Verify with `--dry-run` and note the rationale in your PR.
+Edit the Agent prose (`role.md` / `goal.md` / `backstory.md` at the member root) or the per-task prose (`<task>/description.md` / `expected_output.md`). No Python changes required. Verify with `--dry-run` and note the rationale in your PR.
+
+### Conventions
+
+- `CLAUDE.md` carries the AI-contributor guide and the `.claude/skills/` catalogue (auto-loaded on file-path matches via the `PreToolUse` hook).
+- `CONTRIBUTING.md` carries the universal rules: ASCII only, minimal diff, FIXME/TODO grammar, the CI parity stack.
 
 ---
 
@@ -201,7 +234,7 @@ Edit any of the five prose files in `squad/<member>/`: `role.md`, `goal.md`, `ba
 - **Branch naming** - `feat/`, `fix/`, `chore/`, or `docs/` prefixes.
 - **One concern per PR** - a new agent, a new tool, a config change - not all three.
 - **No secrets in code** - credentials belong in `.env` (gitignored). New config fields go in `config.py` and must be documented in `.env.example`.
-- **Scope and safety** - changes to scanning behaviour must preserve rate-limiting and the scope guard in `recon_tools.py`. `filter_in_scope()` is a hard safety boundary; do not weaken it.
+- **Scope and safety** - changes to scanning behaviour must preserve rate-limiting and the scope guard in `tools/recon/scope.py`. `filter_in_scope()` is a hard safety boundary; the `@cyber_tool(scope_filter=...)` decorator applies it at the wrapper layer before the body ever sees agent-picked hosts. Do not weaken it or move it body-side.
 
 ### CI jobs
 
@@ -220,6 +253,34 @@ Edit any of the five prose files in `squad/<member>/`: `role.md`, `goal.md`, `ba
 - **Read before you approve.** When running with `CYBERSQUAD_HUMAN_INPUT=true`, review the programme selection and the report carefully before confirming each pause.
 - **Check for duplicates.** Submitting a known duplicate wastes triage time and reflects poorly on the submission record.
 - **Handle reports carefully.** The `reports/` directory contains vulnerability details and evidence. It is gitignored - do not commit or share its contents.
+
+---
+
+## Background reading
+
+Load-bearing structural decisions in cybersquad cite a canonical external spec at the assertion site. The index below is the same set, grouped by concern, for a contributor wanting one map.
+
+**Vulnerability scoring and classification**
+
+- [FIRST CVSS v3.1 Specification Document](https://www.first.org/cvss/v3.1/specification-document) - the vector grammar, metric short codes, and base-score formula implemented by `Calculate CVSS Score` in `tools/report_tools.py` and surfaced by `squad/vulnerability_researcher/triage.py`.
+- [FIRST CVSS v3.1 Calculator](https://www.first.org/cvss/calculator/3-1) - hand-verification entry point for a vector / score pair.
+- [OWASP Top 10:2021](https://owasp.org/Top10/2021/) - the A01..A10 codes encoded by `OWASPCategory` in `tools/pentest/owasp.py` and stamped onto every `check_X` via `@owasp(...)`.
+- [OWASP Cheat Sheet Series](https://cheatsheetseries.owasp.org/) - canonical remediation guidance keyed by topic slug, looked up by `tools/owasp_data.py` and cited in every disclosure's Remediation section.
+
+**LLM safety**
+
+- [OWASP Top 10 for LLM Applications - LLM01:2025 Prompt Injection](https://genai.owasp.org/llmrisk/llm01-prompt-injection/) - the threat model the prompt-injection-aware fields in `models/` defend against (direct vs indirect; tool-captured free text vs agent-produced free text).
+
+**Framework and data-shape primitives**
+
+- [CrewAI - LLMs concept](https://docs.crewai.com/en/concepts/llms) and [Agents concept](https://docs.crewai.com/en/concepts/agents) - the `LLM(...)` / `Agent(llm=...)` contract that `crew.py` relies on; the "bare model string silently ignores temperature and max_tokens" footgun is documented here.
+- [CrewAI - Create Custom Tools](https://docs.crewai.com/en/learn/create-custom-tools) - the `BaseTool.description` and `args_schema: Type[BaseModel]` surfaces our `@cyber_tool` wrapper makes mandatory.
+- [Alexis King, "Parse, don't validate" (2019)](https://lexi-lambda.github.io/blog/2019/11/05/parse-don-t-validate/) - the canonical reference for our boundary-typed-validation discipline. Pydantic v2 is the runtime: [docs.pydantic.dev/2.12/concepts/models/](https://docs.pydantic.dev/2.12/concepts/models/).
+
+**Transport and tokenisation**
+
+- [RFC 9110 section 10.1.5 - User-Agent](https://www.rfc-editor.org/rfc/rfc9110.html#section-10.1.5) - the header semantics underlying `tools/http.py`'s structured UA.
+- [Sennrich et al., Neural Machine Translation of Rare Words with Subword Units (ACL 2016, arXiv:1508.07909)](https://arxiv.org/abs/1508.07909) - the canonical BPE reference. The mechanism (frequency-trained subword vocabulary) is why the ASCII-only rule in `CONTRIBUTING.md` has measurable downstream cost, not just stylistic motivation.
 
 ---
 

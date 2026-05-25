@@ -16,7 +16,6 @@ from pydantic import BaseModel
 
 from models import Endpoint, RawFinding, ReconResult
 from squad import SquadTool, cyber_tool
-from tools import http
 
 _PentestFn = Callable[..., list[RawFinding]]
 
@@ -74,17 +73,13 @@ def _parse_endpoints(endpoints: list[Endpoint]) -> list[Endpoint]:
 
 
 def _recon_from_path(recon_path: str) -> ReconResult:
-    """Read a serialised ReconResult from disk and seed the http programme context.
+    """Read a serialised ReconResult from disk.
 
-    Centralised here so any wrapper that loads a ReconResult propagates the
-    programme handle into outbound User-Agent headers without each call site
-    having to remember the http.set_programme(...) call. ``recon_path`` is a
-    relative path under the run directory.
+    ``recon_path`` is a relative path under the run directory. The
+    outbound User-Agent is sourced from ``runtime.programme_handle``
+    (set by the Programme Manager at run start), so no per-call
+    programme attribution is needed here.
     """
     from tools.workspace import resolve_run_path
 
-    recon = ReconResult.model_validate_json(
-        resolve_run_path(recon_path).read_text(encoding="utf-8")
-    )
-    http.set_programme(recon.programme.handle)
-    return recon
+    return ReconResult.model_validate_json(resolve_run_path(recon_path).read_text(encoding="utf-8"))

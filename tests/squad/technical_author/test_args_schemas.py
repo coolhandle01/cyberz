@@ -66,7 +66,7 @@ def _tools_by_name() -> dict[str, SquadTool]:
     return {t.name: t for t in MEMBER.tools}
 
 
-def _good_authored_draft() -> dict[str, object]:
+def _good_authored_draft(target_apex) -> dict[str, object]:
     """Minimal valid kwargs for ``AuthoredDraft``.
 
     Returned as a dict so the args_schema accept / reject tests can
@@ -86,7 +86,7 @@ def _good_authored_draft() -> dict[str, object]:
             "injection extracts arbitrary rows."
         ),
         "steps_to_reproduce": [
-            "Issue GET https://api.example.com/search?q=test' UNION SELECT 1,2,3-- ",
+            f"Issue GET https://api.{target_apex}/search?q=test' UNION SELECT 1,2,3-- ",
             "Observe the response body contains the union'd rows.",
         ],
         "evidence": 'HTTP/1.1 200 OK\n\n[{"username":"alice"}]',
@@ -103,7 +103,7 @@ def _good_authored_draft() -> dict[str, object]:
     }
 
 
-def _good_draft_kwargs() -> dict[str, object]:
+def _good_draft_kwargs(target_apex) -> dict[str, object]:
     """Minimal valid kwargs for ``_DraftReportArgs``.
 
     Wraps the authored shape (``_good_authored_draft``) in the
@@ -111,7 +111,7 @@ def _good_draft_kwargs() -> dict[str, object]:
     """
     return {
         "finding_index": 0,
-        "authored": _good_authored_draft(),
+        "authored": _good_authored_draft(target_apex),
     }
 
 
@@ -222,15 +222,13 @@ class TestSchemaAcceptReject:
         instance = schema_cls.model_validate(kwargs)
         assert isinstance(instance, schema_cls)
 
-    def test_list_programme_reports_accepts_programme_handle(self, programme) -> None:
-        """``List Programme Reports`` takes the selected programme's handle."""
-        instance = _TaListProgrammeReportsArgs.model_validate(
-            {"programme_handle": programme.handle}
-        )
-        assert instance.programme_handle == programme.handle
+    def test_list_programme_reports_accepts_empty_payload(self) -> None:
+        """``List Programme Reports`` takes no required parameters - the
+        programme is sourced from the workspace at runtime."""
+        instance = _TaListProgrammeReportsArgs.model_validate({})
         assert instance.page_size == 25  # default
 
-    def test_draft_report_accepts_full_authored_shape(self) -> None:
+    def test_draft_report_accepts_full_authored_shape(self, target_apex) -> None:
         """``Draft Vulnerability Report`` accepts the canonical authored payload.
 
         The authored content is the typed ``AuthoredDraft`` (in
@@ -238,24 +236,23 @@ class TestSchemaAcceptReject:
         field; the wrapper-side plumbing (finding_index,
         verified_path) stays top-level.
         """
-        instance = _DraftReportArgs.model_validate(_good_draft_kwargs())
+        instance = _DraftReportArgs.model_validate(_good_draft_kwargs(target_apex))
         assert instance.finding_index == 0
         assert instance.authored.cwe_id == 89
         assert instance.verified_path == "verified.json"  # default
 
-    def test_finalise_reports_accepts_handle_and_summary(self, programme) -> None:
-        """``Finalise Reports`` takes the programme handle and an executive
-        summary that gets attached to every consolidated report."""
+    def test_finalise_reports_accepts_summary(self) -> None:
+        """``Finalise Reports`` takes an executive summary attached to
+        every consolidated report. The programme is sourced from the
+        workspace at runtime."""
         instance = _FinaliseReportsArgs.model_validate(
             {
-                "programme_handle": programme.handle,
                 "summary": (
                     "Tested the API surface and found one Critical SQLi at "
                     "/search. No other findings cleared the floor."
                 ),
             }
         )
-        assert instance.programme_handle == programme.handle
         assert "SQLi" in instance.summary
 
     @pytest.mark.parametrize(
@@ -265,9 +262,8 @@ class TestSchemaAcceptReject:
             _TaLookupCweArgs,  # query required
             _TaLookupOwaspArgs,  # query required
             _TaCalculateCvssArgs,  # vector required
-            _TaListProgrammeReportsArgs,  # programme_handle required
             _DraftReportArgs,  # every authored field required
-            _FinaliseReportsArgs,  # programme_handle + summary required
+            _FinaliseReportsArgs,  # summary required
             _ReadRunFileArgs,  # relative_path required
         ],
     )
@@ -276,26 +272,19 @@ class TestSchemaAcceptReject:
         with pytest.raises(ValidationError):
             schema_cls.model_validate({})
 
-    def test_finalise_reports_requires_both_handle_and_summary(self, programme) -> None:
-        """Both ``programme_handle`` and ``summary`` are required - one alone fails."""
-        with pytest.raises(ValidationError):
-            _FinaliseReportsArgs.model_validate({"programme_handle": programme.handle})
-        with pytest.raises(ValidationError):
-            _FinaliseReportsArgs.model_validate({"summary": "Session summary."})
-
-    def test_draft_report_rejects_partial_authored_payload(self) -> None:
+    def test_draft_report_rejects_partial_authored_payload(self, target_apex) -> None:
         """Each field on ``AuthoredDraft`` is required - dropping any one
         rejects upstream of the wrapper body. Spot-check the four
         most-frequently-missed fields rather than parametrize over the
         full nine: every required field is structurally identical."""
-        full_authored = _good_authored_draft()
+        full_authored = _good_authored_draft(target_apex)
         for missing in ("title", "evidence", "cvss_vector", "cwe_id"):
             partial_authored = {k: v for k, v in full_authored.items() if k != missing}
             kwargs = {"finding_index": 0, "authored": partial_authored}
             with pytest.raises(ValidationError):
                 _DraftReportArgs.model_validate(kwargs)
 
-    def test_draft_report_rejects_non_numeric_cwe_id(self) -> None:
+    def test_draft_report_rejects_non_numeric_cwe_id(self, target_apex) -> None:
         """``AuthoredDraft.cwe_id`` is typed ``int`` - a non-numeric
         string rejects.
 
@@ -303,6 +292,6 @@ class TestSchemaAcceptReject:
         this test only pins the case the validator actually catches: a
         non-numeric string for ``cwe_id``.
         """
-        authored = {**_good_authored_draft(), "cwe_id": "not-a-number"}
+        authored = {**_good_authored_draft(target_apex), "cwe_id": "not-a-number"}
         with pytest.raises(ValidationError):
             _DraftReportArgs.model_validate({"finding_index": 0, "authored": authored})

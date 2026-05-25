@@ -18,8 +18,8 @@ pytestmark = pytest.mark.unit
 
 # check_host_headers - reflection
 class TestCheckHostHeadersReflection:
-    def test_detects_canary_host_in_response_body(self, victim_url: str):
-        endpoint = Endpoint(url=f"{victim_url}/", status_code=200)
+    def test_detects_canary_host_in_response_body(self, target_url: str):
+        endpoint = Endpoint(url=f"{target_url}/", status_code=200)
         mock_resp = MagicMock()
         mock_resp.text = "href=https://cybersquad-canary.invalid/reset"
         mock_resp.headers = {}
@@ -31,8 +31,8 @@ class TestCheckHostHeadersReflection:
         assert len(host_findings) >= 1
         assert host_findings[0].severity_hint == Severity.MEDIUM
 
-    def test_detects_canary_host_in_location_header(self, victim_url: str):
-        endpoint = Endpoint(url=f"{victim_url}/", status_code=200)
+    def test_detects_canary_host_in_location_header(self, target_url: str):
+        endpoint = Endpoint(url=f"{target_url}/", status_code=200)
         mock_resp = MagicMock()
         mock_resp.text = "redirecting..."
         mock_resp.headers = {"Location": "https://cybersquad-canary.invalid/login"}
@@ -43,8 +43,8 @@ class TestCheckHostHeadersReflection:
         host_findings = [r for r in results if r.vuln_class == "HostHeaderInjection"]
         assert len(host_findings) >= 1
 
-    def test_clean_response_produces_no_reflection_finding(self, victim_url: str):
-        endpoint = Endpoint(url=f"{victim_url}/", status_code=200)
+    def test_clean_response_produces_no_reflection_finding(self, target_url: str):
+        endpoint = Endpoint(url=f"{target_url}/", status_code=200)
         mock_resp = MagicMock()
         mock_resp.text = "<html>Normal page</html>"
         mock_resp.headers = {"Content-Type": "text/html"}
@@ -55,16 +55,16 @@ class TestCheckHostHeadersReflection:
         reflection = [r for r in results if r.vuln_class == "HostHeaderInjection"]
         assert reflection == []
 
-    def test_request_exception_is_swallowed(self, victim_url: str):
-        endpoint = Endpoint(url=f"{victim_url}/", status_code=200)
+    def test_request_exception_is_swallowed(self, target_url: str):
+        endpoint = Endpoint(url=f"{target_url}/", status_code=200)
         with patch("requests.get", side_effect=Exception("timeout")):
             results = check_host_headers([endpoint])
         assert results == []
 
-    def test_deduplicates_by_origin(self, victim_url: str):
+    def test_deduplicates_by_origin(self, target_url: str):
         endpoints = [
-            Endpoint(url=f"{victim_url}/page1", status_code=200),
-            Endpoint(url=f"{victim_url}/page2", status_code=200),
+            Endpoint(url=f"{target_url}/page1", status_code=200),
+            Endpoint(url=f"{target_url}/page2", status_code=200),
         ]
         mock_resp = MagicMock()
         mock_resp.text = "cybersquad-canary.invalid in body"
@@ -86,8 +86,8 @@ class TestCheckHostHeadersReflection:
 
 # check_host_headers - URL override bypass
 class TestCheckHostHeadersPathOverride:
-    def test_detects_bypass_when_direct_is_403_and_override_is_200(self, victim_url: str):
-        endpoint = Endpoint(url=f"{victim_url}/", status_code=200)
+    def test_detects_bypass_when_direct_is_403_and_override_is_200(self, target_url: str):
+        endpoint = Endpoint(url=f"{target_url}/", status_code=200)
 
         def mock_get(url, **kwargs):
             resp = MagicMock()
@@ -110,8 +110,8 @@ class TestCheckHostHeadersPathOverride:
         assert len(bypass) >= 1
         assert bypass[0].severity_hint == Severity.HIGH
 
-    def test_no_bypass_when_direct_returns_200(self, victim_url: str):
-        endpoint = Endpoint(url=f"{victim_url}/", status_code=200)
+    def test_no_bypass_when_direct_returns_200(self, target_url: str):
+        endpoint = Endpoint(url=f"{target_url}/", status_code=200)
 
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -128,8 +128,8 @@ class TestCheckHostHeadersPathOverride:
 # check_header_injection (CRLF) - these mirror the original tests but now
 # import from the correct module
 class TestCheckHeaderInjectionCrlf:
-    def test_detects_reflected_canary_in_response_headers(self):
-        endpoint = Endpoint(url="https://api.example.com/", status_code=200)
+    def test_detects_reflected_canary_in_response_headers(self, target_apex):
+        endpoint = Endpoint(url=f"https://api.{target_apex}/", status_code=200)
         mock_resp = MagicMock()
         mock_resp.headers = {"CybersquadCanary": "yes"}
         mock_resp.text = ""
@@ -140,8 +140,8 @@ class TestCheckHeaderInjectionCrlf:
         assert len(results) == 1
         assert results[0].vuln_class == "HeaderInjection"
 
-    def test_clean_response_produces_no_finding(self):
-        endpoint = Endpoint(url="https://api.example.com/", status_code=200)
+    def test_clean_response_produces_no_finding(self, target_apex):
+        endpoint = Endpoint(url=f"https://api.{target_apex}/", status_code=200)
         mock_resp = MagicMock()
         mock_resp.headers = {"Content-Type": "text/html"}
         mock_resp.text = "<html>Normal</html>"

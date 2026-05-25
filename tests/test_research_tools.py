@@ -86,26 +86,21 @@ class TestValidateAttackPlan:
 
 
 class TestFinaliseResearch:
-    def test_writes_attack_plan_json_for_clean_plan(self, attack_plan, tmp_path, monkeypatch):
-        monkeypatch.setattr("tools.research_tools.runtime.run_dir", lambda: tmp_path)
+    def test_writes_attack_plan_json_for_clean_plan(self, attack_plan, run_dir):
         path = finalise_research(attack_plan)
-        assert path == tmp_path / "attack_plan.json"
+        assert path == run_dir / "attack_plan.json"
         loaded = AttackPlan.model_validate_json(path.read_text(encoding="utf-8"))
         assert loaded.programme_handle == attack_plan.programme_handle
         assert len(loaded.items) == 1
         assert loaded.items[0].probe == "CVE-2022-22965"
 
-    def test_refuses_empty_plan(self, attack_plan, tmp_path, monkeypatch):
-        monkeypatch.setattr("tools.research_tools.runtime.run_dir", lambda: tmp_path)
+    def test_refuses_empty_plan(self, attack_plan, run_dir):
         plan = attack_plan.model_copy(update={"items": []})
         with pytest.raises(AttackPlanFinalisationError, match="no items"):
             finalise_research(plan)
-        assert not (tmp_path / "attack_plan.json").exists()
+        assert not (run_dir / "attack_plan.json").exists()
 
-    def test_refuses_on_validation_errors(
-        self, attack_plan, attack_plan_item, tmp_path, monkeypatch
-    ):
-        monkeypatch.setattr("tools.research_tools.runtime.run_dir", lambda: tmp_path)
+    def test_refuses_on_validation_errors(self, attack_plan, attack_plan_item, run_dir):
         plan = attack_plan.model_copy(
             update={"items": [attack_plan_item.model_copy(update={"recon_evidence": []})]}
         )
@@ -115,9 +110,10 @@ class TestFinaliseResearch:
     def test_creates_run_dir_if_missing(self, attack_plan, tmp_path, monkeypatch):
         # run_dir() may point to a directory that does not yet exist (the
         # finaliser is the first thing to write into it). The finaliser must
-        # mkdir parents.
+        # mkdir parents. The shared ``run_dir`` fixture always returns an
+        # existing path, so this test stays on the explicit monkeypatch.
         nested = tmp_path / "nested" / "run"
-        monkeypatch.setattr("tools.research_tools.runtime.run_dir", lambda: nested)
+        monkeypatch.setattr("runtime.run_dir", lambda: nested)
         path = finalise_research(attack_plan)
         assert path.exists()
         assert path.parent == nested
@@ -127,17 +123,15 @@ class TestFinaliseResearch:
 
 
 class TestAttackPlanPath:
-    def test_returns_attack_plan_json_under_run_dir(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("tools.research_tools.runtime.run_dir", lambda: tmp_path)
-        assert attack_plan_path() == tmp_path / "attack_plan.json"
+    def test_returns_attack_plan_json_under_run_dir(self, run_dir):
+        assert attack_plan_path() == run_dir / "attack_plan.json"
 
 
 # Loading
 
 
 class TestLoadAttackPlan:
-    def test_round_trips_a_persisted_plan(self, attack_plan, tmp_path, monkeypatch):
-        monkeypatch.setattr("tools.research_tools.runtime.run_dir", lambda: tmp_path)
+    def test_round_trips_a_persisted_plan(self, attack_plan, run_dir):
         path = finalise_research(attack_plan)
         loaded = load_attack_plan(path)
         assert isinstance(loaded, AttackPlan)

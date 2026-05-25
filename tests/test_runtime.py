@@ -48,6 +48,40 @@ class TestRunDir:
             runtime.run_dir()
 
 
+class TestBindRunId:
+    def test_binds_when_unset(self):
+        runtime.bind_run_id("20260517-120000-abc123")
+        assert runtime.run_id == "20260517-120000-abc123"
+
+    def test_same_value_rebind_is_noop(self):
+        runtime.bind_run_id("20260517-120000-abc123")
+        runtime.bind_run_id("20260517-120000-abc123")
+        assert runtime.run_id == "20260517-120000-abc123"
+
+    def test_conflicting_rebind_raises(self):
+        runtime.bind_run_id("20260517-120000-abc123")
+        with pytest.raises(RuntimeError, match="#128"):
+            runtime.bind_run_id("20260517-120000-deadbe")
+        assert runtime.run_id == "20260517-120000-abc123"
+
+
+class TestBindProgramme:
+    def test_binds_when_unset(self):
+        runtime.bind_programme("acme")
+        assert runtime.programme_handle == "acme"
+
+    def test_same_value_rebind_is_noop(self):
+        runtime.bind_programme("acme")
+        runtime.bind_programme("acme")
+        assert runtime.programme_handle == "acme"
+
+    def test_conflicting_rebind_raises(self):
+        runtime.bind_programme("acme")
+        with pytest.raises(RuntimeError, match="#128"):
+            runtime.bind_programme("globex")
+        assert runtime.programme_handle == "acme"
+
+
 class TestProgrammeCachePath:
     def test_returns_correct_path(self, monkeypatch, tmp_path):
         monkeypatch.setattr("config.config.reports_dir", str(tmp_path))

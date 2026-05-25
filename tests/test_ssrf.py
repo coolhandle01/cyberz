@@ -15,9 +15,9 @@ pytestmark = pytest.mark.unit
 
 class TestCheckSSRF:
     def test_detects_aws_imds_response(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/fetch", status_code=200, parameters=["url"])
+        ep = Endpoint(url=f"{target_url}/fetch", status_code=200, parameters=["url"])
 
         body = "ami-id\nami-launch-index\nhostname\n"
         with patch("requests.get", return_value=make_response(body=body)):
@@ -29,17 +29,17 @@ class TestCheckSSRF:
         assert "url" in results[0].evidence
 
     def test_no_finding_when_no_marker_in_response(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/fetch", status_code=200, parameters=["url"])
+        ep = Endpoint(url=f"{target_url}/fetch", status_code=200, parameters=["url"])
 
         with patch("requests.get", return_value=make_response(body="<html>nothing here</html>")):
             results = check_ssrf([ep])
 
         assert results == []
 
-    def test_skips_endpoints_without_parameters(self, victim_url: str) -> None:
-        ep = Endpoint(url=f"{victim_url}/about", status_code=200)
+    def test_skips_endpoints_without_parameters(self, target_url: str) -> None:
+        ep = Endpoint(url=f"{target_url}/about", status_code=200)
 
         with patch("requests.get") as mock_get:
             results = check_ssrf([ep])
@@ -47,8 +47,8 @@ class TestCheckSSRF:
         mock_get.assert_not_called()
         assert results == []
 
-    def test_network_exception_is_swallowed(self, victim_url: str) -> None:
-        ep = Endpoint(url=f"{victim_url}/fetch", status_code=200, parameters=["url"])
+    def test_network_exception_is_swallowed(self, target_url: str) -> None:
+        ep = Endpoint(url=f"{target_url}/fetch", status_code=200, parameters=["url"])
 
         with patch("requests.get", side_effect=OSError("connection refused")):
             results = check_ssrf([ep])
@@ -65,11 +65,11 @@ class TestCheckSSRF:
         assert "[::1]" in joined
 
     def test_payload_filter_restricts_to_named_variants(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
         # An agent on a known AWS target should be able to fire only the
         # AWS IMDS payload and skip the two loopback probes.
-        ep = Endpoint(url=f"{victim_url}/fetch", status_code=200, parameters=["url"])
+        ep = Endpoint(url=f"{target_url}/fetch", status_code=200, parameters=["url"])
 
         seen_urls: list[str] = []
 
@@ -88,9 +88,9 @@ class TestCheckSSRF:
         assert "%5B%3A%3A1%5D" not in joined  # urlencoded [::1]
 
     def test_payload_filter_finding_evidence_names_the_variant(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/fetch", status_code=200, parameters=["url"])
+        ep = Endpoint(url=f"{target_url}/fetch", status_code=200, parameters=["url"])
 
         with patch("requests.get", return_value=make_response(body="ami-id")):
             results = check_ssrf([ep], payload_names=[SsrfPayload.aws_imds])
@@ -99,9 +99,9 @@ class TestCheckSSRF:
         assert "aws-imds" in results[0].evidence
 
     def test_payload_filter_none_runs_all_variants(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/fetch", status_code=200, parameters=["url"])
+        ep = Endpoint(url=f"{target_url}/fetch", status_code=200, parameters=["url"])
 
         seen_urls: list[str] = []
 
@@ -114,8 +114,8 @@ class TestCheckSSRF:
 
         assert len(seen_urls) == len(_SSRF_PAYLOADS)
 
-    def test_payload_filter_empty_list_is_a_noop(self, victim_url: str) -> None:
-        ep = Endpoint(url=f"{victim_url}/fetch", status_code=200, parameters=["url"])
+    def test_payload_filter_empty_list_is_a_noop(self, target_url: str) -> None:
+        ep = Endpoint(url=f"{target_url}/fetch", status_code=200, parameters=["url"])
 
         with patch("requests.get") as mock_get:
             results = check_ssrf([ep], payload_names=[])

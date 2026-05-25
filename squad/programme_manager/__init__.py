@@ -180,12 +180,12 @@ class _SaveProgrammeArgs(BaseModel):
 @cyber_tool("Save Selected Programme", args_schema=_SaveProgrammeArgs)
 def save_programme_tool(handle: str) -> str:
     """
-    Record the selected programme for downstream agents. Sets
+    Record the selected programme for downstream agents. Binds
     runtime.programme_handle, creates the run directory, and copies the
     cached programme.json into it. Returns the absolute path to the run
     directory.
     """
-    runtime.programme_handle = handle
+    runtime.bind_programme(handle)
     run_dir = runtime.run_dir()
     run_dir.mkdir(parents=True, exist_ok=True)
     cache = runtime.programme_cache_path(handle)

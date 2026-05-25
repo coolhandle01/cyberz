@@ -158,17 +158,10 @@ class TestSchemaAcceptReject:
         with pytest.raises(ValidationError):
             _SubmitReportArgs.model_validate({"report": {"not_a_real_field": "x"}})
 
-    def test_check_duplicate_accepts_programme_and_title(
-        self, programme, disclosure_report
-    ) -> None:
-        """Check Duplicate takes the selected programme's handle and the draft title."""
-        instance = _CheckDuplicateArgs.model_validate(
-            {
-                "programme_handle": programme.handle,
-                "title": disclosure_report.title,
-            }
-        )
-        assert instance.programme_handle == programme.handle
+    def test_check_duplicate_accepts_title(self, disclosure_report) -> None:
+        """Check Duplicate takes the draft title - the programme is
+        sourced from the workspace at runtime."""
+        instance = _CheckDuplicateArgs.model_validate({"title": disclosure_report.title})
         assert instance.title == disclosure_report.title
 
     @pytest.mark.parametrize(
@@ -182,10 +175,3 @@ class TestSchemaAcceptReject:
         """Every DC typed-tool schema rejects an empty payload - all fields are required."""
         with pytest.raises(ValidationError):
             schema_cls.model_validate({})
-
-    def test_check_duplicate_requires_both_handle_and_title(self, programme) -> None:
-        """Both ``programme_handle`` and ``title`` are required - one alone fails."""
-        with pytest.raises(ValidationError):
-            _CheckDuplicateArgs.model_validate({"programme_handle": programme.handle})
-        with pytest.raises(ValidationError):
-            _CheckDuplicateArgs.model_validate({"title": "Some report title"})

@@ -53,20 +53,20 @@ class TestRedirectsToCanary:
     def test_matches_subdomain_of_canary(self):
         assert _redirects_to_canary(f"https://sub.{_PAYLOAD_HOST}/")
 
-    def test_does_not_match_when_canary_is_only_in_path(self, victim_url: str):
+    def test_does_not_match_when_canary_is_only_in_path(self, target_url: str):
         # Server safely placed our payload inside the path of the legitimate
         # host - browser would stay on-origin, so this is NOT a finding.
-        assert not _redirects_to_canary(f"{victim_url}/{_PAYLOAD_HOST}/")
+        assert not _redirects_to_canary(f"{target_url}/{_PAYLOAD_HOST}/")
 
-    def test_does_not_match_unrelated_host(self, victim_url: str):
-        assert not _redirects_to_canary(f"{victim_url}/dashboard")
+    def test_does_not_match_unrelated_host(self, target_url: str):
+        assert not _redirects_to_canary(f"{target_url}/dashboard")
 
 
 class TestCheckOpenRedirect:
     def test_detects_30x_to_canary(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/login", status_code=200, parameters=["next"])
+        ep = Endpoint(url=f"{target_url}/login", status_code=200, parameters=["next"])
 
         def fake_get(url, **kwargs) -> MagicMock:
             payload = url.split("next=", 1)[1]
@@ -82,9 +82,9 @@ class TestCheckOpenRedirect:
         assert _PAYLOAD_HOST in results[0].evidence
 
     def test_detects_meta_refresh_redirect(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/go", status_code=200, parameters=["dest"])
+        ep = Endpoint(url=f"{target_url}/go", status_code=200, parameters=["dest"])
 
         def fake_get(url, **kwargs) -> MagicMock:
             payload = url.split("dest=", 1)[1]
@@ -100,10 +100,10 @@ class TestCheckOpenRedirect:
         assert "Redirect target" in results[0].evidence
 
     def test_no_finding_when_redirect_stays_on_origin(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
         # Application sanitises by ignoring our payload and redirecting home
-        ep = Endpoint(url=f"{victim_url}/login", status_code=200, parameters=["next"])
+        ep = Endpoint(url=f"{target_url}/login", status_code=200, parameters=["next"])
 
         def fake_get(url, **kwargs) -> MagicMock:
             return make_response(status=302, headers={"Location": "/dashboard"})
@@ -114,9 +114,9 @@ class TestCheckOpenRedirect:
         assert results == []
 
     def test_no_finding_when_no_redirect_at_all(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/login", status_code=200, parameters=["next"])
+        ep = Endpoint(url=f"{target_url}/login", status_code=200, parameters=["next"])
 
         def fake_get(url, **kwargs) -> MagicMock:
             return make_response(status=200, body="<html>login form</html>")
@@ -126,25 +126,25 @@ class TestCheckOpenRedirect:
 
         assert results == []
 
-    def test_skips_endpoints_without_parameters(self, victim_url: str):
-        ep = Endpoint(url=f"{victim_url}/about", status_code=200)
+    def test_skips_endpoints_without_parameters(self, target_url: str):
+        ep = Endpoint(url=f"{target_url}/about", status_code=200)
         with patch("requests.get") as mock_get:
             results = check_open_redirect([ep])
         mock_get.assert_not_called()
         assert results == []
 
-    def test_skips_server_error_endpoints(self, victim_url: str):
-        ep = Endpoint(url=f"{victim_url}/", status_code=500, parameters=["url"])
+    def test_skips_server_error_endpoints(self, target_url: str):
+        ep = Endpoint(url=f"{target_url}/", status_code=500, parameters=["url"])
         with patch("requests.get") as mock_get:
             results = check_open_redirect([ep])
         mock_get.assert_not_called()
         assert results == []
 
     def test_one_finding_per_endpoint_even_with_multiple_vuln_params(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
         ep = Endpoint(
-            url=f"{victim_url}/login",
+            url=f"{target_url}/login",
             status_code=200,
             parameters=["next", "return_to"],
         )
@@ -163,10 +163,10 @@ class TestCheckOpenRedirect:
         assert len(results) == 1
 
     def test_protocol_relative_payload_in_location(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
         # Server normalises a backslash payload to protocol-relative
-        ep = Endpoint(url=f"{victim_url}/r", status_code=200, parameters=["u"])
+        ep = Endpoint(url=f"{target_url}/r", status_code=200, parameters=["u"])
 
         def fake_get(url, **kwargs) -> MagicMock:
             return make_response(status=302, headers={"Location": f"//{_PAYLOAD_HOST}/"})
@@ -176,8 +176,8 @@ class TestCheckOpenRedirect:
 
         assert len(results) == 1
 
-    def test_network_exception_is_swallowed(self, victim_url: str):
-        ep = Endpoint(url=f"{victim_url}/login", status_code=200, parameters=["next"])
+    def test_network_exception_is_swallowed(self, target_url: str):
+        ep = Endpoint(url=f"{target_url}/login", status_code=200, parameters=["next"])
         with patch("requests.get", side_effect=Exception("network error")):
             results = check_open_redirect([ep])
         assert results == []
@@ -188,11 +188,11 @@ class TestCheckOpenRedirect:
         assert _PAYLOAD_HOST.endswith(".invalid")
 
     def test_payload_filter_restricts_to_named_variants(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
         # Selecting only "https" should fire one request per parameter,
         # not four.
-        ep = Endpoint(url=f"{victim_url}/login", status_code=200, parameters=["next"])
+        ep = Endpoint(url=f"{target_url}/login", status_code=200, parameters=["next"])
 
         seen_urls: list[str] = []
 
@@ -206,9 +206,9 @@ class TestCheckOpenRedirect:
         assert len(seen_urls) == 1
 
     def test_payload_filter_finding_evidence_names_the_variant(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/login", status_code=200, parameters=["next"])
+        ep = Endpoint(url=f"{target_url}/login", status_code=200, parameters=["next"])
 
         with patch(
             "requests.get",
@@ -222,9 +222,9 @@ class TestCheckOpenRedirect:
         assert "https" in results[0].evidence
 
     def test_payload_filter_none_runs_all_variants(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/login", status_code=200, parameters=["next"])
+        ep = Endpoint(url=f"{target_url}/login", status_code=200, parameters=["next"])
 
         seen_urls: list[str] = []
 
@@ -237,8 +237,8 @@ class TestCheckOpenRedirect:
 
         assert len(seen_urls) == len(_PAYLOADS)
 
-    def test_payload_filter_empty_list_is_a_noop(self, victim_url: str):
-        ep = Endpoint(url=f"{victim_url}/login", status_code=200, parameters=["next"])
+    def test_payload_filter_empty_list_is_a_noop(self, target_url: str):
+        ep = Endpoint(url=f"{target_url}/login", status_code=200, parameters=["next"])
 
         with patch("requests.get") as mock_get:
             results = check_open_redirect([ep], payload_names=[])

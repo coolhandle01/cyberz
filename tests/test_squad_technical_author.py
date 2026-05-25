@@ -26,7 +26,7 @@ class TestTechnicalAuthorTools:
         )
 
     @staticmethod
-    def _good_authoring(**overrides):
+    def _good_authoring(target_apex: str, **overrides):
         """Build the kwargs for ``draft_report_tool.func(...)``.
 
         The wrapper takes a typed ``AuthoredDraft``, so the authored
@@ -46,7 +46,7 @@ class TestTechnicalAuthorTools:
                 "injection extracts arbitrary rows from the users table."
             ),
             "steps_to_reproduce": [
-                "Issue GET https://api.example.com/search?q=test' UNION SELECT 1,2,3-- ",
+                f"Issue GET https://api.{target_apex}/search?q=test' UNION SELECT 1,2,3-- ",
                 "Observe the response body contains the union'd rows.",
             ],
             "evidence": 'HTTP/1.1 200 OK\n\n[{"username":"alice"}]',
@@ -74,76 +74,64 @@ class TestTechnicalAuthorTools:
         return base
 
     def test_draft_report_tool_writes_draft_and_returns_validation(
-        self, verified_vuln, tmp_path
+        self, verified_vuln, run_dir, target_apex
     ) -> None:
         from squad.technical_author import draft_report_tool
         from tools.report_tools import ReportDraftResult
 
-        self._write_verified(tmp_path, verified_vuln)
-        with (
-            patch("tools.workspace.runtime.run_dir", return_value=tmp_path),
-            patch("tools.report_tools.runtime.run_dir", return_value=tmp_path),
-        ):
-            result = draft_report_tool.func(**self._good_authoring())
+        self._write_verified(run_dir, verified_vuln)
+        result = draft_report_tool.func(**self._good_authoring(target_apex))
 
         assert isinstance(result, ReportDraftResult)
         assert result.validation.ok is True
-        assert (tmp_path / "drafts" / "000.json").exists()
+        assert (run_dir / "drafts" / "000.json").exists()
 
-    def test_draft_report_tool_surfaces_validation_issues(self, verified_vuln, tmp_path) -> None:
+    def test_draft_report_tool_surfaces_validation_issues(
+        self, verified_vuln, run_dir, target_apex
+    ) -> None:
         from squad.technical_author import draft_report_tool
         from tools.report_tools import ReportDraftResult
 
-        self._write_verified(tmp_path, verified_vuln)
-        with (
-            patch("tools.workspace.runtime.run_dir", return_value=tmp_path),
-            patch("tools.report_tools.runtime.run_dir", return_value=tmp_path),
-        ):
-            result = draft_report_tool.func(**self._good_authoring(title="bad title"))
+        self._write_verified(run_dir, verified_vuln)
+        result = draft_report_tool.func(**self._good_authoring(target_apex, title="bad title"))
 
         assert isinstance(result, ReportDraftResult)
         assert result.validation.ok is False
         sections = {i.section for i in result.validation.issues}
         assert "title" in sections
 
-    def test_draft_report_tool_rejects_out_of_range_index(self, verified_vuln, tmp_path) -> None:
+    def test_draft_report_tool_rejects_out_of_range_index(
+        self, verified_vuln, run_dir, target_apex
+    ) -> None:
         from squad.technical_author import draft_report_tool
 
-        self._write_verified(tmp_path, verified_vuln)
-        with (
-            patch("tools.workspace.runtime.run_dir", return_value=tmp_path),
-            patch("tools.report_tools.runtime.run_dir", return_value=tmp_path),
-        ):
-            with pytest.raises(ValueError, match="out of range"):
-                draft_report_tool.func(**self._good_authoring(finding_index=5))
+        self._write_verified(run_dir, verified_vuln)
+        with pytest.raises(ValueError, match="out of range"):
+            draft_report_tool.func(**self._good_authoring(target_apex, finding_index=5))
 
-    def test_finalise_reports_tool_consolidates_drafts(self, verified_vuln, tmp_path) -> None:
-        from squad.technical_author import draft_report_tool, finalise_reports_tool
-
-        self._write_verified(tmp_path, verified_vuln)
-        with (
-            patch("tools.workspace.runtime.run_dir", return_value=tmp_path),
-            patch("tools.report_tools.runtime.run_dir", return_value=tmp_path),
-        ):
-            draft_report_tool.func(**self._good_authoring())
-            result = finalise_reports_tool.func("acme", "Session summary line.")
-
-        assert result == "reports.json"
-        assert (tmp_path / "reports.json").exists()
-
-    def test_finalise_reports_tool_raises_on_unresolved_errors(
-        self, verified_vuln, tmp_path
+    def test_finalise_reports_tool_consolidates_drafts(
+        self, verified_vuln, run_dir, target_apex
     ) -> None:
         from squad.technical_author import draft_report_tool, finalise_reports_tool
 
-        self._write_verified(tmp_path, verified_vuln)
-        with (
-            patch("tools.workspace.runtime.run_dir", return_value=tmp_path),
-            patch("tools.report_tools.runtime.run_dir", return_value=tmp_path),
-        ):
-            draft_report_tool.func(**self._good_authoring(title="bad title"))
+        self._write_verified(run_dir, verified_vuln)
+        with patch("runtime.programme_handle", "acme"):
+            draft_report_tool.func(**self._good_authoring(target_apex))
+            result = finalise_reports_tool.func("Session summary line.")
+
+        assert result == "reports.json"
+        assert (run_dir / "reports.json").exists()
+
+    def test_finalise_reports_tool_raises_on_unresolved_errors(
+        self, verified_vuln, run_dir, target_apex
+    ) -> None:
+        from squad.technical_author import draft_report_tool, finalise_reports_tool
+
+        self._write_verified(run_dir, verified_vuln)
+        with patch("runtime.programme_handle", "acme"):
+            draft_report_tool.func(**self._good_authoring(target_apex, title="bad title"))
             with pytest.raises(ValueError, match="unresolved errors"):
-                finalise_reports_tool.func("acme", "Summary.")
+                finalise_reports_tool.func("Summary.")
 
     def test_sanitise_evidence_tool_returns_redactions(self) -> None:
         from squad.technical_author import sanitise_evidence_tool
@@ -207,10 +195,10 @@ class TestTechnicalAuthorTools:
             }
         ]
         with (
-            patch("squad.technical_author.http.set_programme") as mhttp,
+            patch("runtime.programme_handle", "acme"),
             patch("squad.technical_author.h1.list_reports", return_value=h1_reports) as mlist,
         ):
-            result = list_programme_reports_tool.func("acme", page_size=10)
+            result = list_programme_reports_tool.func(page_size=10)
 
         assert result == [
             ProgrammeReportSummary(
@@ -220,5 +208,4 @@ class TestTechnicalAuthorTools:
                 state="triaged",
             )
         ]
-        mhttp.assert_called_once_with("acme")
         mlist.assert_called_once_with("acme", page_size=10)

@@ -17,7 +17,7 @@ llm = LLM(
 )
 ```
 
-Then pass `llm` into `Agent(llm=...)`. Never pass a bare model string to `Agent(llm=...)` directly - CrewAI silently ignores `temperature` and `max_tokens` in that path and the agent runs with defaults that do not match `config.llm`.
+Then pass `llm` into `Agent(llm=...)`. Never pass a bare model string to `Agent(llm=...)` directly - CrewAI silently ignores `temperature` and `max_tokens` in that path and the agent runs with defaults that do not match `config.llm`. The CrewAI LLM class and its accepted parameters are documented at <https://docs.crewai.com/en/concepts/llms>; the `Agent` constructor's `llm` parameter at <https://docs.crewai.com/en/concepts/agents>. We pin `crewai>=1.14` in `pyproject.toml`.
 
 ## The model prefix
 

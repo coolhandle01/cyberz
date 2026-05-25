@@ -24,13 +24,20 @@ Skills under `.claude/skills/` auto-load via a `PreToolUse` hook on `Write`/`Edi
 
 | Skill | Triggers on |
 |---|---|
-| `cybersquad-tool` | `squad/__init__.py`, `squad/workspace_tools.py`, `squad/<member>/__init__.py` |
-| `cybersquad-pentest-tool` | `tools/pentest/**` or `squad/penetration_tester/__init__.py` |
+| `cybersquad-tool` | Any `*.py` file under `squad/` at any depth - member `__init__.py`s, sub-package wrappers under `probes/` and `cloud/`, the `recon.py` / `findings.py` / `research.py` / `triage.py` / `curation.py` / `discovery.py` modules, and the `workspace_tools.py` shared layer. Guarded out of the `tests/squad/` mirror so test edits do not over-trigger. |
+| `cybersquad-pentest-tool` | `tools/pentest/**` and the `@pentest_tool` wrapper surface: `squad/penetration_tester/__init__.py`, `squad/penetration_tester/_decorator.py`, `squad/penetration_tester/probes/**`. Cloud wrappers use `@cyber_tool` (not `@pentest_tool`) so they stack on the universal skill only. |
+| `cybersquad-prompteng` | Same trigger as `cybersquad-tool` (`*/squad/*.py`). Carries the *communication* layer - the two LLM-visible surfaces (tool docstring + `Field(description=...)`), the division of labour between them, what to say in each, what NOT to say twice. Specialist after `cybersquad-tool` (mechanics) so the communication rules land more prominently. |
+| `cybersquad-models` | Any `*.py` file under `models/`. Carries the LLM-facing contract: typed primitives, workspace artefact shapes, prompt-injection awareness on free-text fields. The consumer-side rules (how a wrapper *uses* these models) live in `cybersquad-tool`. |
+| `cybersquad-runtime` | `runtime.py`, `main.py` |
 | `cybersquad-agent-llm` | `crew.py` |
 | `cybersquad-task` | `tasks.py` |
-| `cybersquad-skill` | Any agent-facing markdown under `squad/`: `squad/skills/<name>/SKILL.md`, `squad/<member>/skills/<name>/SKILL.md`, `squad/<member>/role.md`/`goal.md`/`backstory.md`, `squad/<member>/<task>/description.md`/`expected_output.md` |
-| `cybersquad-test-fixtures` | Any file under `tests/` |
+| `cybersquad-test-fixtures` | Any file under `tests/` (including the `tests/squad/` mirror) |
 | `cybersquad-bdd` | `tests/features/**` or `tests/bdd/**` |
+| `cybersquad-skill` | Any agent-facing markdown under `squad/`: `squad/skills/<name>/SKILL.md`, `squad/<member>/skills/<name>/SKILL.md`, `squad/<member>/role.md`/`goal.md`/`backstory.md`, `squad/<member>/<task>/description.md`/`expected_output.md` |
+
+Grouped by concern: tool wrappers, pipeline plumbing, tests, agent-facing prose. Where two skills can match the same file (tool + pentest-tool on a probe; test-fixtures + bdd on a BDD test) the specialist is loaded last so it lands more prominently in context. Editing `runtime.py` directly loads `cybersquad-runtime` only - consumer-side rules (the `import runtime` propagation property tests rely on) live in `cybersquad-tool` because that is the skill the tool author already sees.
+
+The `in_tests` pre-classifier in the hook is load-bearing: `*` crosses `/` in bash case patterns, so without it `*/squad/*.py` would over-match `tests/squad/<member>/test_*.py` and pull the wrapper-author skills into test edits where they do not apply.
 
 The hook is wired in `.claude/settings.json`; the matching logic lives in `.claude/hooks/load-skill.sh`. If a hook fails to fire in your session, run `/hooks` once (or restart) - the watcher only sees `.claude/settings.json` if it existed at session start. You can always also load a skill manually via the `Skill` tool.
 

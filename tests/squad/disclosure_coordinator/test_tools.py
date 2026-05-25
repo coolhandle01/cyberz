@@ -25,7 +25,6 @@ class TestDisclosureCoordinatorTools:
         submission = SubmissionResult(report_id="h1-42", status=SubmissionStatus.SUBMITTED)
 
         with (
-            patch("squad.disclosure_coordinator.http.set_programme") as mhttp,
             patch("squad.disclosure_coordinator.save_report") as msave,
             patch(
                 "squad.disclosure_coordinator.h1.submit_report",
@@ -38,7 +37,6 @@ class TestDisclosureCoordinatorTools:
             result = submit_report_tool.func(disclosure_report)
 
         assert result == submission
-        mhttp.assert_called_once_with(disclosure_report.programme_handle)
         msave.assert_called_once()
         msub.assert_called_once()
 
@@ -51,7 +49,6 @@ class TestDisclosureCoordinatorTools:
         submission = SubmissionResult(report_id="h1-42", status=SubmissionStatus.SUBMITTED)
 
         with (
-            patch("squad.disclosure_coordinator.http.set_programme") as mhttp,
             patch("squad.disclosure_coordinator.save_report"),
             patch(
                 "squad.disclosure_coordinator.h1.submit_report",
@@ -61,7 +58,6 @@ class TestDisclosureCoordinatorTools:
             result = submit_report_tool.func(disclosure_report.model_dump())
 
         assert result == submission
-        mhttp.assert_called_once_with(disclosure_report.programme_handle)
 
     def test_check_duplicate_tool(self) -> None:
         from squad.disclosure_coordinator import check_duplicate_tool
@@ -73,13 +69,13 @@ class TestDisclosureCoordinatorTools:
             },
         ]
         with (
-            patch("squad.disclosure_coordinator.http.set_programme"),
+            patch("runtime.programme_handle", "acme"),
             patch(
                 "squad.disclosure_coordinator.h1.list_reports",
                 return_value=reports,
             ),
         ):
-            result = check_duplicate_tool.func("acme", "SQL Injection in search")
+            result = check_duplicate_tool.func("SQL Injection in search")
 
         assert isinstance(result, list)
         assert len(result) == 1

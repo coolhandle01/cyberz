@@ -20,11 +20,11 @@ def _mock_result(stdout: str, returncode: int = 0) -> MagicMock:
 
 
 class TestRunNosqli:
-    def test_detects_injection_from_stdout(self):
+    def test_detects_injection_from_stdout(self, target_apex):
         output = (
             "Testing http://example.com/?id=1\nInjection found in parameter: id\n[payload details]"
         )
-        endpoints = [Endpoint(url="https://example.com/api", status_code=200, parameters=["id"])]
+        endpoints = [Endpoint(url=f"https://{target_apex}/api", status_code=200, parameters=["id"])]
 
         with (
             patch("shutil.which", return_value="/usr/bin/nosqli"),
@@ -37,9 +37,9 @@ class TestRunNosqli:
         assert results[0].tool == "nosqli"
         assert results[0].severity_hint == Severity.HIGH
 
-    def test_no_finding_when_no_injection(self):
+    def test_no_finding_when_no_injection(self, target_apex):
         output = "Testing http://example.com/?id=1\nNo vulnerabilities detected."
-        endpoints = [Endpoint(url="https://example.com/api", status_code=200, parameters=["id"])]
+        endpoints = [Endpoint(url=f"https://{target_apex}/api", status_code=200, parameters=["id"])]
 
         with (
             patch("shutil.which", return_value="/usr/bin/nosqli"),
@@ -54,8 +54,8 @@ class TestRunNosqli:
             results = run_nosqli([])
         assert results == []
 
-    def test_skips_endpoints_without_parameters(self):
-        endpoints = [Endpoint(url="https://example.com/static", status_code=200)]
+    def test_skips_endpoints_without_parameters(self, target_apex):
+        endpoints = [Endpoint(url=f"https://{target_apex}/static", status_code=200)]
 
         with (
             patch("shutil.which", return_value="/usr/bin/nosqli"),
@@ -66,15 +66,15 @@ class TestRunNosqli:
         mock_run.assert_not_called()
         assert results == []
 
-    def test_raises_if_binary_missing(self):
-        endpoints = [Endpoint(url="https://example.com", status_code=200, parameters=["id"])]
+    def test_raises_if_binary_missing(self, target_apex):
+        endpoints = [Endpoint(url=f"https://{target_apex}", status_code=200, parameters=["id"])]
         with patch("shutil.which", return_value=None):
             with pytest.raises(OSError, match="nosqli"):
                 run_nosqli(endpoints)
 
-    def test_evidence_truncated_to_last_2000_chars(self):
+    def test_evidence_truncated_to_last_2000_chars(self, target_apex):
         long_output = "Injection found\n" + "x" * 5000
-        endpoints = [Endpoint(url="https://example.com/api", status_code=200, parameters=["q"])]
+        endpoints = [Endpoint(url=f"https://{target_apex}/api", status_code=200, parameters=["q"])]
 
         with (
             patch("shutil.which", return_value="/usr/bin/nosqli"),

@@ -7,9 +7,7 @@ without loading the full ReconResult into context.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from pathlib import Path
-from unittest.mock import patch
 from urllib.parse import urlparse
 
 import pytest
@@ -21,13 +19,13 @@ pytestmark = pytest.mark.unit
 
 
 @pytest.fixture()
-def recon_file(tmp_path: Path, recon_result, victim_url: str) -> Iterator[str]:
-    """Write a populated recon.json into tmp_path and patch runtime.run_dir
-    so query._load resolves "recon.json" under tmp_path.
+def recon_file(run_dir: Path, recon_result, target_url: str) -> str:
+    """Write a populated recon.json under the shared ``run_dir`` fixture
+    so ``query._load`` resolves "recon.json" against it.
 
     Returns the relative filename - tests pass this through, matching the
     inter-agent contract (relative paths only)."""
-    domain = urlparse(victim_url).hostname  # "victim.example.com"
+    domain = urlparse(target_url).hostname  # "victim.example.com"
     endpoints = [
         Endpoint(url=f"https://api.{domain}/v1", status_code=200, technologies=["nginx"]),
         Endpoint(url=f"https://blog.{domain}/", status_code=200, technologies=["WordPress"]),
@@ -48,20 +46,18 @@ def recon_file(tmp_path: Path, recon_result, victim_url: str) -> Iterator[str]:
             },
         }
     )
-    recon_path = tmp_path / "recon.json"
-    recon_path.write_text(recon.model_dump_json(), encoding="utf-8")
-    with patch("tools.workspace.runtime.run_dir", return_value=tmp_path):
-        yield "recon.json"
+    (run_dir / "recon.json").write_text(recon.model_dump_json(), encoding="utf-8")
+    return "recon.json"
 
 
 class TestReconSubdomains:
-    def test_returns_all_subdomains(self, recon_file: str, victim_url: str) -> None:
-        domain = urlparse(victim_url).hostname
+    def test_returns_all_subdomains(self, recon_file: str, target_url: str) -> None:
+        domain = urlparse(target_url).hostname
         result = query.recon_subdomains(recon_file)
         assert result == [f"api.{domain}", f"blog.{domain}", f"admin.{domain}"]
 
-    def test_filters_case_insensitively(self, recon_file: str, victim_url: str) -> None:
-        domain = urlparse(victim_url).hostname
+    def test_filters_case_insensitively(self, recon_file: str, target_url: str) -> None:
+        domain = urlparse(target_url).hostname
         assert query.recon_subdomains(recon_file, host_filter="API") == [f"api.{domain}"]
 
     def test_filter_no_match_returns_empty(self, recon_file: str) -> None:
@@ -69,8 +65,8 @@ class TestReconSubdomains:
 
 
 class TestReconEndpoints:
-    def test_no_filters_returns_all(self, recon_file: str, victim_url: str) -> None:
-        domain = urlparse(victim_url).hostname
+    def test_no_filters_returns_all(self, recon_file: str, target_url: str) -> None:
+        domain = urlparse(target_url).hostname
         result = query.recon_endpoints(recon_file)
         assert result.total == 4
         assert result.returned == 4
@@ -81,8 +77,8 @@ class TestReconEndpoints:
             f"https://old.{domain}/",
         }
 
-    def test_filter_by_status(self, recon_file: str, victim_url: str) -> None:
-        domain = urlparse(victim_url).hostname
+    def test_filter_by_status(self, recon_file: str, target_url: str) -> None:
+        domain = urlparse(target_url).hostname
         result = query.recon_endpoints(recon_file, status=200)
         assert result.total == 2
         assert {e.url for e in result.endpoints} == {
@@ -94,8 +90,8 @@ class TestReconEndpoints:
         result = query.recon_endpoints(recon_file, tech="wordpress")
         assert result.total == 2
 
-    def test_conjunctive_filters(self, recon_file: str, victim_url: str) -> None:
-        domain = urlparse(victim_url).hostname
+    def test_conjunctive_filters(self, recon_file: str, target_url: str) -> None:
+        domain = urlparse(target_url).hostname
         result = query.recon_endpoints(recon_file, status=200, tech="wordpress")
         assert result.total == 1
         assert result.endpoints[0].url == f"https://blog.{domain}/"
@@ -126,20 +122,20 @@ class TestReconEndpoints:
 
 
 class TestReconOpenPorts:
-    def test_returns_all_hosts(self, recon_file: str, victim_url: str) -> None:
-        domain = urlparse(victim_url).hostname
+    def test_returns_all_hosts(self, recon_file: str, target_url: str) -> None:
+        domain = urlparse(target_url).hostname
         result = query.recon_open_ports(recon_file)
         assert result == {
             f"api.{domain}": [80, 443],
             f"redis.{domain}": [6379],
         }
 
-    def test_returns_single_host(self, recon_file: str, victim_url: str) -> None:
-        domain = urlparse(victim_url).hostname
+    def test_returns_single_host(self, recon_file: str, target_url: str) -> None:
+        domain = urlparse(target_url).hostname
         assert query.recon_open_ports(recon_file, host=f"redis.{domain}") == {
             f"redis.{domain}": [6379]
         }
 
-    def test_unknown_host_returns_empty(self, recon_file: str, victim_url: str) -> None:
-        domain = urlparse(victim_url).hostname
+    def test_unknown_host_returns_empty(self, recon_file: str, target_url: str) -> None:
+        domain = urlparse(target_url).hostname
         assert query.recon_open_ports(recon_file, host=f"ghost.{domain}") == {}

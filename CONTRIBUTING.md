@@ -56,9 +56,47 @@ These apply to every edit, no exceptions.
 
 All source files, comments, docstrings, and `.md` prose must be plain ASCII. No em dashes, en dashes, curly quotes, box-drawing characters, arrows, bullets, or emoji. Use `-` not em-dash, `->` not the Unicode arrow, `|` not the Unicode pipe. Unicode in source inflates token counts for every AI tool that reads this codebase.
 
+The mechanism, briefly: modern LLM tokenisers are byte-pair-encoding variants trained on corpus frequency (Sennrich et al., [Neural Machine Translation of Rare Words with Subword Units](https://arxiv.org/abs/1508.07909), ACL 2016). The vocabulary is biased toward common-corpus sequences, so high-frequency ASCII (`-`, `->`, `|`, `'`, `"`) is typically one token, while uncommon Unicode punctuation (em-dash, smart quotes, non-breaking space, box-drawing characters, emoji) routinely fragments into multiple bytes / tokens under byte-level BPE. The exact ratio is tokeniser-dependent - this is an emergent property of frequency-trained vocabularies, not a per-character constant - but the direction is consistent and the cost compounds across every agent context window the codebase ever lands in.
+
 ### Minimal diff
 
 One PR does one thing. Before any commit, run `git diff origin/main --stat` and ask: does every changed file relate to the stated task? If not, revert the unrelated change or move it to its own branch. Leave whitespace, formatting, and import order alone unless the linter required the change. Do not rewrite working code to a "cleaner" form unless cleanliness was the task.
+
+### Cite the standard you diverge from
+
+When the codebase deliberately departs from a documented standard, named best practice, or upstream framework convention, the divergence must carry a link to the thing it diverges from. Future-you reading the code six months from now needs to be able to follow the URL, read the upstream practice, and recover the *reasoning* behind the departure - not infer it from the absence of a citation, and not rediscover it by reading the spec from scratch.
+
+This is the Chesterton's Fence rule with a sign on the fence. A divergence without a citation is indistinguishable from sloppiness; the citation is what marks it as deliberate.
+
+State three things in the same paragraph or docstring as the divergence:
+
+1. **Cite the upstream practice with a URL.** "RFC 9110 section 10.1.5 defines...", "CrewAI's design-agent skill recommends...", "OWASP Top 10:2021 categorises...". The URL must back the specific claim, not just be vaguely topical.
+2. **Name the departure explicitly.** "Deliberate departure from...", "Diverges from upstream by...", "This skill *deliberately diverges*...". Grep-discoverable so future-contributor `grep -ri "divergen\|departure from"` surfaces the same set every time.
+3. **Name what the departure buys.** SOC-operator parseability, cross-agent contract-test discipline, mypy verification of inter-tool wiring, avoiding a 30K-token JSON blob in every downstream context. A divergence without a stated reason is a future migration target.
+
+Current divergences in the codebase, each carrying its citation - this is the worked register, not an exhaustive list:
+
+- `tools/http.py` `user_agent()` - structured `"<product>; <key>: <value>"` UA vs the typical product-token form. Cites [RFC 9110 section 10.1.5](https://www.rfc-editor.org/rfc/rfc9110.html#section-10.1.5). Buys SOC-operator parseability of programme handle, researcher, and contact email without external metadata correlation.
+- `cybersquad-tool` skill `Divergence 1` - Pydantic typed returns from tools vs upstream's "tools return text-fodder for LLM reasoning" stance. Cites [crewAIInc/skills `design-agent/references/custom-tools.md`](https://github.com/crewAIInc/skills/blob/main/skills/design-agent/references/custom-tools.md). Buys cross-agent contract tests, mypy verification of tool wiring, and typed test access to `tool.func(...)`.
+- `cybersquad-tool` skill `Divergence 2` and `cybersquad-task` skill - workspace files (typed `finalise_X` writer + typed `load_X` reader) for inter-agent structured handoff vs CrewAI's `output_pydantic`. Cites [crewAIInc/skills `design-task`](https://github.com/crewAIInc/skills/blob/main/skills/design-task/SKILL.md). Buys: avoidance of ~30K-token recon artefacts in every downstream `context=`, and a reasoning-narrative + typed-artefact split that `output_pydantic` collapses.
+
+When you add a new divergence, append it to the register above in the same PR. A new divergence that ships without a citation is treated like a `# noqa` without an explanation: not a hard block, but a reviewer-facing flag that the assumption is unverified.
+
+### Defer to upstream where upstream covers it
+
+The partner rule to "Cite the standard you diverge from". Where the codebase **does not** diverge - where upstream's general case is the case - link the canonical reference and stay silent on the general material. Don't restate what upstream already covers competently; duplication becomes drift the moment upstream updates, and the contributor reading our skill loses the discoverability hop to the source of truth.
+
+A skill, module docstring, or design comment that competently practices this looks like `cybersquad-agent-llm`'s Upstream alignment section: it names what upstream covers (general agent design - role-goal-backstory, `max_iter` / `max_rpm` tuning, `function_calling_llm` split, guardrails), links the canonical upstream source ([crewAIInc/skills `design-agent`](https://github.com/crewAIInc/skills/blob/main/skills/design-agent/SKILL.md)), and confines the cybersquad-side content to the narrow project-specific footgun (the bare-model-string `Agent(llm=...)` path silently dropping `temperature` and `max_tokens`).
+
+Skills already practicing this, as the worked register:
+
+- `cybersquad-agent-llm` defers to crewAIInc/skills `design-agent` for general agent design.
+- `cybersquad-task` defers to crewAIInc/skills `design-task` for general task design.
+- `cybersquad-tool` defers to crewAIInc/skills `design-agent/references/custom-tools.md` for tool mechanics.
+- `cybersquad-skill` defers to CrewAI's runtime skill documentation for skill-authoring mechanics.
+- `cybersquad-models` defers to [Pydantic v2 documentation](https://docs.pydantic.dev/2.12/) for general Pydantic usage.
+
+A new contributor skill that does **not** carry an Upstream alignment section is fine if either: (a) there is no canonical upstream for the topic - some patterns are genuinely cybersquad-specific (the `runtime.bind_*` singleton-per-pipeline pattern is an example) - or (b) the skill explicitly builds on another cybersquad skill, named in its frontmatter `description:` (e.g. `cybersquad-pentest-tool` builds on `cybersquad-tool`; `cybersquad-prompteng` builds on `cybersquad-tool`). State the case in either form so the absence is read as deliberate, not as oversight.
 
 ### Preserve names, comments, and structure unless the change is the task
 

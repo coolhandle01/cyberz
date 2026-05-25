@@ -138,10 +138,10 @@ class TestCalculateCvssScore:
 # Draft fixtures
 
 
-def _good_draft(**overrides) -> ReportDraft:
+def _good_draft(target_apex: str, **overrides) -> ReportDraft:
     base: dict = {
         "finding_index": 0,
-        "target": "https://api.example.com/search",
+        "target": f"https://api.{target_apex}/search",
         "vuln_class": "SQLi",
         "severity": Severity.HIGH,
         "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
@@ -160,7 +160,7 @@ def _good_draft(**overrides) -> ReportDraft:
             "via the q querystring parameter and extract arbitrary tables."
         ),
         "steps_to_reproduce": [
-            "Issue GET https://api.example.com/search?q=test' UNION SELECT 1,2,3-- ",
+            f"Issue GET https://api.{target_apex}/search?q=test' UNION SELECT 1,2,3-- ",
             "Observe the response includes the union'd rows alongside legitimate data.",
         ],
         "evidence": 'HTTP/1.1 200 OK\n\n[{"username":"alice"}]',
@@ -183,63 +183,67 @@ def _good_draft(**overrides) -> ReportDraft:
 
 
 class TestValidateDraft:
-    def test_clean_draft_passes(self):
-        report = validate_draft(_good_draft())
+    def test_clean_draft_passes(self, target_apex):
+        report = validate_draft(_good_draft(target_apex))
         assert report.ok is True
         assert report.issues == []
 
-    def test_empty_title_errors(self):
-        report = validate_draft(_good_draft(title=""))
+    def test_empty_title_errors(self, target_apex):
+        report = validate_draft(_good_draft(target_apex, title=""))
         assert report.ok is False
         assert any(i.section == "title" and "empty" in i.message for i in report.issues)
 
-    def test_title_without_formula_errors(self):
-        report = validate_draft(_good_draft(title="SQL injection bug"))
+    def test_title_without_formula_errors(self, target_apex):
+        report = validate_draft(_good_draft(target_apex, title="SQL injection bug"))
         assert report.ok is False
         assert any(i.section == "title" and "does not match" in i.message for i in report.issues)
 
-    def test_thin_description_errors(self):
-        report = validate_draft(_good_draft(description="Too short."))
+    def test_thin_description_errors(self, target_apex):
+        report = validate_draft(_good_draft(target_apex, description="Too short."))
         assert report.ok is False
         assert any(i.section == "description" for i in report.issues)
 
-    def test_single_step_errors(self):
+    def test_single_step_errors(self, target_apex):
         report = validate_draft(
-            _good_draft(steps_to_reproduce=["only one step that is long enough"])
+            _good_draft(target_apex, steps_to_reproduce=["only one step that is long enough"])
         )
         assert report.ok is False
         assert any(i.section == "steps_to_reproduce" for i in report.issues)
 
-    def test_hand_wavy_impact_errors(self):
+    def test_hand_wavy_impact_errors(self, target_apex):
         report = validate_draft(
-            _good_draft(impact="An attacker could compromise user data of the system.")
+            _good_draft(target_apex, impact="An attacker could compromise user data of the system.")
         )
         assert report.ok is False
         assert any(i.section == "impact" and "hand-wavy" in i.message for i in report.issues)
 
-    def test_remediation_without_url_errors(self):
+    def test_remediation_without_url_errors(self, target_apex):
         report = validate_draft(
-            _good_draft(remediation="Use parameterised queries throughout the codebase.")
+            _good_draft(
+                target_apex, remediation="Use parameterised queries throughout the codebase."
+            )
         )
         assert report.ok is False
         assert any(i.section == "remediation" for i in report.issues)
 
-    def test_unsanitised_evidence_errors(self):
-        bad = _good_draft(evidence="Authorization: Bearer leaked.token.here\nGET / HTTP/1.1\n")
+    def test_unsanitised_evidence_errors(self, target_apex):
+        bad = _good_draft(
+            target_apex, evidence="Authorization: Bearer leaked.token.here\nGET / HTTP/1.1\n"
+        )
         report = validate_draft(bad)
         assert report.ok is False
         assert any(i.section == "evidence" for i in report.issues)
 
-    def test_cvss_score_mismatch_errors(self):
+    def test_cvss_score_mismatch_errors(self, target_apex):
         # vector computes to 9.8 but score claims 5.0
-        bad = _good_draft(cvss_score=5.0)
+        bad = _good_draft(target_apex, cvss_score=5.0)
         report = validate_draft(bad)
         assert report.ok is False
         assert any(i.section == "cvss" for i in report.issues)
 
-    def test_unknown_cwe_warns(self):
+    def test_unknown_cwe_warns(self, target_apex):
         # warning, not error
-        report = validate_draft(_good_draft(cwe_id=99999))
+        report = validate_draft(_good_draft(target_apex, cwe_id=99999))
         assert any(i.section == "cwe" and i.severity == "warning" for i in report.issues)
         # still ok since only warning
         assert report.ok is True
@@ -249,21 +253,21 @@ class TestValidateDraft:
 
 
 class TestRenderDraftMarkdown:
-    def test_contains_title(self):
-        md = render_draft_markdown(_good_draft())
+    def test_contains_title(self, target_apex):
+        md = render_draft_markdown(_good_draft(target_apex))
         assert "/search?q allows full database extraction" in md
 
-    def test_contains_cwe_name(self):
-        md = render_draft_markdown(_good_draft())
+    def test_contains_cwe_name(self, target_apex):
+        md = render_draft_markdown(_good_draft(target_apex))
         assert "CWE-89 (SQL Injection)" in md
 
-    def test_steps_are_numbered(self):
-        md = render_draft_markdown(_good_draft())
+    def test_steps_are_numbered(self, target_apex):
+        md = render_draft_markdown(_good_draft(target_apex))
         assert "1. " in md
         assert "2. " in md
 
-    def test_evidence_block_present(self):
-        md = render_draft_markdown(_good_draft())
+    def test_evidence_block_present(self, target_apex):
+        md = render_draft_markdown(_good_draft(target_apex))
         assert "HTTP/1.1 200 OK" in md
 
 
@@ -271,23 +275,20 @@ class TestRenderDraftMarkdown:
 
 
 class TestSaveAndLoadDraft:
-    def test_save_writes_indexed_file(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("tools.report_tools.runtime.run_dir", lambda: tmp_path)
-        path = save_draft(_good_draft(finding_index=2))
-        assert path == tmp_path / "drafts" / "002.json"
+    def test_save_writes_indexed_file(self, run_dir, target_apex):
+        path = save_draft(_good_draft(target_apex, finding_index=2))
+        assert path == run_dir / "drafts" / "002.json"
         assert path.exists()
         data = json.loads(path.read_text())
         assert data["finding_index"] == 2
 
-    def test_load_drafts_orders_by_index(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("tools.report_tools.runtime.run_dir", lambda: tmp_path)
-        save_draft(_good_draft(finding_index=1))
-        save_draft(_good_draft(finding_index=0))
+    def test_load_drafts_orders_by_index(self, run_dir, target_apex):
+        save_draft(_good_draft(target_apex, finding_index=1))
+        save_draft(_good_draft(target_apex, finding_index=0))
         drafts = load_drafts()
         assert [d.finding_index for d in drafts] == [0, 1]
 
-    def test_load_drafts_empty_when_no_dir(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("tools.report_tools.runtime.run_dir", lambda: tmp_path)
+    def test_load_drafts_empty_when_no_dir(self, run_dir):
         assert load_drafts() == []
 
 
@@ -295,24 +296,21 @@ class TestSaveAndLoadDraft:
 
 
 class TestFinaliseDrafts:
-    def test_writes_reports_json_for_clean_drafts(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("tools.report_tools.runtime.run_dir", lambda: tmp_path)
-        save_draft(_good_draft(finding_index=0))
+    def test_writes_reports_json_for_clean_drafts(self, run_dir, target_apex):
+        save_draft(_good_draft(target_apex, finding_index=0))
         path = finalise_drafts("test-programme", "Summary line.", expected_count=1)
-        assert path == tmp_path / "reports.json"
+        assert path == run_dir / "reports.json"
         contents = json.loads(path.read_text())
         assert len(contents) == 1
         assert contents[0]["programme_handle"] == "test-programme"
 
-    def test_refuses_when_drafts_missing(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("tools.report_tools.runtime.run_dir", lambda: tmp_path)
-        save_draft(_good_draft(finding_index=0))
+    def test_refuses_when_drafts_missing(self, run_dir, target_apex):
+        save_draft(_good_draft(target_apex, finding_index=0))
         with pytest.raises(FinalisationError, match="expected 2 drafts, found 1"):
             finalise_drafts("test-programme", "Summary.", expected_count=2)
 
-    def test_refuses_on_validation_errors(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("tools.report_tools.runtime.run_dir", lambda: tmp_path)
-        save_draft(_good_draft(finding_index=0, title="bad title"))
+    def test_refuses_on_validation_errors(self, run_dir, target_apex):
+        save_draft(_good_draft(target_apex, finding_index=0, title="bad title"))
         with pytest.raises(FinalisationError, match="unresolved errors"):
             finalise_drafts("test-programme", "Summary.", expected_count=1)
 

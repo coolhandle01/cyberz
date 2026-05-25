@@ -15,9 +15,9 @@ pytestmark = pytest.mark.unit
 
 class TestCheckIDOR:
     def test_detects_access_control_bypass(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/api/users/12345", status_code=403)
+        ep = Endpoint(url=f"{target_url}/api/users/12345", status_code=403)
 
         with patch("requests.get", return_value=make_response(status=200, body='{"name":"Alice"}')):
             results = check_idor([ep])
@@ -29,9 +29,9 @@ class TestCheckIDOR:
         assert "200" in results[0].evidence
 
     def test_detects_pii_in_response(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/api/orders/99", status_code=200)
+        ep = Endpoint(url=f"{target_url}/api/orders/99", status_code=200)
         body = '{"id": 100, "email": "alice@example.com", "total": 49.99}'
 
         with patch("requests.get", return_value=make_response(status=200, body=body)):
@@ -43,9 +43,9 @@ class TestCheckIDOR:
         assert "PII" in results[0].evidence
 
     def test_detects_boundary_id_200_on_param(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/api/docs", status_code=200, parameters=["id"])
+        ep = Endpoint(url=f"{target_url}/api/docs", status_code=200, parameters=["id"])
 
         def respond(url: str, **_: object) -> MagicMock:
             if "id=0" in url or "id=-1" in url:
@@ -59,8 +59,8 @@ class TestCheckIDOR:
         assert results[0].severity_hint == Severity.MEDIUM
         assert "boundary" in results[0].evidence.lower()
 
-    def test_skips_500_endpoints(self, victim_url: str) -> None:
-        ep = Endpoint(url=f"{victim_url}/api/users/42", status_code=500)
+    def test_skips_500_endpoints(self, target_url: str) -> None:
+        ep = Endpoint(url=f"{target_url}/api/users/42", status_code=500)
 
         with patch("requests.get") as mock_get:
             results = check_idor([ep])
@@ -68,9 +68,9 @@ class TestCheckIDOR:
         mock_get.assert_not_called()
         assert results == []
 
-    def test_skips_non_id_params(self, victim_url: str) -> None:
+    def test_skips_non_id_params(self, target_url: str) -> None:
         ep = Endpoint(
-            url=f"{victim_url}/search",
+            url=f"{target_url}/search",
             status_code=200,
             parameters=["q", "page"],
         )
@@ -81,8 +81,8 @@ class TestCheckIDOR:
         mock_get.assert_not_called()
         assert results == []
 
-    def test_skips_endpoint_with_no_numeric_segment_and_no_id_params(self, victim_url: str) -> None:
-        ep = Endpoint(url=f"{victim_url}/about", status_code=200)
+    def test_skips_endpoint_with_no_numeric_segment_and_no_id_params(self, target_url: str) -> None:
+        ep = Endpoint(url=f"{target_url}/about", status_code=200)
 
         with patch("requests.get") as mock_get:
             results = check_idor([ep])
@@ -91,9 +91,9 @@ class TestCheckIDOR:
         assert results == []
 
     def test_probes_numeric_path_segment_variants(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/api/invoices/500", status_code=200)
+        ep = Endpoint(url=f"{target_url}/api/invoices/500", status_code=200)
 
         seen_urls: list[str] = []
 
@@ -114,10 +114,10 @@ class TestCheckIDOR:
         self,
         make_response: Callable[..., MagicMock],
         clean_response_body: str,
-        victim_url: str,
+        target_url: str,
     ) -> None:
         ep = Endpoint(
-            url=f"{victim_url}/api/items/10",
+            url=f"{target_url}/api/items/10",
             status_code=200,
             parameters=["id"],
         )
@@ -128,8 +128,8 @@ class TestCheckIDOR:
 
         assert results == []
 
-    def test_network_exception_is_swallowed(self, victim_url: str) -> None:
-        ep = Endpoint(url=f"{victim_url}/api/users/1001", status_code=200)
+    def test_network_exception_is_swallowed(self, target_url: str) -> None:
+        ep = Endpoint(url=f"{target_url}/api/users/1001", status_code=200)
 
         with patch("requests.get", side_effect=OSError("timeout")):
             results = check_idor([ep])
@@ -137,12 +137,12 @@ class TestCheckIDOR:
         assert results == []
 
     def test_deduplicates_to_one_finding_per_endpoint(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
         # Both the path segment (12345) and a query param would trigger, but
         # the path-segment phase fires first - only one finding expected.
         ep = Endpoint(
-            url=f"{victim_url}/api/users/12345",
+            url=f"{target_url}/api/users/12345",
             status_code=403,
             parameters=["id"],
         )
@@ -169,9 +169,9 @@ class TestCheckIDOR:
         assert required <= _ID_PARAMS
 
     def test_attack_filter_boundary_only_sends_two_probes(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/api/docs", status_code=200, parameters=["id"])
+        ep = Endpoint(url=f"{target_url}/api/docs", status_code=200, parameters=["id"])
         seen_urls: list[str] = []
 
         def record(url: str, **_: object) -> MagicMock:
@@ -188,9 +188,9 @@ class TestCheckIDOR:
         assert "id=-1" in joined
 
     def test_attack_filter_type_juggling_only(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/api/docs", status_code=200, parameters=["id"])
+        ep = Endpoint(url=f"{target_url}/api/docs", status_code=200, parameters=["id"])
         seen_urls: list[str] = []
 
         def record(url: str, **_: object) -> MagicMock:
@@ -207,9 +207,9 @@ class TestCheckIDOR:
         assert "0" not in probed_values
         assert "-1" not in probed_values
 
-    def test_attack_filter_empty_list_is_noop(self, victim_url: str) -> None:
+    def test_attack_filter_empty_list_is_noop(self, target_url: str) -> None:
         ep = Endpoint(
-            url=f"{victim_url}/api/users/42",
+            url=f"{target_url}/api/users/42",
             status_code=200,
             parameters=["id"],
         )
@@ -220,9 +220,9 @@ class TestCheckIDOR:
         assert results == []
 
     def test_attack_filter_none_runs_all_strategies(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/api/users/500", status_code=200)
+        ep = Endpoint(url=f"{target_url}/api/users/500", status_code=200)
         seen_urls: list[str] = []
 
         def record(url: str, **_: object) -> MagicMock:

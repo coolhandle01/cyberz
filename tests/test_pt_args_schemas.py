@@ -248,8 +248,12 @@ class TestSchemaAcceptReject:
                 _JwtCheckArgs,
                 {
                     "token": "eyJ.x.y",
-                    # endpoint is typed Endpoint; minimum shape is the URL
-                    "endpoint": {"url": "https://victim.example.com/api/me"},
+                    # endpoint is typed Endpoint; minimum shape is the URL.
+                    # Literal here, not f-string with target_apex: this is class-level
+                    # @pytest.mark.parametrize data, evaluated at collection time when
+                    # fixtures are not yet resolved. The URL value is incidental shape
+                    # data - the args_schema validation under test is URL-format-only.
+                    "endpoint": {"url": "https://example.invalid/api/me"},
                     "attacks": ["alg-none"],
                 },
             ),
@@ -341,7 +345,7 @@ class TestSchemaAcceptReject:
         ],
     )
     def test_unknown_strenum_value_rejected(
-        self, schema_cls: type[BaseModel], field_name: str
+        self, schema_cls: type[BaseModel], field_name: str, target_apex: str
     ) -> None:
         """An unknown StrEnum member must fail validation, not silently coerce."""
         base: dict[str, object] = {field_name: ["this-is-not-a-real-variant"]}
@@ -353,7 +357,7 @@ class TestSchemaAcceptReject:
             # _JwtCheckArgs takes the typed ``Endpoint`` shape (not a bare
             # URL string); pass the minimum dict that validates so the test
             # stays focused on the unknown-StrEnum reject.
-            base["endpoint"] = {"url": "https://victim.example.com/api/me"}
+            base["endpoint"] = {"url": f"https://victim.{target_apex}/api/me"}
         with pytest.raises(ValidationError):
             schema_cls.model_validate(base)
 
@@ -422,13 +426,13 @@ class TestSchemaAcceptReject:
         with pytest.raises(ValidationError):
             _JwtCheckArgs.model_validate({"endpoint": endpoint.model_dump(mode="json")})
 
-    def test_jwt_rejects_malformed_endpoint(self, endpoint) -> None:
+    def test_jwt_rejects_malformed_endpoint(self, endpoint, target_apex) -> None:
         """The typed ``Endpoint`` validates URL well-formedness upstream of
         the JWT replay - a string where an Endpoint dict is required
         rejects, as does an Endpoint dict whose URL is malformed."""
         with pytest.raises(ValidationError):
             _JwtCheckArgs.model_validate(
-                {"token": "eyJ.x.y", "endpoint": "https://victim.example.com/api"}
+                {"token": "eyJ.x.y", "endpoint": f"https://victim.{target_apex}/api"}
             )
         with pytest.raises(ValidationError):
             _JwtCheckArgs.model_validate({"token": "eyJ.x.y", "endpoint": {"url": "not-a-url"}})
@@ -455,22 +459,22 @@ class TestSchemaAcceptReject:
         with pytest.raises(ValidationError):
             _SaveFindingsArgs.model_validate({"findings": [{"not_a_real_field": "x"}]})
 
-    def test_recon_open_ports_accepts_victim_host(self, victim_url: str) -> None:
+    def test_recon_open_ports_accepts_victim_host(self, target_url: str) -> None:
         """``Recon Open Ports`` accepts a bare hostname filter.
 
-        The ``host`` field is ``Hostname``-typed; using the ``victim_url``
+        The ``host`` field is ``Hostname``-typed; using the ``target_url``
         fixture (the conftest's in-scope-target handle) and stripping the
         scheme keeps the test intent readable at the call site rather than
         via an opaque ``api.example.com`` literal.
         """
         from urllib.parse import urlparse
 
-        host = urlparse(victim_url).hostname
+        host = urlparse(target_url).hostname
         _PtReconOpenPortsArgs.model_validate({"recon_path": "recon.json", "host": host})
 
-    def test_recon_open_ports_rejects_url_in_host(self, victim_url: str) -> None:
+    def test_recon_open_ports_rejects_url_in_host(self, target_url: str) -> None:
         """The ``Hostname`` primitive rejects a URL where a bare hostname
-        is expected - ``victim_url`` carries the ``https://`` scheme, so
+        is expected - ``target_url`` carries the ``https://`` scheme, so
         passing it directly trips the validator upstream of the wrapper."""
         with pytest.raises(ValidationError):
-            _PtReconOpenPortsArgs.model_validate({"recon_path": "recon.json", "host": victim_url})
+            _PtReconOpenPortsArgs.model_validate({"recon_path": "recon.json", "host": target_url})

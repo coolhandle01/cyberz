@@ -34,6 +34,8 @@ def s3_check_tool(recon_path: str) -> list[RawFinding]:
 
 Why this matters: every tool's contract is what the LLM reads when picking the tool, including per-field guidance. The inferred path cannot attach per-field `Field(description=...)`; the explicit path can, and writing those descriptions is where the LLM gets the targeting signal that keeps probes on-scope. Per-field descriptions also reject unknown StrEnum variants upstream of any HTTP request - the validation fires before a mis-call costs a request.
 
+The "validate at the boundary, trust within" stance has a name and a canonical reference: Alexis King's [Parse, don't validate](https://lexi-lambda.github.io/blog/2019/11/05/parse-don-t-validate/) (2019). Pydantic v2 is the runtime that lets us do this in Python; see `cybersquad-models` for the upstream-alignment pointer to Pydantic's own docs and the version pin (single source of truth, so this skill doesn't drift when the pin moves). An args_schema is the LLM's input parsed into typed values at the boundary; the wrapper body trusts the parsed result and does not re-check shape. The CrewAI side - how `args_schema` and tool `description` are surfaced to the agent - is documented at <https://docs.crewai.com/en/learn/create-custom-tools>.
+
 Rules:
 
 - Class name is underscore-prefixed `_<ToolName>Args`. Each agent has a contract test under `tests/squad/<agent>/test_args_schemas.py` that walks `MEMBER.tools`, asserts every typed-tool schema is the expected explicit class, and enforces a closed-world `_<AGENT>_SCHEMAS` mapping. New typed tools are discovered via the private-prefix class name; a missing mapping entry fires the test before reviewers see the PR.
@@ -89,6 +91,8 @@ Rules:
 Composition rule: when a higher-level model carries a field that is conceptually a hostname or URL, type it through the primitive. `HostInsight.hostname: Hostname` rather than `: str`; `Endpoint.url: HttpUrl` rather than `: str`; `dict[Hostname, list[int]]` rather than `dict[str, list[int]]` for hostname-keyed dicts. The primitive's validator fires per-field at model construction time, so mis-shaped values reject upstream of every downstream consumer.
 
 FIXME comments in `primitives.py` and `asset.py` flag the eventual move to Pydantic's built-in `HttpUrl` (stronger contract, exposes `.host` / `.scheme` / `.port` properties, but runtime type stops being `str` so every consumer needs auditing first).
+
+For the **producer side** - when to define a new typed primitive, the prompt-injection threat model around free-text fields, and the cross-model coupling that the workspace-pair pattern preserves - see the `cybersquad-models` skill, which auto-loads on `models/*.py` edits.
 
 ## Return a pydantic model, or `list[<Model>]`
 
@@ -188,6 +192,7 @@ Dependency layers flow `primitives -> finding -> h1 -> asset`; modules import on
 - `from squad.workspace_tools import ...` in a consumer instead of `from squad import ...` - the re-export exists so the import path stays stable when shared tools move.
 - Inline scope dance in a tool body that takes agent-supplied targets (the `_load_programme + filter_in_scope` pattern). Lift it onto the decorator via `scope_filter=(field_name, filter_fn)` so the guarantee lives at the wrapper site.
 - A new `programme_handle: str` field on an args_schema for a tool whose body would only thread it into `current_programme()` or `filter_in_scope`. Workspace state (`runtime.programme_handle` / `<run_dir>/programme.json`) is the contract; the per-call handle is duplication.
+- Direct assignment to `runtime.programme_handle` or `runtime.run_id`. Use the `runtime.bind_programme(...)` / `runtime.bind_run_id(...)` setters - they enforce the single-pipeline-at-a-time invariant by raising on a conflicting rebind (same-value rebind is a no-op for retries and tests). Reads stay on the module attribute. The invariant is load-bearing for the planned Flow refactor in #128 where parallel sub-flows would otherwise silently stomp each other's run folders.
 
 ## Canonical examples
 

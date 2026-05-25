@@ -31,20 +31,20 @@ class TestIsInScope:
 
 # run_nuclei
 class TestRunNuclei:
-    def test_parses_nuclei_json_output(self):
+    def test_parses_nuclei_json_output(self, target_apex):
         import json
 
         mock_result = MagicMock()
         mock_result.stdout = json.dumps(
             {
                 "info": {"name": "Test Finding", "severity": "high", "tags": ["xss"]},
-                "matched-at": "https://api.example.com/search",
+                "matched-at": f"https://api.{target_apex}/search",
                 "extracted-results": ["payload"],
             }
         )
         mock_result.returncode = 0
 
-        endpoints = [Endpoint(url="https://api.example.com/search", status_code=200)]
+        endpoints = [Endpoint(url=f"https://api.{target_apex}/search", status_code=200)]
 
         with (
             patch("shutil.which", return_value="/usr/bin/nuclei"),
@@ -60,8 +60,8 @@ class TestRunNuclei:
         results = run_nuclei([])
         assert results == []
 
-    def test_raises_if_binary_missing(self):
-        endpoints = [Endpoint(url="https://example.com", status_code=200)]
+    def test_raises_if_binary_missing(self, target_apex):
+        endpoints = [Endpoint(url=f"https://{target_apex}", status_code=200)]
         with patch("shutil.which", return_value=None):
             with pytest.raises(EnvironmentError, match="nuclei"):
                 run_nuclei(endpoints)
@@ -69,14 +69,14 @@ class TestRunNuclei:
 
 # check_cors_misconfiguration
 class TestCheckCorsMisconfiguration:
-    def test_detects_wildcard_cors(self):
+    def test_detects_wildcard_cors(self, target_apex):
         mock_response = MagicMock()
         mock_response.headers = {
             "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Credentials": "false",
         }
 
-        endpoints = [Endpoint(url="https://api.example.com", status_code=200)]
+        endpoints = [Endpoint(url=f"https://api.{target_apex}", status_code=200)]
 
         with patch("requests.get", return_value=mock_response):
             results = check_cors_misconfiguration(endpoints)
@@ -84,14 +84,14 @@ class TestCheckCorsMisconfiguration:
         assert len(results) == 1
         assert results[0].vuln_class == "CORS"
 
-    def test_detects_reflected_origin_with_credentials(self):
+    def test_detects_reflected_origin_with_credentials(self, target_apex):
         mock_response = MagicMock()
         mock_response.headers = {
-            "Access-Control-Allow-Origin": "https://evil.example.com",
+            "Access-Control-Allow-Origin": f"https://evil.{target_apex}",
             "Access-Control-Allow-Credentials": "true",
         }
 
-        endpoints = [Endpoint(url="https://api.example.com", status_code=200)]
+        endpoints = [Endpoint(url=f"https://api.{target_apex}", status_code=200)]
 
         with patch("requests.get", return_value=mock_response):
             results = check_cors_misconfiguration(endpoints)
@@ -99,22 +99,22 @@ class TestCheckCorsMisconfiguration:
         assert len(results) == 1
         assert results[0].severity_hint == Severity.HIGH
 
-    def test_safe_cors_produces_no_finding(self):
+    def test_safe_cors_produces_no_finding(self, target_apex):
         mock_response = MagicMock()
         mock_response.headers = {
-            "Access-Control-Allow-Origin": "https://example.com",
+            "Access-Control-Allow-Origin": f"https://{target_apex}",
             "Access-Control-Allow-Credentials": "false",
         }
 
-        endpoints = [Endpoint(url="https://api.example.com", status_code=200)]
+        endpoints = [Endpoint(url=f"https://api.{target_apex}", status_code=200)]
 
         with patch("requests.get", return_value=mock_response):
             results = check_cors_misconfiguration(endpoints)
 
         assert results == []
 
-    def test_request_exception_is_swallowed(self):
-        endpoints = [Endpoint(url="https://api.example.com", status_code=200)]
+    def test_request_exception_is_swallowed(self, target_apex):
+        endpoints = [Endpoint(url=f"https://api.{target_apex}", status_code=200)]
 
         with patch("requests.get", side_effect=Exception("timeout")):
             results = check_cors_misconfiguration(endpoints)
@@ -124,11 +124,11 @@ class TestCheckCorsMisconfiguration:
 
 # check_ssrf
 class TestCheckSsrf:
-    def test_detects_aws_metadata_in_response(self):
+    def test_detects_aws_metadata_in_response(self, target_apex):
         from tools.pentest import check_ssrf
 
         endpoint = Endpoint(
-            url="https://api.example.com/fetch",
+            url=f"https://api.{target_apex}/fetch",
             status_code=200,
             parameters=["url"],
         )
@@ -142,10 +142,10 @@ class TestCheckSsrf:
         assert results[0].vuln_class == "SSRF"
         assert results[0].severity_hint == Severity.CRITICAL
 
-    def test_skips_endpoints_without_parameters(self):
+    def test_skips_endpoints_without_parameters(self, target_apex):
         from tools.pentest import check_ssrf
 
-        endpoint = Endpoint(url="https://api.example.com/static", status_code=200)
+        endpoint = Endpoint(url=f"https://api.{target_apex}/static", status_code=200)
 
         with patch("requests.get") as mock_get:
             results = check_ssrf([endpoint])
@@ -153,11 +153,11 @@ class TestCheckSsrf:
         mock_get.assert_not_called()
         assert results == []
 
-    def test_safe_response_produces_no_finding(self):
+    def test_safe_response_produces_no_finding(self, target_apex):
         from tools.pentest import check_ssrf
 
         endpoint = Endpoint(
-            url="https://api.example.com/fetch",
+            url=f"https://api.{target_apex}/fetch",
             status_code=200,
             parameters=["url"],
         )
@@ -169,11 +169,11 @@ class TestCheckSsrf:
 
         assert results == []
 
-    def test_request_exception_is_swallowed(self):
+    def test_request_exception_is_swallowed(self, target_apex):
         from tools.pentest import check_ssrf
 
         endpoint = Endpoint(
-            url="https://api.example.com/fetch",
+            url=f"https://api.{target_apex}/fetch",
             status_code=200,
             parameters=["url"],
         )
@@ -186,10 +186,10 @@ class TestCheckSsrf:
 
 # check_header_injection
 class TestCheckHeaderInjection:
-    def test_detects_reflected_canary_in_headers(self):
+    def test_detects_reflected_canary_in_headers(self, target_apex):
         from tools.pentest import check_header_injection
 
-        endpoint = Endpoint(url="https://api.example.com/", status_code=200)
+        endpoint = Endpoint(url=f"https://api.{target_apex}/", status_code=200)
         mock_resp = MagicMock()
         mock_resp.headers = {"CybersquadCanary": "yes"}
         mock_resp.text = ""
@@ -200,10 +200,10 @@ class TestCheckHeaderInjection:
         assert len(results) == 1
         assert results[0].vuln_class == "HeaderInjection"
 
-    def test_detects_canary_in_response_body(self):
+    def test_detects_canary_in_response_body(self, target_apex):
         from tools.pentest import check_header_injection
 
-        endpoint = Endpoint(url="https://api.example.com/", status_code=200)
+        endpoint = Endpoint(url=f"https://api.{target_apex}/", status_code=200)
         mock_resp = MagicMock()
         mock_resp.headers = {}
         mock_resp.text = "cybersquadcanary injected"
@@ -213,10 +213,10 @@ class TestCheckHeaderInjection:
 
         assert len(results) == 1
 
-    def test_clean_response_produces_no_finding(self):
+    def test_clean_response_produces_no_finding(self, target_apex):
         from tools.pentest import check_header_injection
 
-        endpoint = Endpoint(url="https://api.example.com/", status_code=200)
+        endpoint = Endpoint(url=f"https://api.{target_apex}/", status_code=200)
         mock_resp = MagicMock()
         mock_resp.headers = {"Content-Type": "text/html"}
         mock_resp.text = "<html>Normal</html>"
@@ -226,10 +226,10 @@ class TestCheckHeaderInjection:
 
         assert results == []
 
-    def test_request_exception_is_swallowed(self):
+    def test_request_exception_is_swallowed(self, target_apex):
         from tools.pentest import check_header_injection
 
-        endpoint = Endpoint(url="https://api.example.com/", status_code=200)
+        endpoint = Endpoint(url=f"https://api.{target_apex}/", status_code=200)
 
         with patch("requests.get", side_effect=Exception("conn error")):
             results = check_header_injection([endpoint])

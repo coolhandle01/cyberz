@@ -34,28 +34,28 @@ pytestmark = pytest.mark.unit
 
 
 @pytest.fixture
-def sweep(programme) -> ReconResult:
+def sweep(programme, target_apex) -> ReconResult:
     return ReconResult(
         programme=programme,
         subdomains=["api.example.com", "admin.example.com", "cdn.example.com"],
         endpoints=[
             Endpoint(
-                url="https://api.example.com",
+                url=f"https://api.{target_apex}",
                 status_code=200,
                 technologies=["Nginx", "Spring Boot 2.6"],
             ),
             Endpoint(
-                url="https://admin.example.com",
+                url=f"https://admin.{target_apex}",
                 status_code=401,
                 technologies=["WordPress 5.8"],
             ),
             Endpoint(
-                url="https://cdn.example.com",
+                url=f"https://cdn.{target_apex}",
                 status_code=200,
                 technologies=["CloudFront"],
             ),
             Endpoint(
-                url="https://dead.example.com",
+                url=f"https://dead.{target_apex}",
                 status_code=500,
                 technologies=[],
             ),
@@ -164,16 +164,14 @@ class TestValidateInsight:
 
 
 class TestPersistence:
-    def test_save_insight_writes_per_host_file(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("tools.recon_insights.runtime.run_dir", lambda: tmp_path)
+    def test_save_insight_writes_per_host_file(self, run_dir):
         path = save_insight(_good_insight())
-        assert path == tmp_path / "host_insights" / "api.example.com.json"
+        assert path == run_dir / "host_insights" / "api.example.com.json"
         assert path.exists()
         loaded = HostInsight.model_validate_json(path.read_text())
         assert loaded.hostname == "api.example.com"
 
-    def test_insight_path_sanitises_special_chars(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("tools.recon_insights.runtime.run_dir", lambda: tmp_path)
+    def test_insight_path_sanitises_special_chars(self, run_dir):
         # HostInsight.hostname is now typed as Hostname so weird chars cannot
         # reach save_insight through the model path - but insight_path itself
         # still takes a bare ``str`` argument (used directly elsewhere), and
@@ -185,8 +183,7 @@ class TestPersistence:
         assert "/" not in path.name
         assert path.parent.name == "host_insights"
 
-    def test_load_insights_orders_by_hostname(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("tools.recon_insights.runtime.run_dir", lambda: tmp_path)
+    def test_load_insights_orders_by_hostname(self, run_dir):
         save_insight(_good_insight(hostname="zebra.example.com"))
         save_insight(_good_insight(hostname="aardvark.example.com"))
         loaded = load_insights()
@@ -195,15 +192,13 @@ class TestPersistence:
             "zebra.example.com",
         ]
 
-    def test_load_insights_empty_when_no_dir(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("tools.recon_insights.runtime.run_dir", lambda: tmp_path)
+    def test_load_insights_empty_when_no_dir(self, run_dir):
         assert load_insights() == []
 
-    def test_insight_path_rejects_empty_hostname(self, tmp_path, monkeypatch):
+    def test_insight_path_rejects_empty_hostname(self, run_dir):
         # ``insight_path`` builds <run_dir>/host_insights/<sanitised>.json, so
         # the sanitisation check has to run against a stub run_dir or
         # runtime.run_dir() raises first.
-        monkeypatch.setattr("tools.recon_insights.runtime.run_dir", lambda: tmp_path)
         with pytest.raises(ValueError, match="empty after sanitisation"):
             insight_path("///")
 
@@ -238,30 +233,27 @@ class TestUncoveredInterestingHosts:
 # Finalisation
 
 
-def _write_sweep(tmp_path, sweep: ReconResult) -> None:
-    (tmp_path / "sweep.json").write_text(sweep.model_dump_json(), encoding="utf-8")
+def _write_sweep(run_dir, sweep: ReconResult) -> None:
+    (run_dir / "sweep.json").write_text(sweep.model_dump_json(), encoding="utf-8")
 
 
 class TestFinaliseRecon:
-    def test_writes_recon_json_for_clean_insights(self, sweep, programme, tmp_path, monkeypatch):
-        monkeypatch.setattr("tools.recon_insights.runtime.run_dir", lambda: tmp_path)
-        _write_sweep(tmp_path, sweep)
+    def test_writes_recon_json_for_clean_insights(self, sweep, programme, run_dir):
+        _write_sweep(run_dir, sweep)
         save_insight(_good_insight())
         path = finalise_recon(programme)
-        assert path == tmp_path / "recon.json"
+        assert path == run_dir / "recon.json"
         data = json.loads(path.read_text())
         assert len(data["host_insights"]) == 1
         assert data["host_insights"][0]["hostname"] == "api.example.com"
 
-    def test_refuses_without_insights(self, sweep, programme, tmp_path, monkeypatch):
-        monkeypatch.setattr("tools.recon_insights.runtime.run_dir", lambda: tmp_path)
-        _write_sweep(tmp_path, sweep)
+    def test_refuses_without_insights(self, sweep, programme, run_dir):
+        _write_sweep(run_dir, sweep)
         with pytest.raises(ReconFinalisationError, match="no host_insights"):
             finalise_recon(programme)
 
-    def test_refuses_when_no_high_priority(self, sweep, programme, tmp_path, monkeypatch):
-        monkeypatch.setattr("tools.recon_insights.runtime.run_dir", lambda: tmp_path)
-        _write_sweep(tmp_path, sweep)
+    def test_refuses_when_no_high_priority(self, sweep, programme, run_dir):
+        _write_sweep(run_dir, sweep)
         save_insight(
             _good_insight(
                 priority=HostPriority.MEDIUM,
@@ -271,22 +263,19 @@ class TestFinaliseRecon:
         with pytest.raises(ReconFinalisationError, match="HIGH priority"):
             finalise_recon(programme)
 
-    def test_refuses_on_validation_errors(self, sweep, programme, tmp_path, monkeypatch):
-        monkeypatch.setattr("tools.recon_insights.runtime.run_dir", lambda: tmp_path)
-        _write_sweep(tmp_path, sweep)
+    def test_refuses_on_validation_errors(self, sweep, programme, run_dir):
+        _write_sweep(run_dir, sweep)
         save_insight(_good_insight(notes="too short"))
         with pytest.raises(ReconFinalisationError, match="unresolved errors"):
             finalise_recon(programme)
 
-    def test_refuses_without_sweep(self, programme, tmp_path, monkeypatch):
-        monkeypatch.setattr("tools.recon_insights.runtime.run_dir", lambda: tmp_path)
+    def test_refuses_without_sweep(self, programme, run_dir):
         save_insight(_good_insight())
         with pytest.raises(FileNotFoundError, match="sweep.json"):
             finalise_recon(programme)
 
-    def test_carries_sweep_fields_through(self, sweep, programme, tmp_path, monkeypatch):
-        monkeypatch.setattr("tools.recon_insights.runtime.run_dir", lambda: tmp_path)
-        _write_sweep(tmp_path, sweep)
+    def test_carries_sweep_fields_through(self, sweep, programme, run_dir):
+        _write_sweep(run_dir, sweep)
         save_insight(_good_insight())
         path = finalise_recon(programme)
         data = json.loads(path.read_text())

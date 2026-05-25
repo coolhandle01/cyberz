@@ -4,10 +4,10 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
+import runtime
 from models import ProgrammeReportSummary
 from models.h1 import DisclosureReport, SubmissionResult
 from squad import SquadMember, cyber_tool, read_run_file_tool, read_run_filelist_tool
-from tools import http
 from tools.h1_api import h1
 from tools.report_tools import save_report
 
@@ -51,7 +51,6 @@ def submit_report_tool(report: DisclosureReport) -> SubmissionResult:
     # the same DisclosureReport when given an instance and constructs
     # one when given a dict - so this is the both-shapes adapter.
     report = DisclosureReport.model_validate(report)
-    http.set_programme(report.programme_handle)
     save_report(report)
     return h1.submit_report(report)
 
@@ -59,15 +58,6 @@ def submit_report_tool(report: DisclosureReport) -> SubmissionResult:
 class _CheckDuplicateArgs(BaseModel):
     """Explicit args_schema for the Check H1 Duplicate tool."""
 
-    programme_handle: str = Field(
-        description=(
-            "Exact HackerOne programme handle as it appears in the URL"
-            " (lowercase, no slashes, no spaces). Must match the programme"
-            " the report is about to be submitted against - querying the"
-            " wrong programme's reports list returns a false-negative"
-            " duplicate check and an actual duplicate slips through."
-        ),
-    )
     title: str = Field(
         description=(
             "Draft report title to fuzzy-match against existing reports on"
@@ -80,14 +70,13 @@ class _CheckDuplicateArgs(BaseModel):
 
 
 @cyber_tool("Check H1 Duplicate", args_schema=_CheckDuplicateArgs)
-def check_duplicate_tool(programme_handle: str, title: str) -> list[ProgrammeReportSummary]:
+def check_duplicate_tool(title: str) -> list[ProgrammeReportSummary]:
     """
     Last-chance duplicate check before submission. Lists recent reports on this
     programme whose titles resemble the given title. A match means another
     researcher may have already submitted this finding.
     """
-    http.set_programme(programme_handle)
-    reports = h1.list_reports(programme_handle, page_size=25)
+    reports = h1.list_reports(runtime.programme_handle, page_size=25)
     title_lower = title.lower()
     return [
         ProgrammeReportSummary(
