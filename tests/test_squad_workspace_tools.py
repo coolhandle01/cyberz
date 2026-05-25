@@ -1,10 +1,17 @@
 """
 tests/test_squad_workspace_tools.py - exercise the shared workspace @tool
-wrappers (``read_run_filelist_tool`` / ``read_run_file_tool``).
+wrappers (``read_run_filelist_tool`` / ``read_run_file_tool`` /
+``read_attack_plan_tool``).
 
 The wrappers are thin: unmarshal JSON, call into tools/workspace helpers,
 serialise the result. Coverage here is regression coverage of the wrapping
 itself; the underlying helpers are exercised in ``tests/test_workspace.py``.
+
+The ``args_schema`` contract for the same three wrappers lives in
+``TestWorkspaceArgsSchemas`` below - aligned with the per-agent
+``test_args_schemas.py`` shape used elsewhere, but co-located with the
+behavioural tests because the workspace tools are shared rather than
+agent-scoped.
 """
 
 from __future__ import annotations
@@ -12,6 +19,7 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pytest
+from pydantic import BaseModel, ValidationError
 
 pytestmark = pytest.mark.unit
 
@@ -63,3 +71,77 @@ class TestSharedWorkspaceTools:
         with patch("tools.research_tools.runtime.run_dir", return_value=tmp_path):
             with pytest.raises(FileNotFoundError, match="attack plan not found"):
                 read_attack_plan_tool.func()
+
+
+# Tool-name -> explicit schema class. The workspace wrappers are shared
+# rather than agent-scoped, so the closed-world structural check in each
+# consuming agent's ``test_args_schemas.py`` covers the registry side;
+# this block holds the schema-side contract.
+def _load_workspace_schemas() -> dict[str, type[BaseModel]]:
+    """Resolve the schemas lazily so the module imports without the env vars."""
+    from squad.workspace_tools import (
+        _ListRunFilesArgs,
+        _ReadAttackPlanArgs,
+        _ReadRunFileArgs,
+    )
+
+    return {
+        "List Run Files": _ListRunFilesArgs,
+        "Read Run File": _ReadRunFileArgs,
+        "Read Attack Plan": _ReadAttackPlanArgs,
+    }
+
+
+class TestWorkspaceArgsSchemas:
+    """Contract tests for the shared workspace tools' explicit
+    ``args_schema`` classes.
+
+    The workspace wrappers are reachable from every agent's ``MEMBER.tools``;
+    a mis-call costs a wrong artefact loaded (or the wrong agent reasoning
+    over the wrong inputs). The per-field description on ``Read Run File``'s
+    ``relative_path`` is the load-bearing signal that says "prefer the typed
+    slicer when one exists".
+    """
+
+    def test_every_field_has_description(self) -> None:
+        """Every field on every workspace schema carries a description.
+
+        ``List Run Files`` and ``Read Attack Plan`` have no fields (the
+        run directory and attack plan path are resolved from runtime
+        state), so the loop trivially passes for them.
+        """
+        for tool_name, schema_cls in _load_workspace_schemas().items():
+            for field_name, field_info in schema_cls.model_fields.items():
+                desc = field_info.description
+                assert desc, f"{tool_name}::{field_name} missing Field(description=...)"
+                assert isinstance(desc, str) and desc.strip(), (
+                    f"{tool_name}::{field_name} description is blank"
+                )
+
+    def test_list_run_files_accepts_empty_payload(self) -> None:
+        """``List Run Files`` takes no parameters; the empty payload is canonical."""
+        from squad.workspace_tools import _ListRunFilesArgs
+
+        instance = _ListRunFilesArgs.model_validate({})
+        assert isinstance(instance, _ListRunFilesArgs)
+
+    def test_read_attack_plan_accepts_empty_payload(self) -> None:
+        """``Read Attack Plan`` takes no parameters; the empty payload is canonical."""
+        from squad.workspace_tools import _ReadAttackPlanArgs
+
+        instance = _ReadAttackPlanArgs.model_validate({})
+        assert isinstance(instance, _ReadAttackPlanArgs)
+
+    def test_read_run_file_accepts_relative_path(self) -> None:
+        """``Read Run File`` accepts a bare relative-path string."""
+        from squad.workspace_tools import _ReadRunFileArgs
+
+        instance = _ReadRunFileArgs.model_validate({"relative_path": "recon.json"})
+        assert instance.relative_path == "recon.json"
+
+    def test_read_run_file_rejects_missing_relative_path(self) -> None:
+        """``relative_path`` is required - the wrapper has no default."""
+        from squad.workspace_tools import _ReadRunFileArgs
+
+        with pytest.raises(ValidationError):
+            _ReadRunFileArgs.model_validate({})

@@ -57,12 +57,11 @@ _STALE_STEP = "observe the following evidence:"
 # Enumerations
 
 
-class SeverityDecision(StrEnum):
-    """How the VR's severity call relates to the PT's severity_hint."""
-
-    KEEP = "keep"
-    RAISE = "raise"
-    LOWER = "lower"
+# SeverityDecision lives in models/triage.py per the typed-shapes-live-
+# in-models rule. Re-exported here so existing ``from tools.triage_tools
+# import SeverityDecision`` consumers keep working; the canonical
+# import path is ``from models import SeverityDecision``.
+from models.triage import SeverityDecision  # noqa: E402
 
 
 class DiscardReason(StrEnum):

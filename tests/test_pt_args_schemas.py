@@ -1,33 +1,25 @@
 """
 tests/test_pt_args_schemas.py - contract tests for the explicit Pydantic
-``args_schema`` every Penetration Tester ``@cyber_tool`` / ``@pentest_tool``
-wrapper carries.
-
-Started life under #143/#146 covering the 25 ``@pentest_tool`` probes;
-#147 extended it to cover the 18 cloud / infra ``@cyber_tool`` wrappers on
-the same agent. Both decorators go through the same ``cyber_tool`` helper
-so the contract is identical: the schema class is hand-written, every
-field carries a non-empty ``description``, and ``args_schema`` on the
-registered ``Tool`` ``is`` (identity) the explicit class - not the
-title-cased one CrewAI synthesises from the function signature.
+``args_schema`` every Penetration Tester wrapper carries.
 
 The PT agent's tools hit live programmes; a mis-call costs money and
-noise. The ``args_schema`` is the per-tool contract the LLM is shown when
-picking the tool, so the rules below enforce three things in CI:
+noise. The ``args_schema`` is the per-tool contract the LLM is shown
+when picking the tool, so the rules below enforce three things in CI:
 
-  1. Every PT tool with a hand-written schema is in ``_PT_SCHEMAS``, and
-     every entry in ``_PT_SCHEMAS`` resolves to a registered tool with the
-     expected schema. Closed-world check: a new PT typed-tool added
-     without a mapping entry fires this test before review.
+  1. Every PT tool with a hand-written schema is in ``_PT_SCHEMAS``,
+     and every entry in ``_PT_SCHEMAS`` resolves to a registered tool
+     with the expected schema. Closed-world check: a new PT typed
+     tool added without a mapping entry fires this test before review.
   2. Every field on every schema carries a non-empty ``description`` -
-     the explicit path can address fields individually and the inferred
-     path cannot, so we make sure the new capability is actually used.
+     the explicit path can address fields individually and the
+     inferred path cannot, so we make sure the new capability is
+     actually used.
   3. Schemas with StrEnum filter parameters reject unknown values;
      required-field schemas reject missing fields. The contract is
      enforced upstream of any HTTP request.
 
-The existing behavioural tests (``test_ssrf.py``, ``test_idor.py`` etc.)
-cover probe behaviour separately and are unchanged.
+The behavioural tests (``test_ssrf.py``, ``test_idor.py`` etc.) cover
+probe behaviour separately.
 """
 
 from __future__ import annotations
@@ -35,6 +27,7 @@ from __future__ import annotations
 import pytest
 from pydantic import BaseModel, ValidationError
 
+from squad import SquadTool
 from squad.penetration_tester import (
     MEMBER,
     _AdminPanelsArgs,
@@ -69,8 +62,12 @@ from squad.penetration_tester import (
     _PostgresqlCheckArgs,
     _PromptInjectionArgs,
     _PrototypePollutionArgs,
+    _PtReconEndpointsArgs,
+    _PtReconOpenPortsArgs,
+    _PtReconSubdomainsArgs,
     _RedisCheckArgs,
     _S3CheckArgs,
+    _SaveFindingsArgs,
     _SensitiveFilesArgs,
     _SourceMapsArgs,
     _SqlmapArgs,
@@ -81,17 +78,20 @@ from squad.penetration_tester import (
     _XssArgs,
     _XxeArgs,
 )
+from squad.workspace_tools import (
+    _ListRunFilesArgs,
+    _ReadAttackPlanArgs,
+    _ReadRunFileArgs,
+)
 
 pytestmark = pytest.mark.unit
 
 
 # Tool-name -> explicit schema class. Covers every PT @cyber_tool /
-# @pentest_tool wrapper. Recon / write / workspace tools that intentionally
-# keep the signature-inferred schema (Recon Subdomains, Recon Endpoints,
-# Recon Open Ports, Save Findings, plus the three workspace readers) are
-# absent: they are out of scope for #143 / #147, and #150 covers them.
+# @pentest_tool wrapper, including the four recon / save tools and the
+# three shared workspace readers.
 _PT_SCHEMAS: dict[str, type[BaseModel]] = {
-    # @pentest_tool probes (#143 / #146)
+    # @pentest_tool probes
     "Nuclei Scan": _NucleiScanArgs,
     "SQLMap Injection Scan": _SqlmapArgs,
     "Cookie Security Check": _CookieCheckArgs,
@@ -117,7 +117,7 @@ _PT_SCHEMAS: dict[str, type[BaseModel]] = {
     "Prototype Pollution Check": _PrototypePollutionArgs,
     "IDOR Probe": _IdorArgs,
     "JWT Vulnerability Check": _JwtCheckArgs,
-    # @cyber_tool cloud / infra wrappers (#147)
+    # @cyber_tool cloud / infra wrappers
     "S3 Bucket Check": _S3CheckArgs,
     "Azure Blob Storage Check": _AzureStorageCheckArgs,
     "Unauthenticated Elasticsearch Check": _ElasticsearchCheckArgs,
@@ -136,6 +136,15 @@ _PT_SCHEMAS: dict[str, type[BaseModel]] = {
     "Kibana Check": _KibanaArgs,
     "Portainer Check": _PortainerArgs,
     "Consul/Vault Check": _ConsulVaultArgs,
+    # PT recon / save wrappers
+    "Recon Subdomains": _PtReconSubdomainsArgs,
+    "Recon Endpoints": _PtReconEndpointsArgs,
+    "Recon Open Ports": _PtReconOpenPortsArgs,
+    "Save Findings": _SaveFindingsArgs,
+    # Shared workspace wrappers (re-exported via squad.workspace_tools)
+    "List Run Files": _ListRunFilesArgs,
+    "Read Run File": _ReadRunFileArgs,
+    "Read Attack Plan": _ReadAttackPlanArgs,
 }
 
 # Cloud / infra wrappers that take ``recon_path: str``. Used by the
@@ -160,7 +169,7 @@ _RECON_PATH_CLOUD_SCHEMAS: list[type[BaseModel]] = [
 ]
 
 
-def _tools_by_name() -> dict[str, object]:
+def _tools_by_name() -> dict[str, SquadTool]:
     """Look up MEMBER.tools by display name once, share across tests."""
     return {t.name: t for t in MEMBER.tools}
 
@@ -171,8 +180,8 @@ class TestPtArgsSchemaContracts:
         """Every PT typed tool registers the explicit schema class on its Tool."""
         tool_obj = _tools_by_name()[tool_name]
         expected = _PT_SCHEMAS[tool_name]
-        assert tool_obj.args_schema is expected, (  # type: ignore[attr-defined]
-            f"{tool_name} args_schema is {tool_obj.args_schema!r}; expected {expected!r}"  # type: ignore[attr-defined]
+        assert tool_obj.args_schema is expected, (
+            f"{tool_name} args_schema is {tool_obj.args_schema!r}; expected {expected!r}"
         )
 
     @pytest.mark.parametrize(
@@ -181,7 +190,7 @@ class TestPtArgsSchemaContracts:
         ids=sorted(_PT_SCHEMAS),
     )
     def test_every_field_has_description(self, tool_name: str, schema_cls: type[BaseModel]) -> None:
-        """Per #143 / #147: every field on every PT typed-tool schema carries a description."""
+        """Every field on every PT typed-tool schema carries a non-empty description."""
         for field_name, field_info in schema_cls.model_fields.items():
             desc = field_info.description
             assert desc, f"{tool_name}::{field_name} missing Field(description=...)"
@@ -239,7 +248,8 @@ class TestSchemaAcceptReject:
                 _JwtCheckArgs,
                 {
                     "token": "eyJ.x.y",
-                    "endpoint": "https://victim.example.com/api/me",
+                    # endpoint is typed Endpoint; minimum shape is the URL
+                    "endpoint": {"url": "https://victim.example.com/api/me"},
                     "attacks": ["alg-none"],
                 },
             ),
@@ -256,7 +266,7 @@ class TestSchemaAcceptReject:
             (_HostHeaderArgs, {"recon_path": "recon.json"}),
             (_SourceMapsArgs, {"recon_path": "recon.json"}),
             (_SriCheckArgs, {"recon_path": "recon.json"}),
-            # @cyber_tool cloud / infra acceptance cases (#147)
+            # @cyber_tool cloud / infra acceptance cases
             (_S3CheckArgs, {"recon_path": "recon.json"}),
             (_AzureStorageCheckArgs, {"recon_path": "recon.json"}),
             (_ElasticsearchCheckArgs, {"recon_path": "recon.json"}),
@@ -275,6 +285,34 @@ class TestSchemaAcceptReject:
             (_KibanaArgs, {"recon_path": "recon.json"}),
             (_PortainerArgs, {"recon_path": "recon.json"}),
             (_ConsulVaultArgs, {"recon_path": "recon.json"}),
+            # PT recon / save acceptance cases
+            (_PtReconSubdomainsArgs, {"recon_path": "recon.json"}),
+            (_PtReconSubdomainsArgs, {"recon_path": "recon.json", "host_filter": "api"}),
+            (_PtReconEndpointsArgs, {"recon_path": "recon.json"}),
+            (
+                _PtReconEndpointsArgs,
+                {
+                    "recon_path": "recon.json",
+                    "status": 200,
+                    "tech": "wordpress",
+                    "host_contains": "admin",
+                    "offset": 0,
+                    "limit": 25,
+                },
+            ),
+            (_PtReconOpenPortsArgs, {"recon_path": "recon.json"}),
+            # The host-restricted ``Recon Open Ports`` acceptance case lives
+            # in a dedicated test method below (``test_recon_open_ports_*``)
+            # because the ``host`` field is now ``Hostname``-typed and the
+            # fixture-derived hostname makes test intent ("in-scope target")
+            # readable at the call site rather than via an opaque literal.
+            (_SaveFindingsArgs, {"findings": []}),
+            # Shared workspace acceptance cases. List Run Files and
+            # Read Attack Plan take no parameters - the empty payload is the
+            # canonical call.
+            (_ListRunFilesArgs, {}),
+            (_ReadAttackPlanArgs, {}),
+            (_ReadRunFileArgs, {"relative_path": "recon.json"}),
         ],
     )
     def test_schema_accepts_known_input(
@@ -312,7 +350,10 @@ class TestSchemaAcceptReject:
         if "token" in schema_cls.model_fields:
             base["token"] = "eyJ.x.y"
         if "endpoint" in schema_cls.model_fields:
-            base["endpoint"] = "https://victim.example.com/api/me"
+            # _JwtCheckArgs takes the typed ``Endpoint`` shape (not a bare
+            # URL string); pass the minimum dict that validates so the test
+            # stays focused on the unknown-StrEnum reject.
+            base["endpoint"] = {"url": "https://victim.example.com/api/me"}
         with pytest.raises(ValidationError):
             schema_cls.model_validate(base)
 
@@ -336,7 +377,7 @@ class TestSchemaAcceptReject:
             _XssArgs,
             _HppArgs,
             _ErrorDisclosureArgs,
-            # @cyber_tool cloud wrappers that take endpoints (#147)
+            # @cyber_tool cloud wrappers that take endpoints
             _SensitiveFilesArgs,
             _AdminPanelsArgs,
         ],
@@ -357,6 +398,10 @@ class TestSchemaAcceptReject:
             _SourceMapsArgs,
             _SriCheckArgs,
             *_RECON_PATH_CLOUD_SCHEMAS,
+            # PT recon wrappers - all take a required ``recon_path``
+            _PtReconSubdomainsArgs,
+            _PtReconEndpointsArgs,
+            _PtReconOpenPortsArgs,
         ],
     )
     def test_missing_required_recon_path_rejected(self, schema_cls: type[BaseModel]) -> None:
@@ -364,9 +409,68 @@ class TestSchemaAcceptReject:
         with pytest.raises(ValidationError):
             schema_cls.model_validate({})
 
-    def test_jwt_requires_both_token_and_endpoint(self) -> None:
-        """JWT check needs the raw token and the validating endpoint."""
+    def test_jwt_requires_both_token_and_endpoint(self, endpoint) -> None:
+        """JWT check needs the raw token and the validating endpoint.
+
+        Uses the conftest ``endpoint`` fixture for the typed-Endpoint
+        payload so test intent ("a real, in-scope target endpoint") is
+        readable at the call site rather than via a hand-rolled URL
+        literal.
+        """
         with pytest.raises(ValidationError):
             _JwtCheckArgs.model_validate({"token": "eyJ.x.y"})
         with pytest.raises(ValidationError):
-            _JwtCheckArgs.model_validate({"endpoint": "https://victim.example.com/api"})
+            _JwtCheckArgs.model_validate({"endpoint": endpoint.model_dump(mode="json")})
+
+    def test_jwt_rejects_malformed_endpoint(self, endpoint) -> None:
+        """The typed ``Endpoint`` validates URL well-formedness upstream of
+        the JWT replay - a string where an Endpoint dict is required
+        rejects, as does an Endpoint dict whose URL is malformed."""
+        with pytest.raises(ValidationError):
+            _JwtCheckArgs.model_validate(
+                {"token": "eyJ.x.y", "endpoint": "https://victim.example.com/api"}
+            )
+        with pytest.raises(ValidationError):
+            _JwtCheckArgs.model_validate({"token": "eyJ.x.y", "endpoint": {"url": "not-a-url"}})
+        # The conftest endpoint fixture is intentionally valid; this asserts
+        # the happy path stays accepting alongside the rejects above.
+        _JwtCheckArgs.model_validate(
+            {"token": "eyJ.x.y", "endpoint": endpoint.model_dump(mode="json")}
+        )
+
+    def test_save_findings_requires_findings(self) -> None:
+        """``Save Findings`` rejects an empty payload - ``findings`` has no default."""
+        with pytest.raises(ValidationError):
+            _SaveFindingsArgs.model_validate({})
+
+    def test_read_run_file_requires_relative_path(self) -> None:
+        """``Read Run File`` rejects an empty payload - ``relative_path`` is required."""
+        with pytest.raises(ValidationError):
+            _ReadRunFileArgs.model_validate({})
+
+    def test_save_findings_rejects_mis_shaped_finding(self) -> None:
+        """A dict that does not validate as ``RawFinding`` rejects upstream of
+        the wrapper - the whole point of the typed ``list[RawFinding]``
+        parameter is the schema reject before findings.json is written."""
+        with pytest.raises(ValidationError):
+            _SaveFindingsArgs.model_validate({"findings": [{"not_a_real_field": "x"}]})
+
+    def test_recon_open_ports_accepts_victim_host(self, victim_url: str) -> None:
+        """``Recon Open Ports`` accepts a bare hostname filter.
+
+        The ``host`` field is ``Hostname``-typed; using the ``victim_url``
+        fixture (the conftest's in-scope-target handle) and stripping the
+        scheme keeps the test intent readable at the call site rather than
+        via an opaque ``api.example.com`` literal.
+        """
+        from urllib.parse import urlparse
+
+        host = urlparse(victim_url).hostname
+        _PtReconOpenPortsArgs.model_validate({"recon_path": "recon.json", "host": host})
+
+    def test_recon_open_ports_rejects_url_in_host(self, victim_url: str) -> None:
+        """The ``Hostname`` primitive rejects a URL where a bare hostname
+        is expected - ``victim_url`` carries the ``https://`` scheme, so
+        passing it directly trips the validator upstream of the wrapper."""
+        with pytest.raises(ValidationError):
+            _PtReconOpenPortsArgs.model_validate({"recon_path": "recon.json", "host": victim_url})

@@ -21,14 +21,14 @@ class TestOsintAnalystTools:
         from squad.osint_analyst import run_initial_sweep_tool
 
         with (
-            patch("squad.osint_analyst.http.set_programme") as mhttp,
+            patch("squad.osint_analyst.discovery.http.set_programme") as mhttp,
             patch(
-                "squad.osint_analyst.h1.get_programme_policy",
+                "squad.osint_analyst.discovery.h1.get_programme_policy",
                 return_value={"data": {}},
             ),
-            patch("squad.osint_analyst.h1.get_structured_scope", return_value={}),
-            patch("squad.osint_analyst.h1.parse_programme", return_value=programme),
-            patch("squad.osint_analyst.run_recon", return_value=recon_result) as mrun,
+            patch("squad.osint_analyst.discovery.h1.get_structured_scope", return_value={}),
+            patch("squad.osint_analyst.discovery.h1.parse_programme", return_value=programme),
+            patch("squad.osint_analyst.discovery.run_recon", return_value=recon_result) as mrun,
             patch("runtime.run_dir", return_value=tmp_path),
         ):
             result = run_initial_sweep_tool.func("acme")
@@ -41,13 +41,13 @@ class TestOsintAnalystTools:
     @staticmethod
     def _patch_programme(programme):
         return [
-            patch("squad.osint_analyst.http.set_programme"),
+            patch("squad.workspace_tools.http.set_programme"),
             patch(
-                "squad.osint_analyst.h1.get_programme_policy",
+                "squad.workspace_tools.h1.get_programme_policy",
                 return_value={"data": {}},
             ),
-            patch("squad.osint_analyst.h1.get_structured_scope", return_value={}),
-            patch("squad.osint_analyst.h1.parse_programme", return_value=programme),
+            patch("squad.workspace_tools.h1.get_structured_scope", return_value={}),
+            patch("squad.workspace_tools.h1.parse_programme", return_value=programme),
         ]
 
     def test_annotate_host_tool_writes_insight_and_returns_validation(
@@ -78,7 +78,7 @@ class TestOsintAnalystTools:
             for p in reversed(patches):
                 p.stop()
 
-        from tools.recon_insights import HostAnnotation
+        from models import HostAnnotation
 
         assert isinstance(result, HostAnnotation)
         assert result.validation.ok is True
@@ -109,7 +109,7 @@ class TestOsintAnalystTools:
             for p in reversed(patches):
                 p.stop()
 
-        from tools.recon_insights import HostAnnotation
+        from models import HostAnnotation
 
         assert isinstance(result, HostAnnotation)
         assert result.validation.ok is False
@@ -181,11 +181,11 @@ class TestOsintAnalystTools:
 
         patches = self._patch_programme(programme) + [
             patch(
-                "squad.osint_analyst.filter_in_scope_impl",
+                "squad.osint_analyst.discovery.filter_in_scope_impl",
                 return_value=["api.example.com"],
             ),
             patch(
-                "squad.osint_analyst.probe_endpoints_impl",
+                "squad.osint_analyst.discovery.probe_endpoints_impl",
                 return_value=[endpoint],
             ),
         ]
@@ -216,10 +216,10 @@ class TestOsintAnalystTools:
         mprobe = MagicMock()
         patches = self._patch_programme(programme) + [
             patch(
-                "squad.osint_analyst.filter_in_scope_impl",
+                "squad.osint_analyst.discovery.filter_in_scope_impl",
                 return_value=[],
             ),
-            patch("squad.osint_analyst.probe_endpoints_impl", mprobe),
+            patch("squad.osint_analyst.discovery.probe_endpoints_impl", mprobe),
         ]
         for p in patches:
             p.start()
@@ -244,11 +244,11 @@ class TestOsintAnalystTools:
         )
         patches = self._patch_programme(programme) + [
             patch(
-                "squad.osint_analyst.filter_in_scope_impl",
+                "squad.osint_analyst.discovery.filter_in_scope_impl",
                 return_value=["legacy.example.com"],
             ),
             patch(
-                "squad.osint_analyst.detect_takeover_candidates",
+                "squad.osint_analyst.discovery.detect_takeover_candidates",
                 return_value=[candidate],
             ),
         ]
@@ -281,10 +281,10 @@ class TestOsintAnalystTools:
         mdetect = MagicMock()
         patches = self._patch_programme(programme) + [
             patch(
-                "squad.osint_analyst.filter_in_scope_impl",
+                "squad.osint_analyst.discovery.filter_in_scope_impl",
                 return_value=[],
             ),
-            patch("squad.osint_analyst.detect_takeover_candidates", mdetect),
+            patch("squad.osint_analyst.discovery.detect_takeover_candidates", mdetect),
         ]
         for p in patches:
             p.start()
@@ -323,7 +323,7 @@ class TestOsintAnalystTools:
 
         sentinel = ["api.example.com", "admin.example.com"]
         with patch(
-            "squad.osint_analyst.cert_transparency",
+            "squad.osint_analyst.discovery.cert_transparency",
             return_value=sentinel,
         ) as m:
             result = cert_transparency_tool.func("example.com")
@@ -336,7 +336,7 @@ class TestOsintAnalystTools:
 
         sentinel = ["https://example.com/old"]
         with patch(
-            "squad.osint_analyst.historical_urls",
+            "squad.osint_analyst.discovery.historical_urls",
             return_value=sentinel,
         ) as m:
             result = historical_urls_tool.func("example.com")
@@ -353,7 +353,7 @@ class TestOsintAnalystTools:
         # instances or dicts, so this exercises the dict path.
         endpoints_payload = [endpoint.model_dump(mode="json")]
         with patch(
-            "squad.osint_analyst.detect_llm_endpoints",
+            "squad.osint_analyst.discovery.detect_llm_endpoints",
             return_value=[endpoint],
         ) as m:
             result = llm_detection_tool.func(endpoints_payload)

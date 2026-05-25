@@ -22,7 +22,7 @@ from typing import get_args, get_origin
 import pytest
 from pydantic import BaseModel
 
-from squad import CrewAITool
+from squad import SquadTool
 from squad.disclosure_coordinator import MEMBER as DISCLOSURE_COORDINATOR
 from squad.osint_analyst import MEMBER as OSINT_ANALYST
 from squad.penetration_tester import MEMBER as PENETRATION_TESTER
@@ -50,9 +50,9 @@ _HANDLE_TOOLS: frozenset[str] = frozenset(
 )
 
 
-def _every_tool() -> list[tuple[str, CrewAITool]]:
+def _every_tool() -> list[tuple[str, SquadTool]]:
     """Flat list of (agent_slug, tool) pairs across every squad member."""
-    out: list[tuple[str, CrewAITool]] = []
+    out: list[tuple[str, SquadTool]] = []
     for member in (
         PROGRAMME_MANAGER,
         OSINT_ANALYST,
@@ -78,7 +78,7 @@ def _is_list_of_pydantic(annotation: object) -> bool:
     return len(args) == 1 and _is_pydantic_model(args[0])
 
 
-def _is_whitelisted_handle(tool_obj: CrewAITool, return_annotation: object) -> bool:
+def _is_whitelisted_handle(tool_obj: SquadTool, return_annotation: object) -> bool:
     """Workspace-handle ``str`` returns are allowed for the named tools."""
     return tool_obj.name in _HANDLE_TOOLS and return_annotation is str
 
@@ -108,7 +108,7 @@ class TestSquadToolContracts:
         _every_tool(),
         ids=[f"{slug}::{t.name}" for slug, t in _every_tool()],
     )
-    def test_tool_return_annotation_is_typed(self, agent_slug: str, tool_obj: CrewAITool) -> None:
+    def test_tool_return_annotation_is_typed(self, agent_slug: str, tool_obj: SquadTool) -> None:
         """Every tool returns a BaseModel, a list[BaseModel], or a whitelisted
         primitive. ``dict``, ``list[dict]``, ``list[Any]``, bare ``list`` all
         fail."""
@@ -137,10 +137,10 @@ class TestSquadToolContracts:
         """``SquadMember.tools`` carries a typed list, not ``list[Any]``.
 
         The runtime check is intentionally minimal - the dataclass field
-        is statically ``list[CrewAITool]``, so this asserts the Protocol
+        is statically ``list[SquadTool]``, so this asserts the Protocol
         is satisfied by every tool registered today.
         """
         for _slug, tool_obj in _every_tool():
-            assert isinstance(tool_obj, CrewAITool), (
-                f"{tool_obj!r} does not satisfy CrewAITool: missing name/description/func"
+            assert isinstance(tool_obj, SquadTool), (
+                f"{tool_obj!r} does not satisfy SquadTool: missing name/description/func"
             )

@@ -1,18 +1,14 @@
 """Technical Author - writes professional H1-format disclosure reports."""
 
-from __future__ import annotations
-
 from pathlib import Path
 
-from crewai.tools import tool
+from pydantic import BaseModel, Field
 
-from models import ProgrammeReportSummary
-from squad import SquadMember, read_run_file_tool, read_run_filelist_tool
+from models import AuthoredDraft, CWEEntry, OWASPEntry, ProgrammeReportSummary
+from squad import SquadMember, cyber_tool, read_run_file_tool, read_run_filelist_tool
 from tools import http
-from tools.cwe_data import CWEEntry
 from tools.cwe_data import lookup as cwe_lookup
 from tools.h1_api import h1
-from tools.owasp_data import OWASPEntry
 from tools.owasp_data import lookup as owasp_lookup
 from tools.report_tools import (
     FinalisationError,
@@ -29,7 +25,27 @@ from tools.report_tools import (
 from tools.workspace import resolve_run_path
 
 
-@tool("Sanitise Evidence")
+class _SanitiseEvidenceArgs(BaseModel):
+    """Explicit args_schema for the Sanitise Evidence tool."""
+
+    text: str = Field(
+        description=(
+            "Raw evidence text - HTTP request/response excerpts, tool"
+            " output, captured headers - that may carry credentials,"
+            " cookies, bearer tokens, JWTs, AWS keys, or other secret-"
+            "shaped key=value pairs. Pass the unredacted text as it"
+            " appears in the PT's raw finding; the wrapper returns a"
+            " ``SanitisationReport`` carrying the redacted body, a list"
+            " of redactions made, and any warnings. Payloads (XSS"
+            " strings, SQL injection vectors, SSRF URLs) are"
+            " deliberately NOT redacted - the triager needs the literal"
+            " request that proves the issue. Run this before pasting"
+            " evidence into ``Draft Vulnerability Report``."
+        ),
+    )
+
+
+@cyber_tool("Sanitise Evidence", args_schema=_SanitiseEvidenceArgs)
 def sanitise_evidence_tool(text: str) -> SanitisationReport:
     """
     Redact credentials, cookies, bearer tokens, JWTs, AWS keys and secret-shaped
@@ -43,7 +59,23 @@ def sanitise_evidence_tool(text: str) -> SanitisationReport:
     return sanitise_evidence(text)
 
 
-@tool("Lookup CWE")
+class _TaLookupCweArgs(BaseModel):
+    """Explicit args_schema for the TA's Lookup CWE tool."""
+
+    query: str = Field(
+        description=(
+            "Free-text query against the Common Weakness Enumeration"
+            " index. Accepts a ``vuln_class`` string (``SQLi``,"
+            " ``ReflectedXSS``), a CWE name (``Cross-Site Scripting``),"
+            " or a free-text keyword. Use to cite the canonical MITRE"
+            " definition in the remediation section - the returned"
+            " entry surfaces the matching OWASP cheat-sheet topic so"
+            " you can chain to ``Lookup OWASP Guidance``."
+        ),
+    )
+
+
+@cyber_tool("Lookup CWE", args_schema=_TaLookupCweArgs)
 def lookup_cwe_tool(query: str) -> list[CWEEntry]:
     """
     Find Common Weakness Enumeration entries that match a query. Pass a
@@ -55,7 +87,23 @@ def lookup_cwe_tool(query: str) -> list[CWEEntry]:
     return list(cwe_lookup(query))
 
 
-@tool("Lookup OWASP Guidance")
+class _TaLookupOwaspArgs(BaseModel):
+    """Explicit args_schema for the TA's Lookup OWASP Guidance tool."""
+
+    query: str = Field(
+        description=(
+            "Free-text query against the OWASP Cheat Sheet index. Matches"
+            " topic slug or title keyword (e.g. ``sql injection``,"
+            " ``ssrf``, ``authorization``). Use to source the canonical"
+            " ``cheatsheetseries.owasp.org`` URL cited in the"
+            " Remediation section of the H1 report - the returned"
+            " entry's ``key_principles`` are short, paste-friendly"
+            " statements suitable for the report body."
+        ),
+    )
+
+
+@cyber_tool("Lookup OWASP Guidance", args_schema=_TaLookupOwaspArgs)
 def lookup_owasp_tool(query: str) -> list[OWASPEntry]:
     """
     Find OWASP Cheat Sheet entries that match a query (topic slug or title
@@ -67,7 +115,30 @@ def lookup_owasp_tool(query: str) -> list[OWASPEntry]:
     return list(owasp_lookup(query))
 
 
-@tool("Calculate CVSS Score")
+class _TaCalculateCvssArgs(BaseModel):
+    """Explicit args_schema for the TA's Calculate CVSS Score tool.
+
+    Same vector format as on the VR's copy. ``Draft Vulnerability
+    Report`` re-runs the compute and refuses if the declared score
+    does not match the recomputed value - a mis-formed vector here
+    flips the verdict before the draft is even validated.
+    """
+
+    vector: str = Field(
+        description=(
+            "Full CVSS 3.1 vector string"
+            " (``CVSS:3.1/AV:<n>/AC:<n>/PR:<n>/UI:<n>/S:<n>/C:<n>/I:<n>"
+            "/A:<n>``, e.g."
+            " ``CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H``). Each"
+            " metric must use the documented short codes; malformed"
+            " vectors raise rather than silently scoring 0. Use this"
+            " before drafting so the report's declared score matches"
+            " what the validator recomputes."
+        ),
+    )
+
+
+@cyber_tool("Calculate CVSS Score", args_schema=_TaCalculateCvssArgs)
 def calculate_cvss_tool(vector: str) -> float:
     """
     Compute the CVSS 3.1 base score from a vector string such as
@@ -78,7 +149,31 @@ def calculate_cvss_tool(vector: str) -> float:
     return calculate_cvss_score(vector)
 
 
-@tool("List Programme Reports")
+class _TaListProgrammeReportsArgs(BaseModel):
+    """Explicit args_schema for the TA's List Programme Reports tool."""
+
+    programme_handle: str = Field(
+        description=(
+            "Exact HackerOne programme handle (lowercase, no slashes, no"
+            " spaces) the report list is filtered by - the H1 API uses"
+            " the handle as the authoritative key. A mis-cased or wrong"
+            " handle returns 404 / an empty list and the TA drafts a"
+            " title against an empty prior-art surface rather than the"
+            " real one."
+        ),
+    )
+    page_size: int = Field(
+        default=25,
+        description=(
+            "Number of reports to pull per H1 API page (default 25)."
+            " Used to right-size the prior-art sample before drafting a"
+            " distinct title - 25 is enough to spot collisions without"
+            " a full sweep."
+        ),
+    )
+
+
+@cyber_tool("List Programme Reports", args_schema=_TaListProgrammeReportsArgs)
 def list_programme_reports_tool(
     programme_handle: str, page_size: int = 25
 ) -> list[ProgrammeReportSummary]:
@@ -102,18 +197,47 @@ def list_programme_reports_tool(
     ]
 
 
-@tool("Draft Vulnerability Report")
+class _DraftReportArgs(BaseModel):
+    """Explicit args_schema for the Draft Vulnerability Report tool.
+
+    The LLM-authored content lives on ``AuthoredDraft`` (in
+    ``models.report``) alongside the per-field descriptions; this
+    schema wires that authored content to the VR's verified finding at
+    ``finding_index``.
+    """
+
+    finding_index: int = Field(
+        description=(
+            "Zero-based index into ``verified.json``. Carries target /"
+            " vuln_class / severity forward from the VR's verified"
+            " entry so the draft cannot accidentally contradict the"
+            " Vulnerability Researcher. Out-of-range refuses explicitly."
+        ),
+    )
+    authored: AuthoredDraft = Field(
+        description=(
+            "Your authored report content: title / summary / description"
+            " / steps_to_reproduce / evidence / impact / remediation /"
+            " cvss_vector / cwe_id. Run ``Sanitise Evidence`` over your"
+            " evidence section first - the disclosure is private but"
+            " the report is permanent."
+        ),
+    )
+    verified_path: str = Field(
+        default="verified.json",
+        description=(
+            "Relative path to the VR's verified findings artefact"
+            " (defaults to ``verified.json``). Override only when"
+            " drafting against a non-default writer; the typical TA"
+            " call accepts the default."
+        ),
+    )
+
+
+@cyber_tool("Draft Vulnerability Report", args_schema=_DraftReportArgs)
 def draft_report_tool(
     finding_index: int,
-    title: str,
-    summary: str,
-    description: str,
-    steps_to_reproduce: list[str],
-    evidence: str,
-    impact: str,
-    remediation: str,
-    cvss_vector: str,
-    cwe_id: int,
+    authored: AuthoredDraft,
     verified_path: str = "verified.json",
 ) -> ReportDraftResult:
     """
@@ -122,17 +246,10 @@ def draft_report_tool(
     are pulled from verified.json at ``finding_index`` so you cannot
     accidentally contradict the Vulnerability Researcher.
 
-    Inputs are the prose the triager will read:
-      - title: `[Type] in [Component/Endpoint] allows [Outcome]`
-      - summary: 2-3 sentences (root cause + location + concrete impact)
-      - description: developer-focused explanation of WHY the code is vulnerable
-      - steps_to_reproduce: numbered list, each step at least 10 chars
-      - evidence: PRE-SANITISED tool output / HTTP excerpt; run Sanitise
-        Evidence first to strip credentials and cookies
-      - impact: specific, named data/system and worst realistic outcome
-      - remediation: actionable fix with an OWASP or CWE URL citation
-      - cvss_vector + cwe_id: must match the computed CVSS score and an entry
-        in the CWE catalogue
+    ``authored`` is the typed ``AuthoredDraft`` content: see the
+    model's per-field descriptions for the contract on each section
+    (title, summary, description, steps_to_reproduce, evidence,
+    impact, remediation, cvss_vector, cwe_id).
 
     Returns a ReportDraftResult with the relative draft path and a
     ValidationReport. When validation.ok is false, re-run with the issues
@@ -146,22 +263,24 @@ def draft_report_tool(
             f"(verified.json has {len(verified)} findings)"
         )
     finding = verified[finding_index]
+    # Both-shapes adapter: dict from CrewAI, model instance from tests.
+    authored = AuthoredDraft.model_validate(authored)
 
     draft = ReportDraft(
         finding_index=finding_index,
         target=finding.target,
         vuln_class=finding.vuln_class,
         severity=finding.severity,
-        cvss_vector=cvss_vector,
-        cvss_score=calculate_cvss_score(cvss_vector),
-        cwe_id=cwe_id,
-        title=title.strip(),
-        summary=summary.strip(),
-        description=description.strip(),
-        steps_to_reproduce=[s.strip() for s in steps_to_reproduce],
-        evidence=evidence,
-        impact=impact.strip(),
-        remediation=remediation.strip(),
+        cvss_vector=authored.cvss_vector,
+        cvss_score=calculate_cvss_score(authored.cvss_vector),
+        cwe_id=authored.cwe_id,
+        title=authored.title.strip(),
+        summary=authored.summary.strip(),
+        description=authored.description.strip(),
+        steps_to_reproduce=[s.strip() for s in authored.steps_to_reproduce],
+        evidence=authored.evidence,
+        impact=authored.impact.strip(),
+        remediation=authored.remediation.strip(),
     )
     path = save_draft(draft)
     return ReportDraftResult(
@@ -170,7 +289,39 @@ def draft_report_tool(
     )
 
 
-@tool("Finalise Reports")
+class _FinaliseReportsArgs(BaseModel):
+    """Explicit args_schema for the TA's Finalise Reports tool."""
+
+    programme_handle: str = Field(
+        description=(
+            "Exact HackerOne programme handle stamped onto every"
+            " consolidated report. Must match the handle the VR's"
+            " ``verified.json`` was produced under; a mismatch would"
+            " ship reports labelled against the wrong programme and"
+            " the DC would file them against whichever handle the body"
+            " carries."
+        ),
+    )
+    summary: str = Field(
+        description=(
+            "2-3 sentence executive summary covering the overall"
+            " session - attached to every report in the consolidated"
+            " manifest. Describe the surface tested and the breadth of"
+            " what was found at a glance; the triager reads this"
+            " before the per-finding body."
+        ),
+    )
+    verified_path: str = Field(
+        default="verified.json",
+        description=(
+            "Relative path to the VR's verified findings artefact"
+            " (defaults to ``verified.json``). Override only when"
+            " finalising against a non-default writer."
+        ),
+    )
+
+
+@cyber_tool("Finalise Reports", args_schema=_FinaliseReportsArgs)
 def finalise_reports_tool(
     programme_handle: str,
     summary: str,

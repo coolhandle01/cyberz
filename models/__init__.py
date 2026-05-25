@@ -14,9 +14,18 @@ across every consumer.
 |                  | ``HostInsight``, ``OpenPortsMap``, ``LlmEndpoint``, ``ReconResult`` |
 | ``models.workspace`` | ``RunFile``, ``RunFileContent`` |
 | ``models.cve`` | ``CveEntry`` |
+| ``models.cwe`` | ``CWEEntry`` |
+| ``models.owasp`` | ``OWASPEntry`` |
+| ``models.dns`` | ``TakeoverCandidate`` |
+| ``models.insight`` | ``HostAnnotation``, ``InsightValidationIssue``, |
+|                    | ``InsightValidationReport``, ``ReconFinalisationError`` |
 | ``models.metrics`` | ``RunMetrics`` |
 | ``models.h1`` | HackerOne shapes incl. ``ProgrammeReportSummary`` |
-| ``models.attack`` | ``AttackPlan``, ``AttackPlanItem`` |
+| ``models.attack`` | ``AttackPlan``, ``AttackPlanItem``, |
+|                   | ``AttackPlanValidationIssue``, ``AttackPlanValidationReport``, |
+|                   | ``AttackPlanFinalisationError`` |
+| ``models.triage`` | ``AuthoredAssessment``, ``SeverityDecision`` |
+| ``models.report`` | ``AuthoredDraft`` |
 
 The per-domain modules import only from layers below them in the
 dependency graph: primitives -> finding -> h1 -> asset. No module imports
@@ -36,31 +45,64 @@ from models.asset import (
     OpenPortsMap,
     ReconResult,
 )
+from models.attack import (
+    AttackPlan,
+    AttackPlanFinalisationError,
+    AttackPlanItem,
+    AttackPlanValidationIssue,
+    AttackPlanValidationReport,
+)
 from models.cve import CveEntry
+from models.cwe import CWEEntry
+from models.dns import TakeoverCandidate
 from models.finding import RawFinding, RawFindingSummary, VerifiedVulnerability
 from models.h1 import ProgrammeReportSummary
+from models.insight import (
+    HostAnnotation,
+    InsightValidationIssue,
+    InsightValidationReport,
+    ReconFinalisationError,
+)
 from models.metrics import RunMetrics
+from models.owasp import OWASPEntry
 from models.primitives import Hostname, HttpUrl, Severity
+from models.report import AuthoredDraft
+from models.triage import AuthoredAssessment, SeverityDecision
 from models.workspace import RunFile, RunFileContent
 
 __all__ = [
+    "AttackPlan",
+    "AttackPlanFinalisationError",
+    "AttackPlanItem",
+    "AttackPlanValidationIssue",
+    "AttackPlanValidationReport",
+    "AuthoredAssessment",
+    "AuthoredDraft",
+    "CWEEntry",
     "CveEntry",
     "Endpoint",
     "EndpointPage",
+    "HostAnnotation",
     "HostInsight",
     "HostPriority",
     "HostRole",
     "Hostname",
     "HttpUrl",
+    "InsightValidationIssue",
+    "InsightValidationReport",
     "LlmEndpoint",
+    "OWASPEntry",
     "OpenPortsMap",
     "ProgrammeReportSummary",
     "RawFinding",
     "RawFindingSummary",
+    "ReconFinalisationError",
     "ReconResult",
     "RunFile",
     "RunFileContent",
     "RunMetrics",
     "Severity",
+    "SeverityDecision",
+    "TakeoverCandidate",
     "VerifiedVulnerability",
 ]

@@ -35,36 +35,40 @@ from crewai import Agent, Task
 from crewai.tools import tool
 from pydantic import BaseModel
 
-from squad.workspace_tools import (
-    read_attack_plan_tool,
-    read_run_file_tool,
-    read_run_filelist_tool,
-)
-
 SQUAD_SKILLS_DIR = Path(__file__).parent / "skills"
 
 
 @runtime_checkable
-class CrewAITool(Protocol):
+class SquadTool(Protocol):
     """The shape every ``MEMBER.tools`` entry conforms to.
 
-    The decorators in use - the bare ``@tool``, ``@cyber_tool``,
-    ``@pentest_tool``, ``@research_brief_tool`` - all produce CrewAI ``Tool``
-    instances that carry ``name``, ``description``, and ``func``. This
-    Protocol is the single shared surface those decorators expose, so the
-    registry can be ``list[CrewAITool]`` rather than ``list[Any]`` and the
-    contract test in ``tests/test_squad_tool_contracts.py`` has a typed
-    handle to walk.
+    Project-specific name (rather than e.g. ``CrewAITool``) so the squad's
+    public surface stays decoupled from the underlying agent framework:
+    today this Protocol matches the runtime shape ``crewai.tools.tool``
+    produces, but the registry is "the tools the bounty squad uses", not
+    "the tools CrewAI happens to produce". The Protocol stays a real
+    abstraction: ``SquadMember.tools: list[SquadTool]`` and the specialist
+    Protocols (``_PentestTool``, ``_ResearchBriefTool``) inherit from it
+    so the cross-agent contract test in
+    ``tests/test_squad_tool_contracts.py`` has a typed handle to walk.
 
-    ``func`` is declared via ``@property`` (rather than as a plain class
-    attribute) so the Protocol is satisfied by CrewAI's ``Tool`` model -
-    its ``func`` field is typed ``Callable[P, R | Awaitable[R]]`` for the
-    concrete wrapped function and would otherwise fail Protocol variance
-    against ``Callable[..., object]``.
+    The decorators in use - the bare ``@tool``, ``@cyber_tool``,
+    ``@pentest_tool``, ``@research_brief_tool`` - all produce CrewAI
+    ``Tool`` instances that carry ``name``, ``description``, ``func``,
+    and ``args_schema``. ``args_schema`` is part of the Protocol because
+    every cybersquad wrapper carries an explicit Pydantic schema; the
+    contract tests in ``tests/squad/<agent>/test_args_schemas.py`` walk
+    it on every registered tool. ``func`` is declared via ``@property``
+    (rather than as a plain class attribute) so the Protocol is
+    satisfied by CrewAI's ``Tool`` model - its ``func`` field is typed
+    ``Callable[P, R | Awaitable[R]]`` for the concrete wrapped function
+    and would otherwise fail Protocol variance against
+    ``Callable[..., object]``.
     """
 
     name: str
     description: str
+    args_schema: type[BaseModel]
 
     @property
     def func(self) -> Callable[..., object]: ...
@@ -72,15 +76,15 @@ class CrewAITool(Protocol):
 
 def cyber_tool(
     name: str, *, args_schema: type[BaseModel]
-) -> Callable[[Callable[..., object]], CrewAITool]:
+) -> Callable[[Callable[..., object]], SquadTool]:
     """The blessed cybersquad replacement for bare ``@crewai.tools.tool``.
 
     Equivalent to ``tool(name)`` except that ``args_schema`` is keyword-
     required: the explicit Pydantic class overrides the signature-inferred
-    schema CrewAI would otherwise build. Per #143/#146 every cybersquad
-    ``@tool`` wrapper carries one, because the inferred path cannot attach
-    per-field ``Field(description=...)`` and the agent reads those
-    descriptions when picking the tool.
+    schema CrewAI would otherwise build. Every cybersquad ``@tool``
+    wrapper carries one - the inferred path is not reachable anywhere
+    in the squad. Per-field ``Field(description=...)`` is the
+    targeting guidance the agent reads when picking the tool.
 
     ``pentest_tool`` and ``research_brief_tool`` compose on top of this
     helper: they call ``cyber_tool`` underneath and then layer their own
@@ -89,12 +93,23 @@ def cyber_tool(
     specialist wrapper uses ``@cyber_tool`` directly.
     """
 
-    def decorator(fn: Callable[..., object]) -> CrewAITool:
+    def decorator(fn: Callable[..., object]) -> SquadTool:
         wrapped = tool(name)(fn)
         wrapped.args_schema = args_schema
-        return cast(CrewAITool, wrapped)
+        return cast(SquadTool, wrapped)
 
     return decorator
+
+
+# Shared workspace wrappers are imported after ``cyber_tool`` is defined,
+# because ``squad/workspace_tools.py`` decorates with ``@cyber_tool`` and
+# would hit a circular import if pulled in alongside the top-of-module
+# imports.
+from squad.workspace_tools import (  # noqa: E402
+    read_attack_plan_tool,
+    read_run_file_tool,
+    read_run_filelist_tool,
+)
 
 
 @dataclass(frozen=True)
@@ -107,7 +122,7 @@ class SquadMember:
     """
 
     dir: Path
-    tools: list[CrewAITool] = field(default_factory=list)
+    tools: list[SquadTool] = field(default_factory=list)
 
     @property
     def slug(self) -> str:
@@ -171,7 +186,7 @@ def build_task(
 
 
 __all__ = [
-    "CrewAITool",
+    "SquadTool",
     "SquadMember",
     "build_agent",
     "build_task",

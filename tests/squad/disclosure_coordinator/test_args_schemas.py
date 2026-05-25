@@ -10,9 +10,9 @@ The per-field description for ``report`` names the consequence; the
 contract test ensures the description is present and that the
 irreversibility wording survives any future rewording.
 
-The two workspace tools on the DC (``List Run Files``, ``Read Run
-File``) intentionally keep the signature-inferred schema and are out
-of scope here.
+The two shared workspace readers re-exported into the DC's registry
+(``List Run Files``, ``Read Run File``) are part of the closed-world
+check below.
 
 The wrappers do not call the H1 API at validation time - the existing
 H1 behavioural tests in ``test_tools.py`` keep their mocking; this
@@ -24,25 +24,32 @@ from __future__ import annotations
 import pytest
 from pydantic import BaseModel, ValidationError
 
+from squad import SquadTool
 from squad.disclosure_coordinator import (
     MEMBER,
     _CheckDuplicateArgs,
     _SubmitReportArgs,
 )
+from squad.workspace_tools import (
+    _ListRunFilesArgs,
+    _ReadRunFileArgs,
+)
 
 pytestmark = pytest.mark.unit
 
 
-# Tool-name -> explicit schema class. Covers every DC @cyber_tool wrapper.
-# The two workspace readers (``List Run Files``, ``Read Run File``) on
-# the DC keep the signature-inferred schema and are out of scope.
+# Tool-name -> explicit schema class. Covers every DC @cyber_tool
+# wrapper plus the two shared workspace readers.
 _DC_SCHEMAS: dict[str, type[BaseModel]] = {
     "Submit Report": _SubmitReportArgs,
     "Check H1 Duplicate": _CheckDuplicateArgs,
+    # Shared workspace wrappers (re-exported via squad.workspace_tools)
+    "List Run Files": _ListRunFilesArgs,
+    "Read Run File": _ReadRunFileArgs,
 }
 
 
-def _tools_by_name() -> dict[str, object]:
+def _tools_by_name() -> dict[str, SquadTool]:
     """Look up MEMBER.tools by display name once, share across tests."""
     return {t.name: t for t in MEMBER.tools}
 
@@ -53,8 +60,8 @@ class TestDcArgsSchemaContracts:
         """Every DC typed tool registers the explicit schema class on its Tool."""
         tool_obj = _tools_by_name()[tool_name]
         expected = _DC_SCHEMAS[tool_name]
-        assert tool_obj.args_schema is expected, (  # type: ignore[attr-defined]
-            f"{tool_name} args_schema is {tool_obj.args_schema!r}; expected {expected!r}"  # type: ignore[attr-defined]
+        assert tool_obj.args_schema is expected, (
+            f"{tool_name} args_schema is {tool_obj.args_schema!r}; expected {expected!r}"
         )
 
     @pytest.mark.parametrize(
