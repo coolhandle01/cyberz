@@ -119,6 +119,26 @@ def programme(scope_item_url, scope_item_wildcard) -> Programme:
     )
 
 
+@pytest.fixture()
+def programme_in_workspace(programme: Programme, tmp_path, monkeypatch) -> Programme:
+    """Stage ``programme.json`` into the run directory and point runtime at it.
+
+    Reproduces what the PM's ``Save Selected Programme`` does at run
+    start: writes ``<run_dir>/programme.json`` and sets ``runtime`` so
+    every downstream consumer (``current_programme()``, the @cyber_tool
+    ``scope_filter`` wrapper, every tool that reads
+    ``runtime.programme_handle`` for HTTP attribution) sees the in-flight
+    programme without any per-test stubbing of the loader itself.
+
+    The artefact *is* the fixture: tests assert against the same shape
+    the next agent would actually consume.
+    """
+    (tmp_path / "programme.json").write_text(programme.model_dump_json(), encoding="utf-8")
+    monkeypatch.setattr("runtime.run_dir", lambda: tmp_path)
+    monkeypatch.setattr("runtime.programme_handle", programme.handle)
+    return programme
+
+
 # Recon fixtures
 @pytest.fixture()
 def endpoint() -> Endpoint:

@@ -22,7 +22,6 @@ from models import (
 from models.h1 import Programme
 from squad import cyber_tool
 from squad.workspace_tools import current_programme
-from tools import http
 from tools.recon import (
     cert_transparency,
     detect_llm_endpoints,
@@ -60,7 +59,6 @@ def run_initial_sweep_tool() -> str:
     Annotate Host and call Finalise Recon to produce the canonical
     ``recon.json`` that downstream agents consume.
     """
-    http.set_programme(runtime.programme_handle)
     programme = current_programme()
     result = run_recon(programme)
     out_path = runtime.run_dir() / "sweep.json"

@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+import runtime
 from config import config
 from tools import http
 
@@ -13,11 +14,17 @@ pytestmark = pytest.mark.unit
 
 
 @pytest.fixture(autouse=True)
-def _reset_programme():
-    """Each test starts with no programme set and leaves it that way."""
-    http.set_programme(None)
+def _reset_runtime_programme():
+    """Each test starts with no programme set and leaves it that way.
+
+    The User-Agent reads ``runtime.programme_handle`` directly, so the
+    fixture only has to keep that module-level state clean between
+    tests; there is no per-request registry to reset.
+    """
+    saved = runtime.programme_handle
+    runtime.programme_handle = ""
     yield
-    http.set_programme(None)
+    runtime.programme_handle = saved
 
 
 class TestUserAgent:
@@ -32,19 +39,10 @@ class TestUserAgent:
     def test_omits_programme_when_unset(self):
         assert "programme:" not in http.user_agent()
 
-    def test_includes_programme_when_set(self):
-        http.set_programme("acme-corp")
+    def test_includes_programme_from_runtime(self):
+        """The handle the PM saved propagates without a per-tool setter call."""
+        runtime.programme_handle = "acme-corp"
         assert "programme: acme-corp" in http.user_agent()
-
-    def test_set_programme_strips_whitespace(self):
-        http.set_programme("  acme-corp  ")
-        assert "programme: acme-corp" in http.user_agent()
-
-    def test_clearing_programme(self):
-        http.set_programme("acme")
-        http.set_programme(None)
-        assert http.get_programme() is None
-        assert "programme:" not in http.user_agent()
 
 
 class TestInjectHeaders:
@@ -115,7 +113,8 @@ class TestVerbWrappers:
         assert kwargs["headers"]["User-Agent"] == http.user_agent()
 
     def test_programme_appears_in_outbound_ua(self):
-        http.set_programme("acme-corp")
+        """A programme set on ``runtime`` rides every outbound request."""
+        runtime.programme_handle = "acme-corp"
         with patch("requests.get", return_value=MagicMock()) as mock_get:
             http.get("https://x.example.com/")
         ua = mock_get.call_args.kwargs["headers"]["User-Agent"]

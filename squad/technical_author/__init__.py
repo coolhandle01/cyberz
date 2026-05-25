@@ -7,7 +7,6 @@ from pydantic import BaseModel, Field
 import runtime
 from models import AuthoredDraft, CWEEntry, OWASPEntry, ProgrammeReportSummary
 from squad import SquadMember, cyber_tool, read_run_file_tool, read_run_filelist_tool
-from tools import http
 from tools.cwe_data import lookup as cwe_lookup
 from tools.h1_api import h1
 from tools.owasp_data import lookup as owasp_lookup
@@ -173,9 +172,7 @@ def list_programme_reports_tool(page_size: int = 25) -> list[ProgrammeReportSumm
     the Disclosure Coordinator will reject duplicates at submission time and a
     well-differentiated title speeds up triage.
     """
-    handle = runtime.programme_handle
-    http.set_programme(handle)
-    reports = h1.list_reports(handle, page_size=page_size)
+    reports = h1.list_reports(runtime.programme_handle, page_size=page_size)
     return [
         ProgrammeReportSummary(
             report_id=r.get("id"),

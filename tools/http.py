@@ -6,10 +6,15 @@ delegate to ``requests.<verb>`` underneath, so existing tests that patch
 ``requests.get`` continue to intercept calls without modification.
 
 The User-Agent is built from operator config (platform, H1 username, contact
-email) plus the optional per-run programme handle set via ``set_programme()``.
+email) plus the in-flight programme handle read from ``runtime.programme_handle``.
 A SOC operator seeing this UA can verify the H1 username and programme handle
 against their HackerOne dashboard and use the contact email to reach the
 operator without having to ban the IP first. See issue #46.
+
+There is no ``set_programme()`` registry: the Programme Manager has already
+written ``runtime.programme_handle`` (and ``<run_dir>/programme.json``) before
+any other tool fires an outbound request, so the UA builder reads workspace
+state directly and every per-tool ``http.set_programme(...)`` call is gone.
 """
 
 from __future__ import annotations
@@ -18,35 +23,20 @@ from typing import Any
 
 import requests
 
+import runtime
 from config import config
 
 # Identifies the platform the squad operates against. Hardcoded for now;
 # move to config when a second platform is supported.
 _PLATFORM = "hackerone"
 
-_current_programme: str | None = None
-
-
-def set_programme(handle: str | None) -> None:
-    """Set or clear the current programme handle for outbound UA attribution.
-
-    Called by agent @tool wrappers that already deserialise a Programme or
-    ReconResult. Subsequent HTTP calls in the same run - including from
-    tools that only see Endpoint lists - inherit the programme context.
-    """
-    global _current_programme
-    _current_programme = handle.strip() if handle else None
-
-
-def get_programme() -> str | None:
-    return _current_programme
-
 
 def user_agent() -> str:
-    """Build the current User-Agent string from operator + programme context."""
+    """Build the current User-Agent string from operator + workspace context."""
     parts = [f"platform: {_PLATFORM}"]
-    if _current_programme:
-        parts.append(f"programme: {_current_programme}")
+    handle = runtime.programme_handle
+    if handle:
+        parts.append(f"programme: {handle}")
     parts.append(f"researcher: {config.h1.api_username}")
     parts.append(f"contact: {config.contact_email}")
     return f"cybersquad (authorised research; {'; '.join(parts)})"

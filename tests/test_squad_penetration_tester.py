@@ -49,7 +49,6 @@ class TestPenetrationTesterTools:
         recon_path.write_text(recon_result.model_dump_json(), encoding="utf-8")
         with (
             patch("tools.workspace.runtime.run_dir", return_value=tmp_path),
-            patch("squad.penetration_tester._decorator.http.set_programme") as mhttp,
             patch(
                 "squad.penetration_tester.probes.headers.check_cookies",
                 return_value=[raw_finding_low],
@@ -58,7 +57,6 @@ class TestPenetrationTesterTools:
             result = cookie_check_tool.func("recon.json")
 
         assert result == [raw_finding_low]
-        mhttp.assert_called_once_with(recon_result.programme.handle)
 
     def test_cors_check_tool(self, recon_result, raw_finding_low, tmp_path) -> None:
         from squad.penetration_tester import cors_check_tool
@@ -67,7 +65,6 @@ class TestPenetrationTesterTools:
         recon_path.write_text(recon_result.model_dump_json(), encoding="utf-8")
         with (
             patch("tools.workspace.runtime.run_dir", return_value=tmp_path),
-            patch("squad.penetration_tester._decorator.http.set_programme"),
             patch(
                 "squad.penetration_tester.probes.headers.check_cors_misconfiguration",
                 return_value=[raw_finding_low],
@@ -84,7 +81,6 @@ class TestPenetrationTesterTools:
         recon_path.write_text(recon_result.model_dump_json(), encoding="utf-8")
         with (
             patch("tools.workspace.runtime.run_dir", return_value=tmp_path),
-            patch("squad.penetration_tester._decorator.http.set_programme"),
             patch(
                 "squad.penetration_tester.probes.headers.check_csrf",
                 return_value=[raw_finding_low],
@@ -112,7 +108,6 @@ class TestPenetrationTesterTools:
         recon_path.write_text(recon_result.model_dump_json(), encoding="utf-8")
         with (
             patch("tools.workspace.runtime.run_dir", return_value=tmp_path),
-            patch("squad.penetration_tester._decorator.http.set_programme"),
             patch(
                 "squad.penetration_tester.probes.headers.check_header_injection",
                 return_value=[raw_finding_low],
@@ -129,7 +124,6 @@ class TestPenetrationTesterTools:
         recon_path.write_text(recon_result.model_dump_json(), encoding="utf-8")
         with (
             patch("tools.workspace.runtime.run_dir", return_value=tmp_path),
-            patch("squad.penetration_tester._decorator.http.set_programme"),
             patch(
                 "squad.penetration_tester.probes.headers.check_host_headers",
                 return_value=[raw_finding_low],
@@ -242,7 +236,6 @@ class TestCloudWrapperPassThrough:
         check_module = importlib.import_module(check_module_path)
         with (
             patch("tools.workspace.runtime.run_dir", return_value=tmp_path),
-            patch("squad.penetration_tester._decorator.http.set_programme") as mhttp,
             patch.object(check_module, check_attr, return_value=[raw_finding_low]) as mcheck,
         ):
             result = wrapper.func("recon.json")
@@ -253,9 +246,6 @@ class TestCloudWrapperPassThrough:
         mcheck.assert_called_once()
         passed_recon = mcheck.call_args[0][0]
         assert passed_recon.programme.handle == recon_result.programme.handle
-        # The http programme context was set from the recon's programme
-        # handle so outbound User-Agent headers carry the right tag.
-        mhttp.assert_called_once_with(recon_result.programme.handle)
 
 
 # The 6 database wrappers share a different shape from the rest of the
@@ -320,7 +310,6 @@ class TestDatabaseWrapperPassThrough:
         check_module = importlib.import_module(check_module_path)
         with (
             patch("tools.workspace.runtime.run_dir", return_value=tmp_path),
-            patch("squad.penetration_tester._decorator.http.set_programme"),
             patch.object(check_module, check_attr, return_value=[raw_finding_low]) as mcheck,
         ):
             result = wrapper.func("recon.json")
@@ -355,7 +344,6 @@ class TestDatabaseWrapperPassThrough:
         check_module = importlib.import_module(check_module_path)
         with (
             patch("tools.workspace.runtime.run_dir", return_value=tmp_path),
-            patch("squad.penetration_tester._decorator.http.set_programme"),
             patch.object(check_module, check_attr) as mcheck,
         ):
             result = wrapper.func("recon.json")

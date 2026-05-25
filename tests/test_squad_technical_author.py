@@ -210,7 +210,6 @@ class TestTechnicalAuthorTools:
         ]
         with (
             patch("runtime.programme_handle", "acme"),
-            patch("squad.technical_author.http.set_programme") as mhttp,
             patch("squad.technical_author.h1.list_reports", return_value=h1_reports) as mlist,
         ):
             result = list_programme_reports_tool.func(page_size=10)
@@ -223,5 +222,4 @@ class TestTechnicalAuthorTools:
                 state="triaged",
             )
         ]
-        mhttp.assert_called_once_with("acme")
         mlist.assert_called_once_with("acme", page_size=10)
