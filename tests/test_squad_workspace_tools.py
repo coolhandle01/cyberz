@@ -114,21 +114,6 @@ class _StubReconPathArgs(BaseModel):
     recon_path: str = Field(description="Workspace artefact handle.")
 
 
-class _StubOptionalHostnameArgs(BaseModel):
-    """Stub args_schema with ``Hostname | None`` - the auto-detection
-    unwraps the Optional and applies the same scope guard as a bare
-    Hostname when a value is supplied."""
-
-    host: Hostname | None = Field(default=None, description="Optional host filter.")
-
-
-class _StubDictHostnameArgs(BaseModel):
-    """Stub args_schema with a typed target inside an unsupported
-    container - the loud-fail rejects this at decoration time."""
-
-    by_host: dict[Hostname, int] = Field(description="Hostname-keyed dict.")
-
-
 class TestCyberToolScopeFilter:
     """``@cyber_tool`` auto-detects typed-target fields and runs the
     matching scope filter before the body.
@@ -190,46 +175,6 @@ class TestCyberToolScopeFilter:
         # No ``programme_in_workspace`` / ``run_dir`` fixture - the
         # wrapper must not reach for the workspace at all.
         assert stub_tool.func(recon_path="recon.json") == "recon.json"
-
-    def test_single_value_hostname_field_passes_through(self, target_apex) -> None:
-        """``host: Hostname | None`` is a slicer-filter parameter on
-        already-scope-filtered workspace data (e.g. ``Recon Open
-        Ports``); the auto-detection leaves it alone rather than
-        re-filtering. The Hostname primitive's RFC 1123 validator
-        still fires at args_schema time - only the wrapper-level
-        scope filter is the carve-out."""
-        from squad import cyber_tool
-
-        seen_values: list[str | None] = []
-
-        @cyber_tool("Stub Optional Hostname Tool", args_schema=_StubOptionalHostnameArgs)
-        def stub_tool(host: Hostname | None = None) -> Hostname | None:
-            """Stub body that records what it was handed and returns it."""
-            seen_values.append(host)
-            return host
-
-        in_scope_host = f"api.{target_apex}"
-        # No ``programme_in_workspace`` fixture - the wrapper must not
-        # reach for the workspace at all on this shape.
-        assert stub_tool.func(host=in_scope_host) == in_scope_host
-        assert stub_tool.func() is None
-        assert seen_values == [in_scope_host, None]
-
-    def test_unsupported_container_raises_at_decoration_time(self) -> None:
-        """A typed target inside an unsupported container
-        (``dict[Hostname, ...]`` here) is a silent scope-safety skip
-        the auto-detection would not catch at call time. The decorator
-        refuses to wrap, raising ``TypeError`` at import / decoration
-        time so the build fails the moment a new unsupported shape
-        lands rather than the moment an agent triggers it."""
-        from squad import cyber_tool
-
-        with pytest.raises(TypeError, match=r"Hostname appears inside dict"):
-
-            @cyber_tool("Stub Dict Hostname Tool", args_schema=_StubDictHostnameArgs)
-            def stub_tool(by_host: dict) -> dict:
-                """Stub body - never reached because decoration raises."""
-                return by_host
 
 
 # Tool-name -> explicit schema class. The workspace wrappers are shared

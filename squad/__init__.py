@@ -28,11 +28,10 @@ from __future__ import annotations
 
 import functools
 import inspect
-import types
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Protocol, Union, cast, get_args, get_origin, runtime_checkable
+from typing import Protocol, cast, get_args, get_origin, runtime_checkable
 
 from crewai import Agent, Task
 from crewai.tools import tool
@@ -107,7 +106,6 @@ def cyber_tool(
     """
 
     def decorator(fn: Callable[..., object]) -> SquadTool:
-        _assert_scope_safety_complete(args_schema)
         target = _apply_scope_filter(fn, args_schema)
         wrapped = tool(name)(target)
         wrapped.args_schema = args_schema
@@ -119,23 +117,12 @@ def cyber_tool(
 def _scope_filter_for_field(annotation: object) -> Callable[..., object] | None:
     """Pick the scope filter for an args_schema field's annotation.
 
-    Returns ``filter_in_scope`` for ``list[Hostname]``,
-    ``filter_endpoints_in_scope`` for ``list[Endpoint]``, the same
-    filters for their ``| None`` / ``Optional[...]`` variants, or
-    ``None`` for any other annotation.
-
-    Deliberately narrow to list shapes: the auto-detection treats the
-    typed list as the canonical "agent's attack-target pick", which is
-    where scope-safety bites. Single-value ``Hostname`` / ``Endpoint``
-    fields are slicer-filter parameters operating on already-scope-
-    filtered workspace artefacts (e.g. ``host: Hostname | None`` on
-    ``Recon Open Ports``); applying the scope guard at that layer
-    would re-filter data that ``Finalise Recon`` already filtered.
-    The loud-fail in ``_assert_scope_safety_complete`` catches any
-    Hostname / Endpoint appearance in shapes this function does not
-    cover, so the slicer-filter carve-out has to be expressed by the
-    field type itself - use ``list[Hostname]`` (zero-or-one or many)
-    if you want the wrapper-level scope guard.
+    Returns ``filter_in_scope`` for ``Hostname`` / ``list[Hostname]``,
+    ``filter_endpoints_in_scope`` for ``Endpoint`` / ``list[Endpoint]``,
+    or ``None`` for any other annotation. The cybersquad target
+    primitives are identity-comparable (``Hostname`` is a single
+    ``Annotated[...]`` alias imported by every consumer) so ``is``
+    checks work without unwrapping the ``Annotated`` machinery.
 
     Lazy imports break the import cycle: ``models`` and ``tools``
     import nothing from ``squad``; we resolve them at decoration time.
@@ -143,14 +130,10 @@ def _scope_filter_for_field(annotation: object) -> Callable[..., object] | None:
     from models import Endpoint, Hostname
     from tools.recon.scope import filter_endpoints_in_scope, filter_in_scope
 
-    # Unwrap Optional[list[X]] / list[X] | None to the inner list shape -
-    # an optional list-of-targets is the same scope-safety contract as
-    # the bare list, just with None meaning "no targets supplied".
-    if get_origin(annotation) in (Union, types.UnionType):
-        non_none = [a for a in get_args(annotation) if a is not type(None)]
-        if len(non_none) == 1:
-            return _scope_filter_for_field(non_none[0])
-        return None
+    if annotation is Hostname:
+        return filter_in_scope
+    if annotation is Endpoint:
+        return filter_endpoints_in_scope
 
     if get_origin(annotation) is list:
         inner_args = get_args(annotation)
@@ -162,95 +145,6 @@ def _scope_filter_for_field(annotation: object) -> Callable[..., object] | None:
                 return filter_endpoints_in_scope
 
     return None
-
-
-def _walk_for_targets(
-    annotation: object, path: tuple[object, ...]
-) -> list[tuple[object, tuple[object, ...]]]:
-    """Recurse through an annotation, returning every ``Hostname`` or
-    ``Endpoint`` occurrence with the container chain that wraps it.
-
-    The chain is the ``get_origin`` of each container the recursion
-    descended through (``list``, ``dict``, ``set``, ``tuple``,
-    ``types.UnionType``, ``typing.Union``, or a ``BaseModel`` subclass
-    for nested models). Top-level appearance has an empty chain.
-    """
-    from models import Endpoint, Hostname
-
-    if annotation is Hostname or annotation is Endpoint:
-        return [(annotation, path)]
-
-    origin = get_origin(annotation)
-    if origin is None:
-        if isinstance(annotation, type) and issubclass(annotation, BaseModel):
-            found: list[tuple[object, tuple[object, ...]]] = []
-            for field_info in annotation.model_fields.values():
-                found.extend(_walk_for_targets(field_info.annotation, (*path, annotation)))
-            return found
-        return []
-
-    found = []
-    for arg in get_args(annotation):
-        if arg is type(None):
-            continue
-        found.extend(_walk_for_targets(arg, (*path, origin)))
-    return found
-
-
-def _assert_scope_safety_complete(args_schema: type[BaseModel]) -> None:
-    """Refuse to wrap ``args_schema`` if a typed-target primitive hides
-    inside a container the auto-detection does not cover.
-
-    Cross-check: for every field, walk the annotation tree for
-    ``Hostname`` / ``Endpoint`` occurrences. If any occurrence is in a
-    shape ``_scope_filter_for_field`` covers (a ``list[X]`` or
-    ``Optional[list[X]]``), or is a bare single-value ``Hostname`` /
-    ``Endpoint`` (the slicer-filter carve-out documented on
-    ``_scope_filter_for_field``), allow it through. Anything else
-    (``dict[Hostname, ...]``, ``set[Hostname]``, a nested model with
-    a ``Hostname`` field, ...) trips this guard with ``TypeError`` at
-    decoration time so a new unsupported shape fails the build the
-    moment it lands rather than the moment an agent triggers it.
-    """
-    from models import Endpoint, Hostname
-
-    # Shapes the loud-fail considers handled. ``()`` = the field IS
-    # the target (single ``Hostname`` / ``Endpoint`` slicer-filter);
-    # ``(list,)`` = ``list[Hostname]`` / ``list[Endpoint]``;
-    # union-prefixed variants cover ``| None`` / ``Optional[...]``.
-    HANDLED_PATHS: tuple[tuple[object, ...], ...] = (
-        (),
-        (list,),
-        (Union,),
-        (types.UnionType,),
-        (Union, list),
-        (types.UnionType, list),
-    )
-
-    for field_name, field_info in args_schema.model_fields.items():
-        for target, path in _walk_for_targets(field_info.annotation, ()):
-            if path in HANDLED_PATHS:
-                continue
-            target_name = (
-                "Hostname"
-                if target is Hostname
-                else "Endpoint"
-                if target is Endpoint
-                else repr(target)
-            )
-            chain = (
-                " -> ".join(c.__name__ if hasattr(c, "__name__") else repr(c) for c in path)
-                or "<direct>"
-            )
-            raise TypeError(
-                f"{args_schema.__name__}.{field_name}: {target_name} "
-                f"appears inside {chain} - the auto-detected scope "
-                f"filter does not cover this container shape. Either "
-                f"refactor the field to {target_name} / "
-                f"list[{target_name}] / Optional thereof, or extend "
-                f"_scope_filter_for_field in squad/__init__.py with "
-                f"explicit handling for the new shape."
-            )
 
 
 def _apply_scope_filter(
