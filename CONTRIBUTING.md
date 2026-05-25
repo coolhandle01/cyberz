@@ -92,6 +92,22 @@ Current divergences in the codebase, each carrying its citation - this is the wo
 
 When you add a new divergence, append it to the register above in the same PR. A new divergence that ships without a citation is treated like a `# noqa` without an explanation: not a hard block, but a reviewer-facing flag that the assumption is unverified.
 
+### Defer to upstream where upstream covers it
+
+The partner rule to "Cite the standard you diverge from". Where the codebase **does not** diverge - where upstream's general case is the case - link the canonical reference and stay silent on the general material. Don't restate what upstream already covers competently; duplication becomes drift the moment upstream updates, and the contributor reading our skill loses the discoverability hop to the source of truth.
+
+A skill, module docstring, or design comment that competently practices this looks like `cybersquad-agent-llm`'s Upstream alignment section: it names what upstream covers (general agent design - role-goal-backstory, `max_iter` / `max_rpm` tuning, `function_calling_llm` split, guardrails), links the canonical upstream source ([crewAIInc/skills `design-agent`](https://github.com/crewAIInc/skills/blob/main/skills/design-agent/SKILL.md)), and confines the cybersquad-side content to the narrow project-specific footgun (the bare-model-string `Agent(llm=...)` path silently dropping `temperature` and `max_tokens`).
+
+Skills already practicing this, as the worked register:
+
+- `cybersquad-agent-llm` defers to crewAIInc/skills `design-agent` for general agent design.
+- `cybersquad-task` defers to crewAIInc/skills `design-task` for general task design.
+- `cybersquad-tool` defers to crewAIInc/skills `design-agent/references/custom-tools.md` for tool mechanics.
+- `cybersquad-skill` defers to CrewAI's runtime skill documentation for skill-authoring mechanics.
+- `cybersquad-models` defers to [Pydantic v2 documentation](https://docs.pydantic.dev/2.12/) for general Pydantic usage.
+
+A new contributor skill that does **not** carry an Upstream alignment section is fine if either: (a) there is no canonical upstream for the topic - some patterns are genuinely cybersquad-specific (the `runtime.bind_*` singleton-per-pipeline pattern is an example) - or (b) the skill explicitly builds on another cybersquad skill, named in its frontmatter `description:` (e.g. `cybersquad-pentest-tool` builds on `cybersquad-tool`; `cybersquad-prompteng` builds on `cybersquad-tool`). State the case in either form so the absence is read as deliberate, not as oversight.
+
 ### Linter and SAST findings are engineering signal
 
 ruff / mypy / bandit / semgrep findings are not bureaucracy. Each one is the tool flagging an assumption it could not verify. Before suppressing:

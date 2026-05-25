@@ -63,3 +63,9 @@ If you are adding a field that crosses agent boundaries:
 - A new top-level model added to `models/__init__.py` directly. The package is split per domain (`finding.py`, `h1.py`, `report.py`, `attack.py`, etc); put it in the matching module and let the re-export carry it.
 - A `Literal["a", "b", "c"]` for a closed set that will be reused across multiple models. Prefer `StrEnum` - it produces both a real Python type and a clean args_schema with named variants.
 - Removing a field that an upstream agent populates without checking what the downstream reader does. The chain breaks at the reader's `model_validate_json`, often in a test that does not surface the agent that actually needed the field.
+
+## Upstream alignment
+
+For general Pydantic v2 usage - field validators (`@field_validator`, `@model_validator`), discriminated unions, `TypeAdapter` for non-model validation, `model_config`, JSON schema generation, custom serialisation, computed fields - see the [Pydantic v2 documentation](https://docs.pydantic.dev/2.12/). We pin `pydantic>=2.7` in `pyproject.toml` and currently resolve to 2.12.
+
+This skill carries the cybersquad-specific overlay only: the LLM-facing contract (typed primitives constrain what the LLM can *say*; typed JSON artefacts constrain what the LLM can *read*), the prompt-injection-awareness rule on free-text fields fed back into LLM context, and the cross-model coupling preserved by the writer/reader workspace pair. None of that is Pydantic-specific; all of it is how cybersquad *uses* Pydantic. If your question is about Pydantic itself, read upstream first.
