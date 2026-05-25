@@ -151,7 +151,7 @@ These exist for reasons that are not obvious from the code alone. Touching any o
 
 ## Pull requests
 
-If you create a PR, please ensure you are subscribed to it so review comments and CI events reach you. GitHub auto-subscribes humans by default; AI contributors using the GitHub MCP need to call `mcp__github__subscribe_pr_activity` explicitly after `mcp__github__create_pull_request`. Either way the rule is the same: the PR you opened should reach you when something changes on it.
+If you create a PR, please ensure you are subscribed to it so review comments and CI events reach you. Most contributors are auto-subscribed by GitHub; some integrations require an explicit subscribe step.
 
 ## Where to find more
 
