@@ -43,18 +43,45 @@ mkdir -p "$state_dir"
 # layer on top. Each branch is independent so a path can match more than one.
 matches=()
 
+# Pre-classify: paths under tests/ get the tests skills, never the
+# wrapper-author ones. `*` crosses `/` in case patterns, so without
+# this guard ``*/squad/*.py`` over-matches the ``tests/squad/<member>/``
+# mirror dirs and pulls cybersquad-tool / cybersquad-pentest-tool
+# into test edits where they do not apply.
+case "$file_path" in
+    */tests/*) in_tests=1 ;;
+    *)         in_tests=0 ;;
+esac
+
 # Tool wrappers - generic -> specialist stacks so the specialist
 # appears later (more prominent) in context.
-case "$file_path" in
-    */squad/__init__.py|*/squad/workspace_tools.py|*/squad/*/__init__.py)
-        matches+=(cybersquad-tool)
-        ;;
-esac
-case "$file_path" in
-    */tools/pentest/*|*/squad/penetration_tester/__init__.py)
-        matches+=(cybersquad-pentest-tool)
-        ;;
-esac
+#
+# cybersquad-tool covers any Python file under squad/ at any depth -
+# the catch-all pattern matches the 18+ wrapper files under
+# squad/<member>/<sub>/*.py (probes/, cloud/) alongside the member
+# __init__.py files and the workspace_tools shared layer. Decorator
+# implementation files (_decorator.py) are inclusive false positives:
+# they implement the conventions the skill enforces, so loading is
+# appropriate rather than noisy.
+if [ "$in_tests" = 0 ]; then
+    case "$file_path" in
+        */squad/*.py)
+            matches+=(cybersquad-tool)
+            ;;
+    esac
+    # cybersquad-pentest-tool covers the @pentest_tool wrapper surface
+    # (probes/) and its check_X helper layer (tools/pentest/). Cloud
+    # wrappers use @cyber_tool, not @pentest_tool, so they correctly
+    # stay on the universal skill only.
+    case "$file_path" in
+        */tools/pentest/*.py \
+        |*/squad/penetration_tester/__init__.py \
+        |*/squad/penetration_tester/_decorator.py \
+        |*/squad/penetration_tester/probes/*.py)
+            matches+=(cybersquad-pentest-tool)
+            ;;
+    esac
+fi
 
 # Pipeline plumbing - one skill per file; no stacking.
 case "$file_path" in
