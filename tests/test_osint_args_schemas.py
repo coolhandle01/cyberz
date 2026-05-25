@@ -93,6 +93,7 @@ def _annotate_host_base(hostname: str) -> dict[str, object]:
         "role": "api",
         "priority": "high",
         "notes": "Production REST API surface; warrants careful probing.",
+        "programme_handle": "example",
     }
 
 
@@ -232,7 +233,6 @@ class TestSchemaAcceptReject:
             {
                 **_annotate_host_base(host),
                 "detected_tech": ["nginx"],
-                "programme_handle": "example",
             }
         )
 
@@ -262,7 +262,7 @@ class TestSchemaAcceptReject:
             _DetectTakeoverCandidatesArgs,  # hostnames + programme_handle required
             _OsintLookupCweArgs,  # query required
             _OsintLookupOwaspArgs,  # query required
-            _AnnotateHostArgs,  # hostname / role / priority / notes required
+            _AnnotateHostArgs,  # hostname / role / priority / notes / programme_handle required
             _FinaliseReconArgs,  # programme_handle required
         ],
     )
@@ -280,9 +280,9 @@ class TestSchemaAcceptReject:
             _ProbeHostnamesArgs.model_validate({"programme_handle": "example"})
 
     def test_annotate_host_requires_core_fields(self, victim_url: str) -> None:
-        """hostname / role / priority / notes are all required for Annotate Host."""
+        """hostname / role / priority / notes / programme_handle are all required."""
         base = _annotate_host_base(urlparse(victim_url).hostname or "")
-        for missing in ("hostname", "role", "priority", "notes"):
+        for missing in ("hostname", "role", "priority", "notes", "programme_handle"):
             kwargs = {k: v for k, v in base.items() if k != missing}
             with pytest.raises(ValidationError):
                 _AnnotateHostArgs.model_validate(kwargs)

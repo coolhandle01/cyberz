@@ -136,12 +136,10 @@ class _AnnotateHostArgs(BaseModel):
         default="sweep.json",
         description="Relative path to the OA's sweep file. Defaults to ``sweep.json``.",
     )
-    programme_handle: str | None = Field(
-        default=None,
+    programme_handle: str = Field(
         description=(
-            "Exact HackerOne programme handle. Required - the scope guard"
-            " in ``validate_insight`` needs a real Programme to check"
-            " against. ``None`` raises ValueError."
+            "Exact HackerOne programme handle. The scope guard in"
+            " ``validate_insight`` needs a real Programme to check against."
         ),
     )
 

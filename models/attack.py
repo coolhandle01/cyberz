@@ -13,7 +13,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
 
-from models import Severity
+from models.primitives import Severity
 
 
 class AttackPlanItem(BaseModel):

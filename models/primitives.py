@@ -79,12 +79,13 @@ Hostname = Annotated[str, AfterValidator(_validate_hostname)]
 # is a string" in the JSON schema but mis-shaped URLs still reject at
 # model_validate time.
 #
-# FIXME: migrate to Pydantic's built-in ``HttpUrl`` once the call sites that
-# do ``endpoint.url.startswith(...)`` / ``endpoint.url == "..."`` style
-# comparisons have been audited. ``HttpUrl`` exposes ``.host`` / ``.scheme``
-# / ``.port`` properties that would let consumers stop reaching for
-# ``urlparse`` ad-hoc, but the runtime type would stop being ``str`` and
-# the diff across the codebase needs care.
+# Deliberate: Pydantic's built-in ``HttpUrl`` would expose structured
+# ``.host`` / ``.scheme`` / ``.port`` accessors, but the runtime type would
+# stop being ``str``. Every ``urlparse(ep.url)`` / f-string / dict-key
+# consumer would have to switch in lockstep, and that audit-and-migrate
+# cost is intentionally not paid here - the light validator catches the
+# mis-shaped-URL risk class at args_schema time, which is what the typed
+# primitive layer exists to do.
 
 
 def _validate_endpoint_url(value: str) -> str:
@@ -96,6 +97,13 @@ def _validate_endpoint_url(value: str) -> str:
     it). The hostname component runs through ``_validate_hostname`` so the
     RFC 1123 contract is enforced at the URL layer too: a malformed
     hostname inside the URL rejects the same as a bare malformed hostname.
+
+    IPv6-bound URLs (``https://[2001:db8::1]/...``) reject: ``urlparse``
+    returns the bare ``2001:db8::1`` from ``.hostname`` (brackets dropped),
+    and the ``:`` in the address fails the ``Hostname`` per-label regex.
+    HackerOne programmes name DNS-bound assets in structured scope, so the
+    rejection is acceptable; a future contributor seeing an IPv6 reject
+    here should not be surprised by it.
     """
     from urllib.parse import urlparse  # local import: only fires at validation time
 
