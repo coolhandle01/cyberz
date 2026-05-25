@@ -89,12 +89,15 @@ class _JwtCheckArgs(BaseModel):
             " (base64url-encoded JSON header)."
         ),
     )
-    endpoint: str = Field(
+    endpoint: Endpoint = Field(
         description=(
-            "URL that validates the JWT - should return 401 / 403 without"
-            " a valid token and 200 on success. Use the endpoint where the"
-            " token was first observed (e.g. /api/profile, /api/me,"
-            " /dashboard)."
+            "Endpoint object covering the URL that validates the JWT -"
+            " should return 401 / 403 without a valid token and 200 on"
+            " success. Use the endpoint where the token was first"
+            " observed (e.g. /api/profile, /api/me, /dashboard). Typed"
+            " ``Endpoint`` so the agent passes the full recon shape and"
+            " the validator rejects malformed URLs upstream of the JWT"
+            " replay; the wrapper extracts ``.url`` for ``check_jwt``."
         ),
     )
     attacks: list[JwtAttack] | None = Field(
@@ -116,7 +119,7 @@ class _JwtCheckArgs(BaseModel):
 )
 def jwt_check_tool(
     token: str,
-    endpoint: str,
+    endpoint: Endpoint,
     attacks: list[JwtAttack] | None = None,
 ) -> list[RawFinding]:
     """
@@ -147,4 +150,9 @@ def jwt_check_tool(
     endpoints. All confirmed bypasses are CRITICAL.
 
     """
-    return list(check_jwt(token, endpoint, attacks))
+    # ``check_jwt`` takes the validating URL as a string. The args_schema
+    # accepts a typed ``Endpoint`` so the agent passes the recon shape and
+    # CrewAI validates URL well-formedness upstream; extract ``.url`` via
+    # the both-shapes adapter so test invocations passing a dict and the
+    # LLM path passing a dict both resolve to the URL.
+    return list(check_jwt(token, Endpoint.model_validate(endpoint).url, attacks))

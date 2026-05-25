@@ -30,11 +30,22 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from pydantic import BaseModel, Field
-
 import runtime
 from models import HostInsight, HostPriority, ReconResult
 from models.h1 import Programme
+
+# HostAnnotation / InsightValidationIssue / InsightValidationReport /
+# ReconFinalisationError moved to models/insight.py per the typed-shapes
+# -live-in-models rule (review feedback on #150). Re-exported here so
+# existing ``from tools.recon_insights import HostAnnotation`` consumers
+# keep working without churn while the canonical import path becomes
+# ``from models import HostAnnotation`` / ``from models.insight import
+# HostAnnotation``.
+from models.insight import (
+    InsightValidationIssue,
+    InsightValidationReport,
+    ReconFinalisationError,
+)
 from tools.recon.scope import extract_domain, filter_in_scope
 
 _INSIGHTS_SUBDIR = "host_insights"
@@ -48,33 +59,6 @@ _HOSTNAME_SANITISE = re.compile(r"[^A-Za-z0-9.\-_]")
 
 
 # Validation
-
-
-class InsightValidationIssue(BaseModel):
-    """One issue produced by validate_insight."""
-
-    section: str
-    severity: str  # "error" (blocks finalise) or "warning" (advisory)
-    message: str
-
-
-class InsightValidationReport(BaseModel):
-    """Result of validating one insight."""
-
-    ok: bool
-    issues: list[InsightValidationIssue] = Field(default_factory=list)
-
-
-class HostAnnotation(BaseModel):
-    """Return shape of the Annotate Host tool.
-
-    ``path`` is the workspace-relative location of the persisted insight
-    (e.g. ``host_insights/api.example.com.json``); ``validation`` is the
-    quality-gate report for the insight that was just authored.
-    """
-
-    path: str
-    validation: InsightValidationReport
 
 
 def validate_insight(
@@ -260,11 +244,6 @@ def load_sweep(sweep_filename: str = _SWEEP_FILENAME) -> ReconResult:
 
 
 # Finalisation
-
-
-class ReconFinalisationError(RuntimeError):
-    """Raised when finalise_recon cannot consolidate the sweep + insights."""
-
 
 # Status codes whose hosts deserve an annotation: 2xx is a live target,
 # 3xx redirects often hide gates, 401/403 confirm an auth-gated surface

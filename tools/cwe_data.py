@@ -19,26 +19,12 @@ slug from `tools/owasp_data.py`.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, computed_field
-
-
-class CWEEntry(BaseModel):
-    """A single CWE catalogue entry."""
-
-    cwe_id: int
-    name: str
-    description: str
-    aliases: list[str]
-    owasp_topic: str | None = None
-
-    # Exposed as a computed_field rather than a plain @property so it appears
-    # in model_dump output - the @tool wrapper returns list[CWEEntry] direct
-    # and the agent sees the MITRE URL it cites in the remediation section.
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def url(self) -> str:
-        return f"https://cwe.mitre.org/data/definitions/{self.cwe_id}.html"
-
+# CWEEntry moved to models/cwe.py per the typed-shapes-live-in-models rule
+# (review feedback on #150). Re-exported here so existing
+# ``from tools.cwe_data import CWEEntry`` consumers keep working without
+# churn while the canonical import path becomes ``from models import
+# CWEEntry`` / ``from models.cwe import CWEEntry``.
+from models.cwe import CWEEntry
 
 # Catalogue. One entry per vuln_class the pentest stage can emit, plus a few
 # extras for severity-adjusted re-classifications (e.g. AuthZ from IDOR).

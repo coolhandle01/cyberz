@@ -44,15 +44,18 @@ class _PtReconSubdomainsArgs(BaseModel):
 
 
 @cyber_tool("Recon Subdomains", args_schema=_PtReconSubdomainsArgs)
-def recon_subdomains_tool(recon_path: str, host_filter: str | None = None) -> list[str]:
+def recon_subdomains_tool(recon_path: str, host_filter: str | None = None) -> list[Hostname]:
     """
     Return the in-scope subdomains discovered during recon. Pass the recon.json
     path you received from the OSINT Analyst. ``host_filter`` is a
     case-insensitive substring (e.g. "api" returns every subdomain containing
     "api"). Use this instead of reading recon.json directly when you only need
     the subdomain list.
+
+    Returned as ``list[Hostname]``: each entry is RFC-1123 validated,
+    matching the OSINT Analyst's same-named slicer.
     """
-    return recon_subdomains(recon_path, host_filter=host_filter)
+    return [Hostname(h) for h in recon_subdomains(recon_path, host_filter=host_filter)]
 
 
 class _PtReconEndpointsArgs(BaseModel):

@@ -15,16 +15,16 @@ from typing import Protocol, cast
 from pydantic import BaseModel
 
 from models import Endpoint, RawFinding, ReconResult
-from squad import CrewAITool, cyber_tool
+from squad import SquadTool, cyber_tool
 from tools import http
 
 _PentestFn = Callable[..., list[RawFinding]]
 
 
-class _PentestTool(CrewAITool, Protocol):
+class _PentestTool(SquadTool, Protocol):
     """Runtime shape of a CrewAI @tool: callable that also exposes .func.
 
-    Inherits ``name`` / ``description`` / ``func`` from ``CrewAITool`` and
+    Inherits ``name`` / ``description`` / ``func`` from ``SquadTool`` and
     adds the call signature so callers (and the pentest factory) keep the
     ``list[RawFinding]`` return type that the squad contract test enforces.
     """

@@ -256,7 +256,8 @@ class TestSchemaAcceptReject:
                 _JwtCheckArgs,
                 {
                     "token": "eyJ.x.y",
-                    "endpoint": "https://victim.example.com/api/me",
+                    # endpoint is typed Endpoint; minimum shape is the URL
+                    "endpoint": {"url": "https://victim.example.com/api/me"},
                     "attacks": ["alg-none"],
                 },
             ),
@@ -357,7 +358,10 @@ class TestSchemaAcceptReject:
         if "token" in schema_cls.model_fields:
             base["token"] = "eyJ.x.y"
         if "endpoint" in schema_cls.model_fields:
-            base["endpoint"] = "https://victim.example.com/api/me"
+            # _JwtCheckArgs takes the typed ``Endpoint`` shape (not a bare
+            # URL string); pass the minimum dict that validates so the test
+            # stays focused on the unknown-StrEnum reject.
+            base["endpoint"] = {"url": "https://victim.example.com/api/me"}
         with pytest.raises(ValidationError):
             schema_cls.model_validate(base)
 
@@ -413,12 +417,34 @@ class TestSchemaAcceptReject:
         with pytest.raises(ValidationError):
             schema_cls.model_validate({})
 
-    def test_jwt_requires_both_token_and_endpoint(self) -> None:
-        """JWT check needs the raw token and the validating endpoint."""
+    def test_jwt_requires_both_token_and_endpoint(self, endpoint) -> None:
+        """JWT check needs the raw token and the validating endpoint.
+
+        Uses the conftest ``endpoint`` fixture for the typed-Endpoint
+        payload so test intent ("a real, in-scope target endpoint") is
+        readable at the call site rather than via a hand-rolled URL
+        literal.
+        """
         with pytest.raises(ValidationError):
             _JwtCheckArgs.model_validate({"token": "eyJ.x.y"})
         with pytest.raises(ValidationError):
-            _JwtCheckArgs.model_validate({"endpoint": "https://victim.example.com/api"})
+            _JwtCheckArgs.model_validate({"endpoint": endpoint.model_dump(mode="json")})
+
+    def test_jwt_rejects_malformed_endpoint(self, endpoint) -> None:
+        """The typed ``Endpoint`` validates URL well-formedness upstream of
+        the JWT replay - a string where an Endpoint dict is required
+        rejects, as does an Endpoint dict whose URL is malformed."""
+        with pytest.raises(ValidationError):
+            _JwtCheckArgs.model_validate(
+                {"token": "eyJ.x.y", "endpoint": "https://victim.example.com/api"}
+            )
+        with pytest.raises(ValidationError):
+            _JwtCheckArgs.model_validate({"token": "eyJ.x.y", "endpoint": {"url": "not-a-url"}})
+        # The conftest endpoint fixture is intentionally valid; this asserts
+        # the happy path stays accepting alongside the rejects above.
+        _JwtCheckArgs.model_validate(
+            {"token": "eyJ.x.y", "endpoint": endpoint.model_dump(mode="json")}
+        )
 
     def test_save_findings_requires_findings(self) -> None:
         """``Save Findings`` rejects an empty payload - ``findings`` has no default."""

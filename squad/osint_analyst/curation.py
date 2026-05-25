@@ -10,16 +10,21 @@ the typed artefact downstream agents (VR research, PT probes) consume.
 
 from pydantic import BaseModel, Field
 
-from models import HostInsight, Hostname, HostPriority, HostRole
+from models import (
+    CWEEntry,
+    HostAnnotation,
+    HostInsight,
+    Hostname,
+    HostPriority,
+    HostRole,
+    OWASPEntry,
+    ReconFinalisationError,
+)
 from squad import cyber_tool
-from squad.osint_analyst._helpers import _load_programme
-from tools.cwe_data import CWEEntry
+from squad.workspace_tools import load_programme as _load_programme
 from tools.cwe_data import lookup as cwe_lookup
-from tools.owasp_data import OWASPEntry
 from tools.owasp_data import lookup as owasp_lookup
 from tools.recon_insights import (
-    HostAnnotation,
-    ReconFinalisationError,
     finalise_recon,
     save_insight,
     uncovered_interesting_hosts,

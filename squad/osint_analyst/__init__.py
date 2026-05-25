@@ -3,11 +3,12 @@
 The agent's tools split across sibling modules so each file owns one
 cohesive responsibility:
 
-- ``_helpers`` - the ``_load_programme`` loader both task halves call.
 - ``discovery`` - sweep + slicers + passive expansion (cert
   transparency, historical URLs, LLM endpoint detection) + active
   hostname probes + takeover detection. The "what is the surface"
-  half.
+  half. Imports the shared ``load_programme`` from
+  ``squad.workspace_tools`` (was a per-agent ``_helpers.py`` before
+  the dedupe).
 - ``curation`` - lookup (CWE / OWASP) + ``Annotate Host`` +
   ``Uncovered Hosts`` + ``Finalise Recon``. The "what do we record
   about the surface" half.

@@ -39,17 +39,22 @@ SQUAD_SKILLS_DIR = Path(__file__).parent / "skills"
 
 
 @runtime_checkable
-class CrewAITool(Protocol):
+class SquadTool(Protocol):
     """The shape every ``MEMBER.tools`` entry conforms to.
 
-    The decorators in use - the bare ``@tool``, ``@cyber_tool``,
-    ``@pentest_tool``, ``@research_brief_tool`` - all produce CrewAI ``Tool``
-    instances that carry ``name``, ``description``, and ``func``. This
-    Protocol is the single shared surface those decorators expose, so the
-    registry can be ``list[CrewAITool]`` rather than ``list[Any]`` and the
-    contract test in ``tests/test_squad_tool_contracts.py`` has a typed
-    handle to walk.
+    Project-specific name (rather than e.g. ``CrewAITool``) so the squad's
+    public surface stays decoupled from the underlying agent framework:
+    today this Protocol matches the runtime shape ``crewai.tools.tool``
+    produces, but the registry is "the tools the bounty squad uses", not
+    "the tools CrewAI happens to produce". The Protocol stays a real
+    abstraction: ``SquadMember.tools: list[SquadTool]`` and the specialist
+    Protocols (``_PentestTool``, ``_ResearchBriefTool``) inherit from it
+    so the cross-agent contract test in
+    ``tests/test_squad_tool_contracts.py`` has a typed handle to walk.
 
+    The decorators in use - the bare ``@tool``, ``@cyber_tool``,
+    ``@pentest_tool``, ``@research_brief_tool`` - all produce CrewAI
+    ``Tool`` instances that carry ``name``, ``description``, and ``func``.
     ``func`` is declared via ``@property`` (rather than as a plain class
     attribute) so the Protocol is satisfied by CrewAI's ``Tool`` model -
     its ``func`` field is typed ``Callable[P, R | Awaitable[R]]`` for the
@@ -66,7 +71,7 @@ class CrewAITool(Protocol):
 
 def cyber_tool(
     name: str, *, args_schema: type[BaseModel]
-) -> Callable[[Callable[..., object]], CrewAITool]:
+) -> Callable[[Callable[..., object]], SquadTool]:
     """The blessed cybersquad replacement for bare ``@crewai.tools.tool``.
 
     Equivalent to ``tool(name)`` except that ``args_schema`` is keyword-
@@ -86,10 +91,10 @@ def cyber_tool(
     specialist wrapper uses ``@cyber_tool`` directly.
     """
 
-    def decorator(fn: Callable[..., object]) -> CrewAITool:
+    def decorator(fn: Callable[..., object]) -> SquadTool:
         wrapped = tool(name)(fn)
         wrapped.args_schema = args_schema
-        return cast(CrewAITool, wrapped)
+        return cast(SquadTool, wrapped)
 
     return decorator
 
@@ -115,7 +120,7 @@ class SquadMember:
     """
 
     dir: Path
-    tools: list[CrewAITool] = field(default_factory=list)
+    tools: list[SquadTool] = field(default_factory=list)
 
     @property
     def slug(self) -> str:
@@ -179,7 +184,7 @@ def build_task(
 
 
 __all__ = [
-    "CrewAITool",
+    "SquadTool",
     "SquadMember",
     "build_agent",
     "build_task",

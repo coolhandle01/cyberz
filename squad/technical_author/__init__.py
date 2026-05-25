@@ -6,13 +6,11 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from models import ProgrammeReportSummary
+from models import CWEEntry, OWASPEntry, ProgrammeReportSummary
 from squad import SquadMember, cyber_tool, read_run_file_tool, read_run_filelist_tool
 from tools import http
-from tools.cwe_data import CWEEntry
 from tools.cwe_data import lookup as cwe_lookup
 from tools.h1_api import h1
-from tools.owasp_data import OWASPEntry
 from tools.owasp_data import lookup as owasp_lookup
 from tools.report_tools import (
     FinalisationError,

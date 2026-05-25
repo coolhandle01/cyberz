@@ -17,9 +17,10 @@ from models import (
     Hostname,
     LlmEndpoint,
     OpenPortsMap,
+    TakeoverCandidate,
 )
 from squad import cyber_tool
-from squad.osint_analyst._helpers import _load_programme
+from squad.workspace_tools import load_programme as _load_programme
 from tools import http
 from tools.h1_api import h1
 from tools.recon import (
@@ -30,7 +31,6 @@ from tools.recon import (
     run_recon,
 )
 from tools.recon import probe_endpoints as probe_endpoints_impl
-from tools.recon.dnsx import TakeoverCandidate
 from tools.recon.query import recon_endpoints, recon_open_ports, recon_subdomains
 from tools.recon.scope import filter_in_scope as filter_in_scope_impl
 
@@ -100,14 +100,19 @@ class _ReconSubdomainsArgs(BaseModel):
 @cyber_tool("Recon Subdomains", args_schema=_ReconSubdomainsArgs)
 def recon_subdomains_tool(
     sweep_path: str = "sweep.json", host_filter: str | None = None
-) -> list[str]:
+) -> list[Hostname]:
     """
     Return the in-scope subdomains in the OA's draft sweep. ``host_filter`` is
     a case-insensitive substring (e.g. "api" returns every subdomain
     containing "api"). Use this to inspect the sweep before deciding which
     hosts to annotate.
+
+    Returned as ``list[Hostname]``: each entry is RFC-1123 validated, so
+    consumers see "validated hostnames" rather than "arbitrary strings"
+    and any malformed entry in the sweep refuses upstream of downstream
+    use (probe targeting, scope filtering).
     """
-    return recon_subdomains(sweep_path, host_filter=host_filter)
+    return [Hostname(h) for h in recon_subdomains(sweep_path, host_filter=host_filter)]
 
 
 class _ReconEndpointsArgs(BaseModel):

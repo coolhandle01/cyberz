@@ -1,4 +1,16 @@
-"""squad/workspace_tools.py - CrewAI @tool wrappers for the shared run workspace."""
+"""squad/workspace_tools.py - shared run-workspace surface.
+
+Two halves:
+
+- ``@cyber_tool`` wrappers around the workspace artefact IO (``List
+  Run Files``, ``Read Run File``, ``Read Attack Plan``).
+- ``load_programme(programme_handle)`` - the shared programme-loader
+  helper used by every agent that needs a parsed ``Programme`` to
+  reason against (OSINT's curation + active-probe tools, VR triage).
+  Lives here because it is the workspace's other authoritative
+  context: the run directory tells us what we wrote, and this loader
+  tells us who we wrote it about.
+"""
 
 from __future__ import annotations
 
@@ -6,9 +18,31 @@ from pydantic import BaseModel, Field
 
 from models import RunFile, RunFileContent
 from models.attack import AttackPlan
+from models.h1 import Programme
 from squad import cyber_tool
-from tools import workspace
+from tools import http, workspace
+from tools.h1_api import h1
 from tools.research_tools import attack_plan_path, load_attack_plan
+
+
+def load_programme(programme_handle: str | None) -> Programme:
+    """Fetch and parse the Programme for the current run.
+
+    Centralised here (rather than duplicated as a private helper in
+    each agent's package) because the programme is workspace-level
+    state - every agent that needs to scope-check against the
+    selected programme calls this. ``programme_handle`` is required:
+    a None / empty handle is a hard error rather than a silent fall-
+    through to the run directory's metadata, because the scope guard
+    needs the parsed ``Programme`` model and the H1 API is the
+    authoritative source for it.
+    """
+    if not programme_handle:
+        raise ValueError("programme_handle is required")
+    http.set_programme(programme_handle)
+    policy = h1.get_programme_policy(programme_handle)
+    scope = h1.get_structured_scope(programme_handle)
+    return h1.parse_programme(policy["data"], scope)
 
 
 class _ListRunFilesArgs(BaseModel):

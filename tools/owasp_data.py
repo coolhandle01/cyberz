@@ -15,27 +15,12 @@ in one hop.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, computed_field
-
-_BASE_URL = "https://cheatsheetseries.owasp.org/cheatsheets"
-
-
-class OWASPEntry(BaseModel):
-    """A single OWASP Cheat Sheet entry."""
-
-    topic: str  # canonical slug, used to build URL
-    title: str
-    key_principles: list[str]
-    aliases: list[str] = []  # short keywords the TA may use to find this sheet
-
-    # Exposed as a computed_field rather than a plain @property so it appears
-    # in model_dump output - the @tool wrapper returns list[OWASPEntry] direct
-    # and the agent sees the cheatsheetseries.owasp.org URL it cites.
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def url(self) -> str:
-        return f"{_BASE_URL}/{self.topic}_Cheat_Sheet.html"
-
+# OWASPEntry moved to models/owasp.py per the typed-shapes-live-in-models
+# rule (review feedback on #150). Re-exported here so existing
+# ``from tools.owasp_data import OWASPEntry`` consumers keep working
+# without churn while the canonical import path becomes
+# ``from models import OWASPEntry`` / ``from models.owasp import OWASPEntry``.
+from models.owasp import OWASPEntry
 
 # Curated subset of the OWASP Cheat Sheet Series covering the vuln_class
 # strings cybersquad emits. The "key_principles" entries are deliberately

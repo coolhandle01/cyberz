@@ -16,6 +16,13 @@ import logging
 
 from pydantic import BaseModel
 
+# TakeoverCandidate moved to models/dns.py per the typed-shapes-live-in-
+# models rule (review feedback on #150). Re-exported below so existing
+# ``from tools.recon.dnsx import TakeoverCandidate`` consumers keep
+# working without churn while the canonical import path becomes
+# ``from models import TakeoverCandidate`` / ``from models.dns import
+# TakeoverCandidate``.
+from models.dns import TakeoverCandidate
 from tools._helpers import _require_binary, _run
 
 logger = logging.getLogger(__name__)
@@ -89,23 +96,6 @@ class DNSRecord(BaseModel):
     hostname: str
     a_records: list[str] = []
     cname: list[str] = []
-
-
-class TakeoverCandidate(BaseModel):
-    """A subdomain flagged as a potential takeover target.
-
-    ``reason`` is one of:
-      - ``cname_to_vulnerable_provider``: CNAME points to a service in the
-        ``_TAKEOVER_FINGERPRINTS`` catalogue. Probe the host with HTTP and
-        look for the service-specific "not found" body.
-      - ``dangling_cname``: CNAME exists but the chain does not resolve to
-        any A records. The CNAME target may have been deprovisioned.
-    """
-
-    hostname: str
-    cname: str
-    reason: str
-    service: str | None = None
 
 
 def _match_fingerprint(cname: str) -> str | None:

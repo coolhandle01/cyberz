@@ -41,13 +41,13 @@ class TestOsintAnalystTools:
     @staticmethod
     def _patch_programme(programme):
         return [
-            patch("squad.osint_analyst._helpers.http.set_programme"),
+            patch("squad.workspace_tools.http.set_programme"),
             patch(
-                "squad.osint_analyst._helpers.h1.get_programme_policy",
+                "squad.workspace_tools.h1.get_programme_policy",
                 return_value={"data": {}},
             ),
-            patch("squad.osint_analyst._helpers.h1.get_structured_scope", return_value={}),
-            patch("squad.osint_analyst._helpers.h1.parse_programme", return_value=programme),
+            patch("squad.workspace_tools.h1.get_structured_scope", return_value={}),
+            patch("squad.workspace_tools.h1.parse_programme", return_value=programme),
         ]
 
     def test_annotate_host_tool_writes_insight_and_returns_validation(
@@ -78,7 +78,7 @@ class TestOsintAnalystTools:
             for p in reversed(patches):
                 p.stop()
 
-        from tools.recon_insights import HostAnnotation
+        from models import HostAnnotation
 
         assert isinstance(result, HostAnnotation)
         assert result.validation.ok is True
@@ -109,7 +109,7 @@ class TestOsintAnalystTools:
             for p in reversed(patches):
                 p.stop()
 
-        from tools.recon_insights import HostAnnotation
+        from models import HostAnnotation
 
         assert isinstance(result, HostAnnotation)
         assert result.validation.ok is False
