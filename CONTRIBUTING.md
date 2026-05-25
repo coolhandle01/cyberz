@@ -149,6 +149,10 @@ These exist for reasons that are not obvious from the code alone. Touching any o
 - **No module-level side effects in `crew.py`**. The old `crew = build_crew()` at module level was deliberately removed.
 - **`default_factory=lambda` in `config.py`** preserves `monkeypatch.setenv` semantics in tests. Do not "simplify" to direct env reads at class-definition time.
 
+## Pull requests
+
+If you create a PR, please ensure you are subscribed to it so review comments and CI events reach you. Most contributors are auto-subscribed by GitHub; some integrations require an explicit subscribe step.
+
 ## Where to find more
 
 - `docs/architecture.md` - what the project does, key files

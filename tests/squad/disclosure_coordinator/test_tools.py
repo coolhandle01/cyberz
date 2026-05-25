@@ -1,10 +1,11 @@
 """
-tests/test_squad_disclosure_coordinator.py - exercise the @tool wrappers on
-the Disclosure Coordinator.
+Behavioural tests for the Disclosure Coordinator's @tool wrappers.
 
-The wrappers are thin: unmarshal JSON, call into tools/* helpers, serialise
-the result. Coverage here is regression coverage of the wrapping itself; the
-underlying helpers are exercised in their own dedicated test files.
+The wrappers are thin: deserialise inputs, call into tools/* helpers,
+return the result. Coverage here is regression coverage of the
+wrapping itself; the underlying helpers are exercised in their own
+dedicated test files. The args_schema contract for the same tools
+lives in the sibling ``test_args_schemas.py``.
 """
 
 from __future__ import annotations
@@ -21,7 +22,6 @@ class TestDisclosureCoordinatorTools:
         from models.h1 import SubmissionResult, SubmissionStatus
         from squad.disclosure_coordinator import submit_report_tool
 
-        report_json = disclosure_report.model_dump_json()
         submission = SubmissionResult(report_id="h1-42", status=SubmissionStatus.SUBMITTED)
 
         with (
@@ -32,12 +32,36 @@ class TestDisclosureCoordinatorTools:
                 return_value=submission,
             ) as msub,
         ):
-            result = submit_report_tool.func(report_json)
+            # The wrapper takes a typed DisclosureReport; the body's
+            # model_validate handles either a model instance or the dict
+            # CrewAI hands it after args_schema validation.
+            result = submit_report_tool.func(disclosure_report)
 
         assert result == submission
         mhttp.assert_called_once_with(disclosure_report.programme_handle)
         msave.assert_called_once()
         msub.assert_called_once()
+
+    def test_submit_report_tool_accepts_dict(self, disclosure_report) -> None:
+        """CrewAI hands the wrapper a dict after args_schema validation; the
+        both-shapes adapter must accept that too."""
+        from models.h1 import SubmissionResult, SubmissionStatus
+        from squad.disclosure_coordinator import submit_report_tool
+
+        submission = SubmissionResult(report_id="h1-42", status=SubmissionStatus.SUBMITTED)
+
+        with (
+            patch("squad.disclosure_coordinator.http.set_programme") as mhttp,
+            patch("squad.disclosure_coordinator.save_report"),
+            patch(
+                "squad.disclosure_coordinator.h1.submit_report",
+                return_value=submission,
+            ),
+        ):
+            result = submit_report_tool.func(disclosure_report.model_dump())
+
+        assert result == submission
+        mhttp.assert_called_once_with(disclosure_report.programme_handle)
 
     def test_check_duplicate_tool(self) -> None:
         from squad.disclosure_coordinator import check_duplicate_tool

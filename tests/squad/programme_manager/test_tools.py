@@ -1,10 +1,11 @@
 """
-tests/test_squad_programme_manager.py - exercise the @tool wrappers on the
-Programme Manager.
+Behavioural tests for the Programme Manager's @tool wrappers.
 
-The wrappers are thin: unmarshal JSON, call into tools/* helpers, serialise
-the result. Coverage here is regression coverage of the wrapping itself; the
-underlying helpers are exercised in their own dedicated test files.
+The wrappers are thin: deserialise inputs, call into tools/* helpers,
+return the result. Coverage here is regression coverage of the
+wrapping itself; the underlying helpers are exercised in their own
+dedicated test files. The args_schema contract for the same tools
+lives in the sibling ``test_args_schemas.py``.
 """
 
 from __future__ import annotations
@@ -45,6 +46,7 @@ class TestBrowseProgrammesTool:
         )
 
     def test_forwards_all_filter_args(self, tmp_path) -> None:
+        from models.h1 import ScopeType, SubmissionState
         from squad.programme_manager import browse_programmes_tool
 
         with patch(
@@ -52,14 +54,17 @@ class TestBrowseProgrammesTool:
             return_value=[],
         ) as mbrowse:
             browse_programmes_tool.func(
-                asset_type="WILDCARD",
+                asset_type=ScopeType.WILDCARD,
                 bookmarked=True,
                 offers_bounties=True,
-                submission_state="open",
+                submission_state=SubmissionState.OPEN,
                 sort="-launched_at",
                 limit=50,
             )
 
+        # The wrapper uppercases the asset_type StrEnum value to match
+        # H1's filter[asset_type] wire format; submission_state passes
+        # through as its lowercase StrEnum value.
         mbrowse.assert_called_once_with(
             asset_type="WILDCARD",
             bookmarked=True,

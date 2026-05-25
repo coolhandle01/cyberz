@@ -1,29 +1,85 @@
 """Disclosure Coordinator - submits finalised reports to HackerOne."""
 
-from __future__ import annotations
-
 from pathlib import Path
 
-from crewai.tools import tool
+from pydantic import BaseModel, Field
 
 from models import ProgrammeReportSummary
 from models.h1 import DisclosureReport, SubmissionResult
-from squad import SquadMember, read_run_file_tool, read_run_filelist_tool
+from squad import SquadMember, cyber_tool, read_run_file_tool, read_run_filelist_tool
 from tools import http
 from tools.h1_api import h1
 from tools.report_tools import save_report
 
 
-@tool("Submit Report")
-def submit_report_tool(report_json: str) -> SubmissionResult:
-    """Submit a serialised DisclosureReport to HackerOne."""
-    report = DisclosureReport.model_validate_json(report_json)
+class _SubmitReportArgs(BaseModel):
+    """Explicit args_schema for the Submit Report tool.
+
+    IRREVERSIBLE: a successful call publishes a report to hackerone.com.
+    Once filed the report is visible to the programme's triage team and
+    cannot be silently retried - the field description below names the
+    consequences the agent must reason about before calling.
+    """
+
+    report: DisclosureReport = Field(
+        description=(
+            "The fully-built ``DisclosureReport`` to submit. Built by the"
+            " Technical Author and passed as a typed model - CrewAI"
+            " serialises and re-validates against the ``DisclosureReport``"
+            " schema upstream, so mis-shaped reports reject before the"
+            " HTTP POST. IRREVERSIBLE: a successful submission publishes"
+            " the report to hackerone.com and cannot be silently retried."
+            " A well-shaped report with the wrong ``programme_handle``"
+            " inside it files against the wrong target - a public scope"
+            " violation the operator has to apologise for. Double-check"
+            " ``programme_handle`` against the selected programme and"
+            " verify ``title``, ``vulnerability.severity``,"
+            " ``weakness_id``, and ``structured_scope_id`` - all four are"
+            " submission-time authoritative; H1 records them verbatim and"
+            " there is no quiet edit path."
+        ),
+    )
+
+
+@cyber_tool("Submit Report", args_schema=_SubmitReportArgs)
+def submit_report_tool(report: DisclosureReport) -> SubmissionResult:
+    """Submit a DisclosureReport to HackerOne."""
+    # The wrapper signature is DisclosureReport so the agent-facing
+    # args_schema is typed, but CrewAI's args_schema.model_validate(...)
+    # .model_dump() pass leaves the runtime value as a dict by the time
+    # this body runs. model_validate accepts both shapes - it returns
+    # the same DisclosureReport when given an instance and constructs
+    # one when given a dict - so this is the both-shapes adapter.
+    report = DisclosureReport.model_validate(report)
     http.set_programme(report.programme_handle)
     save_report(report)
     return h1.submit_report(report)
 
 
-@tool("Check H1 Duplicate")
+class _CheckDuplicateArgs(BaseModel):
+    """Explicit args_schema for the Check H1 Duplicate tool."""
+
+    programme_handle: str = Field(
+        description=(
+            "Exact HackerOne programme handle as it appears in the URL"
+            " (lowercase, no slashes, no spaces). Must match the programme"
+            " the report is about to be submitted against - querying the"
+            " wrong programme's reports list returns a false-negative"
+            " duplicate check and an actual duplicate slips through."
+        ),
+    )
+    title: str = Field(
+        description=(
+            "Draft report title to fuzzy-match against existing reports on"
+            " this programme. The first 30 characters (case-insensitive)"
+            " are used as the substring needle, so phrase the title so its"
+            " leading 30 characters are distinctive (target host or"
+            " vulnerability class up front)."
+        ),
+    )
+
+
+@cyber_tool("Check H1 Duplicate", args_schema=_CheckDuplicateArgs)
 def check_duplicate_tool(programme_handle: str, title: str) -> list[ProgrammeReportSummary]:
     """
     Last-chance duplicate check before submission. Lists recent reports on this
