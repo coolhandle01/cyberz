@@ -33,7 +33,8 @@ from squad.penetration_tester import (
     _AdminPanelsArgs,
     _AzureStorageCheckArgs,
     _CmdInjectionArgs,
-    _ConsulVaultArgs,
+    _ConsulVaultPathArgs,
+    _ConsulVaultPortArgs,
     _CookieCheckArgs,
     _CorsCheckArgs,
     _CouchdbCheckArgs,
@@ -42,14 +43,16 @@ from squad.penetration_tester import (
     _DirectadminArgs,
     _ElasticsearchCheckArgs,
     _ErrorDisclosureArgs,
-    _GrafanaArgs,
+    _GrafanaPathArgs,
+    _GrafanaPortArgs,
     _HeaderInjectionArgs,
     _HeaderXssArgs,
     _HostHeaderArgs,
     _HppArgs,
     _IdorArgs,
     _JwtCheckArgs,
-    _KibanaArgs,
+    _KibanaPathArgs,
+    _KibanaPortArgs,
     _LdapInjectionArgs,
     _MongodbCheckArgs,
     _MysqlCheckArgs,
@@ -58,7 +61,8 @@ from squad.penetration_tester import (
     _OpenRedirectArgs,
     _PathTraversalArgs,
     _PleskArgs,
-    _PortainerArgs,
+    _PortainerPathArgs,
+    _PortainerPortArgs,
     _PostgresqlCheckArgs,
     _PromptInjectionArgs,
     _PrototypePollutionArgs,
@@ -132,10 +136,14 @@ _PT_SCHEMAS: dict[str, type[BaseModel]] = {
     "Plesk Check": _PleskArgs,
     "DirectAdmin Check": _DirectadminArgs,
     "Webmin Check": _WebminArgs,
-    "Grafana Check": _GrafanaArgs,
-    "Kibana Check": _KibanaArgs,
-    "Portainer Check": _PortainerArgs,
-    "Consul/Vault Check": _ConsulVaultArgs,
+    "Grafana Port Check": _GrafanaPortArgs,
+    "Grafana Path Check": _GrafanaPathArgs,
+    "Kibana Port Check": _KibanaPortArgs,
+    "Kibana Path Check": _KibanaPathArgs,
+    "Portainer Port Check": _PortainerPortArgs,
+    "Portainer Path Check": _PortainerPathArgs,
+    "Consul/Vault Port Check": _ConsulVaultPortArgs,
+    "Consul/Vault Path Check": _ConsulVaultPathArgs,
     # PT recon / save wrappers
     "Recon Subdomains": _PtReconSubdomainsArgs,
     "Recon Endpoints": _PtReconEndpointsArgs,
@@ -147,11 +155,22 @@ _PT_SCHEMAS: dict[str, type[BaseModel]] = {
     "Read Attack Plan": _ReadAttackPlanArgs,
 }
 
-# Cloud / infra wrappers that take ``recon_path: str``. Used by the
-# missing-required-field parametrize below.
+# Cloud / infra wrappers that still take ``recon_path: str``. After the
+# Path B redesign every other cloud wrapper takes a typed
+# ``list[Hostname]`` or ``list[Endpoint]`` picked by the agent and
+# scope-filtered at the wrapper. Storage stays on ``recon_path`` because
+# S3 / Azure buckets live on third-party infrastructure outside
+# programme.in_scope (see ``cloud/__init__.py`` FIXME for the #83
+# framework follow-on).
 _RECON_PATH_CLOUD_SCHEMAS: list[type[BaseModel]] = [
     _S3CheckArgs,
     _AzureStorageCheckArgs,
+]
+
+# Cloud wrappers that take ``hostnames: list[Hostname]`` and scope-filter
+# via ``filter_in_scope``. Used by the missing-required-hostnames
+# parametrize below.
+_HOSTNAMES_CLOUD_SCHEMAS: list[type[BaseModel]] = [
     _ElasticsearchCheckArgs,
     _CouchdbCheckArgs,
     _RedisCheckArgs,
@@ -162,10 +181,22 @@ _RECON_PATH_CLOUD_SCHEMAS: list[type[BaseModel]] = [
     _PleskArgs,
     _DirectadminArgs,
     _WebminArgs,
-    _GrafanaArgs,
-    _KibanaArgs,
-    _PortainerArgs,
-    _ConsulVaultArgs,
+    _GrafanaPortArgs,
+    _KibanaPortArgs,
+    _PortainerPortArgs,
+    _ConsulVaultPortArgs,
+]
+
+# Cloud wrappers that take ``endpoints: list[Endpoint]`` and scope-filter
+# via ``filter_endpoints_in_scope``. Used by the missing-required-endpoints
+# parametrize below.
+_ENDPOINTS_CLOUD_SCHEMAS: list[type[BaseModel]] = [
+    _SensitiveFilesArgs,
+    _AdminPanelsArgs,
+    _GrafanaPathArgs,
+    _KibanaPathArgs,
+    _PortainerPathArgs,
+    _ConsulVaultPathArgs,
 ]
 
 
@@ -270,25 +301,39 @@ class TestSchemaAcceptReject:
             (_HostHeaderArgs, {"recon_path": "recon.json"}),
             (_SourceMapsArgs, {"recon_path": "recon.json"}),
             (_SriCheckArgs, {"recon_path": "recon.json"}),
-            # @cyber_tool cloud / infra acceptance cases
+            # @cyber_tool cloud / infra acceptance cases.
+            # Storage stays on recon_path (third-party infra, not in
+            # programme.in_scope - see _RECON_PATH_CLOUD_SCHEMAS).
             (_S3CheckArgs, {"recon_path": "recon.json"}),
             (_AzureStorageCheckArgs, {"recon_path": "recon.json"}),
-            (_ElasticsearchCheckArgs, {"recon_path": "recon.json"}),
-            (_CouchdbCheckArgs, {"recon_path": "recon.json"}),
-            (_RedisCheckArgs, {"recon_path": "recon.json"}),
-            (_MongodbCheckArgs, {"recon_path": "recon.json"}),
-            (_PostgresqlCheckArgs, {"recon_path": "recon.json"}),
-            (_MysqlCheckArgs, {"recon_path": "recon.json"}),
+            # The endpoint-taking shape accepts the empty list; the
+            # hostname-taking shape's in-scope acceptance lives in
+            # ``test_hostnames_schema_accepts_in_scope`` below where the
+            # target_apex fixture makes test intent ("a real in-scope
+            # hostname") readable at the call site.
             (_SensitiveFilesArgs, {"endpoints": []}),
             (_AdminPanelsArgs, {"endpoints": []}),
-            (_CpanelArgs, {"recon_path": "recon.json"}),
-            (_PleskArgs, {"recon_path": "recon.json"}),
-            (_DirectadminArgs, {"recon_path": "recon.json"}),
-            (_WebminArgs, {"recon_path": "recon.json"}),
-            (_GrafanaArgs, {"recon_path": "recon.json"}),
-            (_KibanaArgs, {"recon_path": "recon.json"}),
-            (_PortainerArgs, {"recon_path": "recon.json"}),
-            (_ConsulVaultArgs, {"recon_path": "recon.json"}),
+            (_GrafanaPathArgs, {"endpoints": []}),
+            (_KibanaPathArgs, {"endpoints": []}),
+            (_PortainerPathArgs, {"endpoints": []}),
+            (_ConsulVaultPathArgs, {"endpoints": []}),
+            # Empty-list acceptance is the safe shape: scope_filter runs on
+            # non-empty values only, so an empty payload validates without
+            # touching the workspace.
+            (_ElasticsearchCheckArgs, {"hostnames": []}),
+            (_CouchdbCheckArgs, {"hostnames": []}),
+            (_RedisCheckArgs, {"hostnames": []}),
+            (_MongodbCheckArgs, {"hostnames": []}),
+            (_PostgresqlCheckArgs, {"hostnames": []}),
+            (_MysqlCheckArgs, {"hostnames": []}),
+            (_CpanelArgs, {"hostnames": []}),
+            (_PleskArgs, {"hostnames": []}),
+            (_DirectadminArgs, {"hostnames": []}),
+            (_WebminArgs, {"hostnames": []}),
+            (_GrafanaPortArgs, {"hostnames": []}),
+            (_KibanaPortArgs, {"hostnames": []}),
+            (_PortainerPortArgs, {"hostnames": []}),
+            (_ConsulVaultPortArgs, {"hostnames": []}),
             # PT recon / save acceptance cases
             (_PtReconSubdomainsArgs, {"recon_path": "recon.json"}),
             (_PtReconSubdomainsArgs, {"recon_path": "recon.json", "host_filter": "api"}),
@@ -382,14 +427,44 @@ class TestSchemaAcceptReject:
             _HppArgs,
             _ErrorDisclosureArgs,
             # @cyber_tool cloud wrappers that take endpoints
-            _SensitiveFilesArgs,
-            _AdminPanelsArgs,
+            *_ENDPOINTS_CLOUD_SCHEMAS,
         ],
     )
     def test_missing_required_endpoints_rejected(self, schema_cls: type[BaseModel]) -> None:
         """``endpoints`` is required on every endpoint-taking PT typed-tool schema."""
         with pytest.raises(ValidationError):
             schema_cls.model_validate({})
+
+    @pytest.mark.parametrize("schema_cls", _HOSTNAMES_CLOUD_SCHEMAS)
+    def test_missing_required_hostnames_rejected(self, schema_cls: type[BaseModel]) -> None:
+        """``hostnames`` is required on every hostname-taking cloud schema."""
+        with pytest.raises(ValidationError):
+            schema_cls.model_validate({})
+
+    @pytest.mark.parametrize("schema_cls", _HOSTNAMES_CLOUD_SCHEMAS)
+    def test_hostnames_schema_accepts_in_scope(
+        self, schema_cls: type[BaseModel], target_apex: str
+    ) -> None:
+        """An in-scope hostname validates through the ``Hostname`` primitive.
+
+        Uses ``target_apex`` so test intent ("a real in-scope target
+        hostname") is readable at the call site rather than via an
+        opaque literal. The wrapper-level scope filter runs at call
+        time, not at schema validation, so this exercises only the
+        ``Hostname`` primitive's RFC 1123 contract.
+        """
+        instance = schema_cls.model_validate({"hostnames": [f"api.{target_apex}"]})
+        assert isinstance(instance, schema_cls)
+
+    @pytest.mark.parametrize("schema_cls", _HOSTNAMES_CLOUD_SCHEMAS)
+    def test_hostnames_schema_rejects_url(
+        self, schema_cls: type[BaseModel], target_url: str
+    ) -> None:
+        """The ``Hostname`` primitive rejects a URL where a bare hostname
+        is expected - passing a full URL trips the validator upstream of
+        the wrapper, before any scope check or HTTP request."""
+        with pytest.raises(ValidationError):
+            schema_cls.model_validate({"hostnames": [target_url]})
 
     @pytest.mark.parametrize(
         "schema_cls",

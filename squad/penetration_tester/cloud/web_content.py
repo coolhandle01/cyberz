@@ -4,10 +4,11 @@ unintentionally (env / config / backups / VCS metadata / build
 artefacts) and for admin-panel login pages exposed at predictable
 paths.
 
-Unlike the other cloud / infra wrappers in this package these take
-typed ``list[Endpoint]`` (the agent picks which endpoints to ask
-about) rather than a recon path - they are HTTP path probes, not
-host-derived service checks.
+These have always taken typed ``list[Endpoint]`` (the agent picks
+which endpoints to ask about) rather than a recon path - they are HTTP
+path probes, not host-derived service checks. The wrapper-level scope
+filter drops any endpoint whose host is outside the selected
+programme's structured scope before the probe fires.
 """
 
 from pydantic import BaseModel, Field
@@ -16,6 +17,7 @@ from models import Endpoint, RawFinding
 from squad import cyber_tool
 from squad.penetration_tester._decorator import _parse_endpoints
 from tools.cloud import check_admin_panels, check_sensitive_files
+from tools.recon.scope import filter_endpoints_in_scope
 
 
 class _SensitiveFilesArgs(BaseModel):
@@ -23,27 +25,31 @@ class _SensitiveFilesArgs(BaseModel):
 
     endpoints: list[Endpoint] = Field(
         description=(
-            "Endpoint objects. Pass a representative set of live endpoints;"
-            " the tool deduplicates by origin so many can be passed without"
-            " redundant probes. High-value finds on any target (.git/HEAD,"
-            " .env, phpinfo.php, Apache server-status, .DS_Store) - run"
-            " broadly."
+            "Endpoint objects. Pass a representative set of live"
+            " endpoints; the tool deduplicates by origin so many can be"
+            " passed without redundant probes. High-value finds on any"
+            " target (.git/HEAD, .env, phpinfo.php, Apache server-status,"
+            " .DS_Store) - run broadly. The wrapper's scope filter drops"
+            " endpoints whose host is outside the selected programme's"
+            " structured scope."
         ),
     )
 
 
-@cyber_tool("Sensitive Files Check", args_schema=_SensitiveFilesArgs)
+@cyber_tool(
+    "Sensitive Files Check",
+    args_schema=_SensitiveFilesArgs,
+    scope_filter=("endpoints", filter_endpoints_in_scope),
+)
 def sensitive_files_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
     """
-    Probe for exposed .git/HEAD, .env, phpinfo.php, Apache server-status, and
-    .DS_Store files. Run broadly - these are high-value finds on any target.
+    Probe for exposed .git/HEAD, .env, phpinfo.php, Apache server-status,
+    and .DS_Store files. Run broadly - these are high-value finds on any
+    target.
 
-    endpoints: list of endpoint objects. Pass a representative set of
-      live endpoints; the tool deduplicates by origin so you can pass many without
-      redundant probes.
-      Example: [{"url": "https://example.com/", "status_code": 200}]
-
-
+    Pass a representative set of live endpoints; the tool deduplicates
+    by origin so you can pass many without redundant probes. The
+    wrapper scope-filters the list.
     """
     return list(check_sensitive_files(_parse_endpoints(endpoints)))
 
@@ -55,21 +61,25 @@ class _AdminPanelsArgs(BaseModel):
         description=(
             "Endpoint objects. The tool deduplicates by origin so passing"
             " many is safe. Probes common admin paths (/admin, /wp-admin,"
-            " /phpmyadmin, /adminer, /manager/html, /_admin) - run broadly"
-            " on all live endpoints."
+            " /phpmyadmin, /adminer, /manager/html, /_admin) - run"
+            " broadly on all live endpoints. The wrapper's scope filter"
+            " drops endpoints whose host is outside the selected"
+            " programme's structured scope."
         ),
     )
 
 
-@cyber_tool("Admin Panels Check", args_schema=_AdminPanelsArgs)
+@cyber_tool(
+    "Admin Panels Check",
+    args_schema=_AdminPanelsArgs,
+    scope_filter=("endpoints", filter_endpoints_in_scope),
+)
 def admin_panels_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
     """
-    Probe common admin panel paths: /admin, /wp-admin, /phpmyadmin, /adminer,
-    /manager/html, /_admin. Run broadly on all live endpoints.
+    Probe common admin panel paths: /admin, /wp-admin, /phpmyadmin,
+    /adminer, /manager/html, /_admin. Run broadly on all live endpoints.
 
-    endpoints: list of endpoint objects. The tool deduplicates by origin.
-      Example: [{"url": "https://example.com/", "status_code": 200}]
-
-
+    Pass a representative set of live endpoints; the tool deduplicates
+    by origin. The wrapper scope-filters the list.
     """
     return list(check_admin_panels(_parse_endpoints(endpoints)))

@@ -1,115 +1,136 @@
 """
 Hosting control-panel exposure probes - cPanel/WHM, Plesk,
-DirectAdmin, Webmin. Each derives candidate host:port pairs from
-recon and checks for the panel's signature login page; a confirmed
+DirectAdmin, Webmin. Each takes typed ``list[Hostname]`` picked by the
+agent from recon (the host:port pairs the nmap pass surfaced) and a
+wrapper-level ``scope_filter`` drops anything outside the selected
+programme's structured scope before the probe fires. A confirmed
 exposed admin panel is a credentialled-attack target rather than a
 direct vulnerability.
-
-See the package-level scope-of-target FIXME in ``cloud/__init__.py``
-(tracked in #156).
 """
 
 from pydantic import BaseModel, Field
 
-from models import RawFinding
+from models import Hostname, RawFinding
 from squad import cyber_tool
-from squad.penetration_tester._decorator import _recon_from_path
 from tools.cloud import check_cpanel, check_directadmin, check_plesk, check_webmin
+from tools.recon.scope import filter_in_scope
 
 
 class _CpanelArgs(BaseModel):
     """Explicit args_schema for the cPanel/WHM Check tool."""
 
-    recon_path: str = Field(
+    hostnames: list[Hostname] = Field(
         description=(
-            "Relative path to recon.json in the run directory. Fire when"
-            " open_ports shows 2082, 2083, 2086, or 2087, or when the"
-            " target appears to be a shared / managed hosting environment."
-            " Probes cPanel (2082/2083) and WHM (2086/2087) on every"
-            " discovered hostname."
+            "Hostnames showing one of ports 2082, 2083, 2086, or 2087"
+            " open, or hostnames on a target that appears to be a shared /"
+            " managed hosting environment. Probes cPanel (2082/2083) and"
+            " WHM (2086/2087) on each. The wrapper's scope filter drops"
+            " out-of-scope hostnames before any probe."
         ),
     )
 
 
-@cyber_tool("cPanel/WHM Check", args_schema=_CpanelArgs)
-def cpanel_tool(recon_path: str) -> list[RawFinding]:
+@cyber_tool(
+    "cPanel/WHM Check",
+    args_schema=_CpanelArgs,
+    scope_filter=("hostnames", filter_in_scope),
+)
+def cpanel_tool(hostnames: list[Hostname]) -> list[RawFinding]:
     """
-    Check for an exposed cPanel hosting control panel (ports 2082/2083) and
-    WHM (WebHost Manager) panel (ports 2086/2087) on all discovered hostnames.
-    Use when open_ports shows 2082, 2083, 2086, or 2087, or when the target
-    appears to be a shared/managed hosting environment.
-    Pass the path to the recon.json file in the run directory.
+    Check for an exposed cPanel hosting control panel (ports 2082/2083)
+    and WHM (WebHost Manager) panel (ports 2086/2087) on each supplied
+    hostname.
+
+    Pick hostnames from the Recon Open Ports slicer where one of 2082,
+    2083, 2086, or 2087 shows open, or pick all hostnames when the target
+    is a shared / managed hosting environment. The wrapper scope-filters
+    the list.
     """
-    recon = _recon_from_path(recon_path)
-    return list(check_cpanel(recon))
+    return list(check_cpanel(hostnames))
 
 
 class _PleskArgs(BaseModel):
     """Explicit args_schema for the Plesk Check tool."""
 
-    recon_path: str = Field(
+    hostnames: list[Hostname] = Field(
         description=(
-            "Relative path to recon.json in the run directory. Fire when"
-            " open_ports shows 8880 or 8443, or when the target is a"
-            " managed hosting or VPS provider. Probes Plesk on 8880 (HTTP)"
-            " and 8443 (HTTPS)."
+            "Hostnames showing port 8880 or 8443 open, or hostnames on a"
+            " managed-hosting or VPS provider. Probes Plesk on 8880 (HTTP)"
+            " and 8443 (HTTPS). The wrapper's scope filter drops"
+            " out-of-scope hostnames before any probe."
         ),
     )
 
 
-@cyber_tool("Plesk Check", args_schema=_PleskArgs)
-def plesk_tool(recon_path: str) -> list[RawFinding]:
+@cyber_tool(
+    "Plesk Check",
+    args_schema=_PleskArgs,
+    scope_filter=("hostnames", filter_in_scope),
+)
+def plesk_tool(hostnames: list[Hostname]) -> list[RawFinding]:
     """
-    Check for an exposed Plesk web hosting control panel on ports 8880 (HTTP)
-    and 8443 (HTTPS). Use when open_ports shows 8880 or 8443, or when the
-    target is a managed hosting or VPS provider.
-    Pass the path to the recon.json file in the run directory.
+    Check for an exposed Plesk web hosting control panel on ports 8880
+    (HTTP) and 8443 (HTTPS) on each supplied hostname.
+
+    Pick hostnames from the Recon Open Ports slicer where 8880 or 8443
+    shows open, or pick all hostnames when the target is a managed
+    hosting or VPS provider. The wrapper scope-filters the list.
     """
-    recon = _recon_from_path(recon_path)
-    return list(check_plesk(recon))
+    return list(check_plesk(hostnames))
 
 
 class _DirectadminArgs(BaseModel):
     """Explicit args_schema for the DirectAdmin Check tool."""
 
-    recon_path: str = Field(
+    hostnames: list[Hostname] = Field(
         description=(
-            "Relative path to recon.json in the run directory. Fire when"
-            " open_ports shows 2222 on a target that appears to be shared"
-            " hosting."
+            "Hostnames showing port 2222 open on a target that appears to"
+            " be shared hosting. The wrapper's scope filter drops"
+            " out-of-scope hostnames before any probe."
         ),
     )
 
 
-@cyber_tool("DirectAdmin Check", args_schema=_DirectadminArgs)
-def directadmin_tool(recon_path: str) -> list[RawFinding]:
+@cyber_tool(
+    "DirectAdmin Check",
+    args_schema=_DirectadminArgs,
+    scope_filter=("hostnames", filter_in_scope),
+)
+def directadmin_tool(hostnames: list[Hostname]) -> list[RawFinding]:
     """
-    Check for an exposed DirectAdmin hosting control panel on port 2222.
-    Use when open_ports shows 2222 on a target that appears to be shared hosting.
-    Pass the path to the recon.json file in the run directory.
+    Check for an exposed DirectAdmin hosting control panel on port 2222
+    on each supplied hostname.
+
+    Pick hostnames from the Recon Open Ports slicer where 2222 shows
+    open on a shared-hosting target. The wrapper scope-filters the list.
     """
-    recon = _recon_from_path(recon_path)
-    return list(check_directadmin(recon))
+    return list(check_directadmin(hostnames))
 
 
 class _WebminArgs(BaseModel):
     """Explicit args_schema for the Webmin Check tool."""
 
-    recon_path: str = Field(
+    hostnames: list[Hostname] = Field(
         description=(
-            "Relative path to recon.json in the run directory. Fire when"
-            " open_ports shows 10000, or when the target is a self-hosted"
-            " Linux server."
+            "Hostnames showing port 10000 open, or hostnames on a"
+            " self-hosted Linux server. The wrapper's scope filter drops"
+            " out-of-scope hostnames before any probe."
         ),
     )
 
 
-@cyber_tool("Webmin Check", args_schema=_WebminArgs)
-def webmin_tool(recon_path: str) -> list[RawFinding]:
+@cyber_tool(
+    "Webmin Check",
+    args_schema=_WebminArgs,
+    scope_filter=("hostnames", filter_in_scope),
+)
+def webmin_tool(hostnames: list[Hostname]) -> list[RawFinding]:
     """
-    Check for an exposed Webmin Linux server administration panel on port 10000.
-    Use when open_ports shows 10000, or when the target is a self-hosted Linux server.
-    Pass the path to the recon.json file in the run directory.
+    Check for an exposed Webmin Linux server administration panel on port
+    10000 on each supplied hostname.
+
+    Pick hostnames from the Recon Open Ports slicer where 10000 shows
+    open, or pick all hostnames when the target is a self-hosted Linux
+    server. The wrapper scope-filters the list.
     """
-    recon = _recon_from_path(recon_path)
-    return list(check_webmin(recon))
+    return list(check_webmin(hostnames))

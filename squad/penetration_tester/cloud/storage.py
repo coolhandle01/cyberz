@@ -2,8 +2,20 @@
 Cloud-storage exposure probes - S3 and Azure Blob buckets the
 programme uses (or once used) that should not be world-readable.
 
-See the package-level scope-of-target FIXME in ``cloud/__init__.py``
-(tracked in #156).
+These two wrappers still take ``recon_path: str`` rather than the
+typed ``list[Hostname]`` / ``list[Endpoint]`` shape every other
+``cloud/`` wrapper moved to: third-party storage tenants
+(``*.s3.amazonaws.com``, ``*.blob.core.windows.net``) are not in the
+programme's structured scope, so ``filter_in_scope`` against
+``programme.in_scope`` would reject every candidate. The
+scope-of-discovery boundary here is workspace state
+(``recon.programme.handle`` + the S3 / Azure subdomains
+``finalise_recon`` already scope-filtered into ``recon.subdomains``),
+which the ``_bucket_candidates`` / ``_account_candidates`` helpers
+read directly.
+
+See the package-level FIXME in ``cloud/__init__.py`` for the broader
+third-party-infrastructure scope-semantics work (#83 follow-on).
 """
 
 from pydantic import BaseModel, Field

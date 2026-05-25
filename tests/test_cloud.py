@@ -16,13 +16,17 @@ from tools.cloud.aws import check_s3_buckets
 from tools.cloud.azure import check_azure_storage
 from tools.cloud.services import (
     check_admin_panels,
-    check_consul_vault,
+    check_consul_vault_paths,
+    check_consul_vault_ports,
     check_cpanel,
     check_directadmin,
-    check_grafana,
-    check_kibana,
+    check_grafana_paths,
+    check_grafana_ports,
+    check_kibana_paths,
+    check_kibana_ports,
     check_plesk,
-    check_portainer,
+    check_portainer_paths,
+    check_portainer_ports,
     check_sensitive_files,
     check_unauthenticated_databases,
     check_webmin,
@@ -435,16 +439,17 @@ class TestCheckAdminPanels:
 
 
 class TestGranularPanels:
-    """Spot-check each branded panel tool hits the right port."""
+    """Spot-check each branded panel / dashboard tool hits the right
+    port (or reverse-proxy path) on the right host. Helpers now take
+    typed inputs (``list[str]`` for hostnames, ``list[Endpoint]`` for
+    path probes) rather than ``ReconResult``; the conversion lives at
+    the wrapper layer."""
 
-    def _recon(self, programme, target_apex):
-        return ReconResult(
-            programme=programme,
-            subdomains=["app.example.com"],
-            endpoints=[Endpoint(url=f"https://app.{target_apex}/", status_code=200)],
-            open_ports={},
-            technologies=[],
-        )
+    def _hostnames(self, target_apex: str) -> list[str]:
+        return [f"app.{target_apex}"]
+
+    def _endpoints(self, target_apex: str) -> list[Endpoint]:
+        return [Endpoint(url=f"https://app.{target_apex}/", status_code=200)]
 
     def _port_mock(self, port: int, marker: str):
         from urllib.parse import urlparse as _up
@@ -462,58 +467,58 @@ class TestGranularPanels:
 
         return fake_get
 
-    def test_cpanel_port_2083(self, programme, target_apex):
+    def test_cpanel_port_2083(self, target_apex):
         with patch("requests.get", side_effect=self._port_mock(2083, "cPanel")):
-            results = check_cpanel(self._recon(programme, target_apex))
+            results = check_cpanel(self._hostnames(target_apex))
         assert any("cPanel" in r.title for r in results)
 
-    def test_whm_port_2087(self, programme, target_apex):
+    def test_whm_port_2087(self, target_apex):
         with patch("requests.get", side_effect=self._port_mock(2087, "WebHost Manager")):
-            results = check_cpanel(self._recon(programme, target_apex))
+            results = check_cpanel(self._hostnames(target_apex))
         assert any("WHM" in r.title for r in results)
 
-    def test_plesk_port_8443(self, programme, target_apex):
+    def test_plesk_port_8443(self, target_apex):
         with patch("requests.get", side_effect=self._port_mock(8443, "Plesk")):
-            results = check_plesk(self._recon(programme, target_apex))
+            results = check_plesk(self._hostnames(target_apex))
         assert any("Plesk" in r.title for r in results)
 
-    def test_directadmin_port_2222(self, programme, target_apex):
+    def test_directadmin_port_2222(self, target_apex):
         with patch("requests.get", side_effect=self._port_mock(2222, "DirectAdmin")):
-            results = check_directadmin(self._recon(programme, target_apex))
+            results = check_directadmin(self._hostnames(target_apex))
         assert any("DirectAdmin" in r.title for r in results)
 
-    def test_webmin_port_10000(self, programme, target_apex):
+    def test_webmin_port_10000(self, target_apex):
         with patch("requests.get", side_effect=self._port_mock(10000, "Webmin")):
-            results = check_webmin(self._recon(programme, target_apex))
+            results = check_webmin(self._hostnames(target_apex))
         assert any("Webmin" in r.title for r in results)
 
-    def test_grafana_port_3000(self, programme, target_apex):
+    def test_grafana_port_3000(self, target_apex):
         with patch("requests.get", side_effect=self._port_mock(3000, "Grafana")):
-            results = check_grafana(self._recon(programme, target_apex))
+            results = check_grafana_ports(self._hostnames(target_apex))
         assert any("Grafana" in r.title for r in results)
 
-    def test_kibana_port_5601(self, programme, target_apex):
+    def test_kibana_port_5601(self, target_apex):
         with patch("requests.get", side_effect=self._port_mock(5601, "Kibana")):
-            results = check_kibana(self._recon(programme, target_apex))
+            results = check_kibana_ports(self._hostnames(target_apex))
         assert any("Kibana" in r.title for r in results)
 
-    def test_portainer_port_9000(self, programme, target_apex):
+    def test_portainer_port_9000(self, target_apex):
         with patch("requests.get", side_effect=self._port_mock(9000, "Portainer")):
-            results = check_portainer(self._recon(programme, target_apex))
+            results = check_portainer_ports(self._hostnames(target_apex))
         assert any("Portainer" in r.title for r in results)
 
-    def test_consul_port_8500(self, programme, target_apex):
+    def test_consul_port_8500(self, target_apex):
         with patch("requests.get", side_effect=self._port_mock(8500, "Consul")):
-            results = check_consul_vault(self._recon(programme, target_apex))
+            results = check_consul_vault_ports(self._hostnames(target_apex))
         assert any("Consul" in r.title for r in results)
 
-    def test_vault_port_8200(self, programme, target_apex):
+    def test_vault_port_8200(self, target_apex):
         with patch("requests.get", side_effect=self._port_mock(8200, "Vault")):
-            results = check_consul_vault(self._recon(programme, target_apex))
+            results = check_consul_vault_ports(self._hostnames(target_apex))
         assert any("Vault" in r.title for r in results)
 
-    def test_grafana_path_probe(self, programme, target_apex):
-        """Grafana also probes /grafana on existing origins."""
+    def test_grafana_path_probe(self, target_apex):
+        """Grafana path check probes /grafana on supplied origins."""
 
         def fake_get(url, **kwargs):
             resp = MagicMock()
@@ -526,39 +531,57 @@ class TestGranularPanels:
             return resp
 
         with patch("requests.get", side_effect=fake_get):
-            results = check_grafana(self._recon(programme, target_apex))
+            results = check_grafana_paths(self._endpoints(target_apex))
         assert any("Grafana" in r.title for r in results)
 
-    def test_no_finding_when_all_404(self, programme, target_apex):
+    def test_no_finding_when_all_404(self, target_apex):
         def always_404(url, **kwargs):
             resp = MagicMock()
             resp.status_code = 404
             resp.text = ""
             return resp
 
+        hostnames = self._hostnames(target_apex)
+        endpoints = self._endpoints(target_apex)
         with patch("requests.get", side_effect=always_404):
             for fn in (
                 check_cpanel,
                 check_plesk,
                 check_directadmin,
                 check_webmin,
-                check_grafana,
-                check_kibana,
-                check_portainer,
-                check_consul_vault,
+                check_grafana_ports,
+                check_kibana_ports,
+                check_portainer_ports,
+                check_consul_vault_ports,
             ):
-                assert fn(self._recon(programme, target_apex)) == []
+                assert fn(hostnames) == []
+            for fn in (
+                check_grafana_paths,
+                check_kibana_paths,
+                check_portainer_paths,
+                check_consul_vault_paths,
+            ):
+                assert fn(endpoints) == []
 
-    def test_exception_is_swallowed(self, programme, target_apex):
+    def test_exception_is_swallowed(self, target_apex):
+        hostnames = self._hostnames(target_apex)
+        endpoints = self._endpoints(target_apex)
         with patch("requests.get", side_effect=Exception("refused")):
             for fn in (
                 check_cpanel,
                 check_plesk,
                 check_directadmin,
                 check_webmin,
-                check_grafana,
-                check_kibana,
-                check_portainer,
-                check_consul_vault,
+                check_grafana_ports,
+                check_kibana_ports,
+                check_portainer_ports,
+                check_consul_vault_ports,
             ):
-                assert fn(self._recon(programme, target_apex)) == []
+                assert fn(hostnames) == []
+            for fn in (
+                check_grafana_paths,
+                check_kibana_paths,
+                check_portainer_paths,
+                check_consul_vault_paths,
+            ):
+                assert fn(endpoints) == []
