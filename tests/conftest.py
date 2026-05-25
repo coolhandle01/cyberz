@@ -85,18 +85,35 @@ def make_html_page(victim_url: str):
 
 # Programme fixtures
 @pytest.fixture()
-def scope_item_url() -> ScopeItem:
+def victim_apex(victim_url: str) -> str:
+    """Apex domain derived from ``victim_url``.
+
+    Every fixture that builds an in-scope ScopeItem, hostname, or URL
+    derives from this rather than embedding the apex literal. That way
+    flipping ``victim_url`` (e.g. to point the suite at DVWA on
+    localhost) propagates through every dependent fixture - no
+    per-fixture hardcoded ``example.com`` left to chase.
+    """
+    from urllib.parse import urlparse
+
+    host = urlparse(victim_url).hostname or ""
+    parts = host.split(".")
+    return ".".join(parts[-2:]) if len(parts) >= 2 else host
+
+
+@pytest.fixture()
+def scope_item_url(victim_apex: str) -> ScopeItem:
     return ScopeItem(
-        asset_identifier="https://example.com",
+        asset_identifier=f"https://{victim_apex}",
         asset_type=ScopeType.URL,
         eligible_for_bounty=True,
     )
 
 
 @pytest.fixture()
-def scope_item_wildcard() -> ScopeItem:
+def scope_item_wildcard(victim_apex: str) -> ScopeItem:
     return ScopeItem(
-        asset_identifier="*.example.com",
+        asset_identifier=f"*.{victim_apex}",
         asset_type=ScopeType.WILDCARD,
         eligible_for_bounty=True,
     )
@@ -139,11 +156,65 @@ def programme_in_workspace(programme: Programme, tmp_path, monkeypatch) -> Progr
     return programme
 
 
+@pytest.fixture()
+def dvwa_programme() -> Programme:
+    """A Programme shaped like Damn Vulnerable Web Application on localhost.
+
+    DVWA (https://github.com/digininja/DVWA) is the canonical
+    deliberately-vulnerable PHP/MySQL training target; the usual
+    deployment is a local Docker container exposed on ``http://localhost``.
+    A Programme-shaped fixture pointing at that lets BDD scenarios and
+    DVWA-targeted integration work read 'the squad targets DVWA'
+    against a fixture that maps to a real, runnable target rather than
+    a synthetic ``example.com`` that does not exist.
+
+    Bounty table mirrors the in-scope ``programme`` fixture's token
+    values so downstream consumers do not need to special-case a
+    zero-bounty programme; the comment is the documentation that DVWA
+    is not actually a paying programme.
+    """
+    return Programme(
+        handle="dvwa-localhost",
+        name="Damn Vulnerable Web Application (localhost)",
+        url="https://hackerone.com/dvwa-localhost",
+        bounty_table={
+            Severity.LOW: 100,
+            Severity.MEDIUM: 500,
+            Severity.HIGH: 2000,
+            Severity.CRITICAL: 5000,
+        },
+        in_scope=[
+            ScopeItem(
+                asset_identifier="http://localhost",
+                asset_type=ScopeType.URL,
+                eligible_for_bounty=False,
+            ),
+            ScopeItem(
+                asset_identifier="http://127.0.0.1",
+                asset_type=ScopeType.URL,
+                eligible_for_bounty=False,
+            ),
+        ],
+        out_of_scope=[],
+    )
+
+
+@pytest.fixture()
+def dvwa_in_workspace(dvwa_programme: Programme, tmp_path, monkeypatch) -> Programme:
+    """DVWA staged into the run dir - same shape as ``programme_in_workspace``
+    but the in-flight programme is DVWA, so BDD scenarios that point the
+    squad at DVWA exercise the artefact the runtime actually consumes."""
+    (tmp_path / "programme.json").write_text(dvwa_programme.model_dump_json(), encoding="utf-8")
+    monkeypatch.setattr("runtime.run_dir", lambda: tmp_path)
+    monkeypatch.setattr("runtime.programme_handle", dvwa_programme.handle)
+    return dvwa_programme
+
+
 # Recon fixtures
 @pytest.fixture()
-def endpoint() -> Endpoint:
+def endpoint(victim_apex: str) -> Endpoint:
     return Endpoint(
-        url="https://api.example.com",
+        url=f"https://api.{victim_apex}",
         status_code=200,
         technologies=["nginx", "React"],
         parameters=["q", "page"],
@@ -151,12 +222,12 @@ def endpoint() -> Endpoint:
 
 
 @pytest.fixture()
-def recon_result(programme, endpoint) -> ReconResult:
+def recon_result(programme, endpoint, victim_apex: str) -> ReconResult:
     return ReconResult(
         programme=programme,
-        subdomains=["api.example.com", "admin.example.com"],
+        subdomains=[f"api.{victim_apex}", f"admin.{victim_apex}"],
         endpoints=[endpoint],
-        open_ports={"api.example.com": [80, 443]},
+        open_ports={f"api.{victim_apex}": [80, 443]},
         technologies=["nginx", "React"],
         notes="Test recon result.",
     )
@@ -164,17 +235,17 @@ def recon_result(programme, endpoint) -> ReconResult:
 
 # Attack plan fixtures
 @pytest.fixture()
-def attack_plan_item() -> AttackPlanItem:
+def attack_plan_item(victim_apex: str) -> AttackPlanItem:
     return AttackPlanItem(
         probe="CVE-2022-22965",
-        target="https://api.example.com",
+        target=f"https://api.{victim_apex}",
         expected_ceiling=Severity.CRITICAL,
         rationale=(
             "Tomcat-served Spring Boot 2.3 detected in recon; test the standard "
             "POST payload and look for arbitrary file write in the webroot."
         ),
         recon_evidence=[
-            "api.example.com runs Tomcat 9.0",
+            f"api.{victim_apex} runs Tomcat 9.0",
             "Spring Boot 2.3 banner observed on /actuator/info",
         ],
     )
