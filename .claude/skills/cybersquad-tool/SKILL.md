@@ -188,6 +188,7 @@ Dependency layers flow `primitives -> finding -> h1 -> asset`; modules import on
 - `from squad.workspace_tools import ...` in a consumer instead of `from squad import ...` - the re-export exists so the import path stays stable when shared tools move.
 - Inline scope dance in a tool body that takes agent-supplied targets (the `_load_programme + filter_in_scope` pattern). Lift it onto the decorator via `scope_filter=(field_name, filter_fn)` so the guarantee lives at the wrapper site.
 - A new `programme_handle: str` field on an args_schema for a tool whose body would only thread it into `current_programme()` or `filter_in_scope`. Workspace state (`runtime.programme_handle` / `<run_dir>/programme.json`) is the contract; the per-call handle is duplication.
+- Direct assignment to `runtime.programme_handle` or `runtime.run_id`. Use the `runtime.bind_programme(...)` / `runtime.bind_run_id(...)` setters - they enforce the single-pipeline-at-a-time invariant by raising on a conflicting rebind (same-value rebind is a no-op for retries and tests). Reads stay on the module attribute. The invariant is load-bearing for the planned Flow refactor in #128 where parallel sub-flows would otherwise silently stomp each other's run folders.
 
 ## Canonical examples
 
