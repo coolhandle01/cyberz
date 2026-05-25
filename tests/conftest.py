@@ -290,11 +290,11 @@ def attack_plan(attack_plan_item) -> AttackPlan:
 
 # Vulnerability fixtures
 @pytest.fixture()
-def raw_finding_high() -> RawFinding:
+def raw_finding_high(target_apex: str) -> RawFinding:
     return RawFinding(
-        title="SQL Injection - https://api.example.com/search",
+        title=f"SQL Injection - https://api.{target_apex}/search",
         vuln_class="SQLi",
-        target="https://api.example.com/search",
+        target=f"https://api.{target_apex}/search",
         evidence="sqlmap identified injection at parameter 'q'",
         tool="sqlmap",
         severity_hint=Severity.HIGH,
@@ -302,11 +302,11 @@ def raw_finding_high() -> RawFinding:
 
 
 @pytest.fixture()
-def raw_finding_low() -> RawFinding:
+def raw_finding_low(target_apex: str) -> RawFinding:
     return RawFinding(
         title="Missing X-Frame-Options",
         vuln_class="Headers",
-        target="https://api.example.com",
+        target=f"https://api.{target_apex}",
         evidence="X-Frame-Options header absent",
         tool="nuclei",
         severity_hint=Severity.LOW,
@@ -327,17 +327,17 @@ def raw_finding_oos() -> RawFinding:
 
 
 @pytest.fixture()
-def verified_vuln() -> VerifiedVulnerability:
+def verified_vuln(target_apex: str) -> VerifiedVulnerability:
     return VerifiedVulnerability(
-        title="SQL Injection - https://api.example.com/search",
+        title=f"SQL Injection - https://api.{target_apex}/search",
         vuln_class="SQLi",
-        target="https://api.example.com/search",
+        target=f"https://api.{target_apex}/search",
         severity=Severity.HIGH,
         cvss_score=8.8,
         cvss_vector="CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H",
         description="A SQL injection vulnerability exists at the search endpoint.",
         steps_to_reproduce=[
-            "Navigate to https://api.example.com/search?q=test",
+            f"Navigate to https://api.{target_apex}/search?q=test",
             "Append a single quote to the q parameter",
             "Observe database error in the response",
         ],
