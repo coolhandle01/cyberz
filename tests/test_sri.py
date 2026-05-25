@@ -15,9 +15,9 @@ pytestmark = pytest.mark.unit
 
 class TestCheckSri:
     def test_flags_cross_origin_script_without_integrity(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/", status_code=200)
+        ep = Endpoint(url=f"{target_url}/", status_code=200)
         html = '<script src="https://cdn.example.net/lib.js"></script>'
 
         with patch(
@@ -32,9 +32,9 @@ class TestCheckSri:
         assert "cdn.example.net" in results[0].evidence
 
     def test_no_finding_when_integrity_present(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/", status_code=200)
+        ep = Endpoint(url=f"{target_url}/", status_code=200)
         html = (
             '<script src="https://cdn.example.net/lib.js" '
             'integrity="sha384-abc123" crossorigin="anonymous"></script>'
@@ -49,9 +49,9 @@ class TestCheckSri:
         assert results == []
 
     def test_no_finding_for_same_origin_script(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/", status_code=200)
+        ep = Endpoint(url=f"{target_url}/", status_code=200)
         html = '<script src="/static/app.js"></script>'
 
         with patch(
@@ -63,9 +63,9 @@ class TestCheckSri:
         assert results == []
 
     def test_flags_cross_origin_stylesheet_without_integrity(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/", status_code=200)
+        ep = Endpoint(url=f"{target_url}/", status_code=200)
         html = '<link rel="stylesheet" href="https://fonts.example.net/style.css">'
 
         with patch(
@@ -78,9 +78,9 @@ class TestCheckSri:
         assert "fonts.example.net" in results[0].evidence
 
     def test_no_finding_for_non_stylesheet_link(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/", status_code=200)
+        ep = Endpoint(url=f"{target_url}/", status_code=200)
         html = '<link rel="icon" href="https://cdn.example.net/favicon.ico">'
 
         with patch(
@@ -91,17 +91,17 @@ class TestCheckSri:
 
         assert results == []
 
-    def test_skips_non_200_endpoints(self, victim_url: str) -> None:
-        ep = Endpoint(url=f"{victim_url}/", status_code=404)
+    def test_skips_non_200_endpoints(self, target_url: str) -> None:
+        ep = Endpoint(url=f"{target_url}/", status_code=404)
         with patch("requests.get") as mock_get:
             results = check_sri([ep])
         mock_get.assert_not_called()
         assert results == []
 
     def test_skips_non_html_content_type(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/api", status_code=200)
+        ep = Endpoint(url=f"{target_url}/api", status_code=200)
 
         with patch(
             "requests.get",
@@ -111,16 +111,16 @@ class TestCheckSri:
 
         assert results == []
 
-    def test_network_exception_is_swallowed(self, victim_url: str) -> None:
-        ep = Endpoint(url=f"{victim_url}/", status_code=200)
+    def test_network_exception_is_swallowed(self, target_url: str) -> None:
+        ep = Endpoint(url=f"{target_url}/", status_code=200)
         with patch("requests.get", side_effect=Exception("timeout")):
             results = check_sri([ep])
         assert results == []
 
     def test_multiple_missing_resources_in_one_finding(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/", status_code=200)
+        ep = Endpoint(url=f"{target_url}/", status_code=200)
         html = (
             '<script src="https://cdn1.example.net/a.js"></script>'
             '<script src="https://cdn2.example.net/b.js"></script>'
@@ -137,11 +137,11 @@ class TestCheckSri:
         assert "cdn2.example.net" in results[0].evidence
 
     def test_deduplicates_same_endpoint(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
         endpoints = [
-            Endpoint(url=f"{victim_url}/page1", status_code=200),
-            Endpoint(url=f"{victim_url}/page1", status_code=200),
+            Endpoint(url=f"{target_url}/page1", status_code=200),
+            Endpoint(url=f"{target_url}/page1", status_code=200),
         ]
         html = '<script src="https://cdn.example.net/lib.js"></script>'
 

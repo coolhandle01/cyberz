@@ -103,20 +103,20 @@ class _HostnameProbe(BaseModel):
 
 
 class TestHostname:
-    def test_accepts_victim_apex(self, victim_url):
+    def test_accepts_target_apex(self, target_url):
         # urlparse hostname is the canonical way to derive a Hostname-shaped
         # string from a URL fixture; using the fixture keeps test intent
         # ("the in-scope target") readable at the call site.
         from urllib.parse import urlparse
 
-        host = urlparse(victim_url).hostname or ""
+        host = urlparse(target_url).hostname or ""
         apex = host.split(".", 1)[-1]  # "example.com" from "victim.example.com"
         assert _HostnameProbe(value=apex).value == apex
 
-    def test_accepts_victim_subdomain(self, victim_url):
+    def test_accepts_victim_subdomain(self, target_url):
         from urllib.parse import urlparse
 
-        host = urlparse(victim_url).hostname or ""
+        host = urlparse(target_url).hostname or ""
         assert _HostnameProbe(value=host).value == host
 
     def test_accepts_single_label(self):
@@ -130,27 +130,27 @@ class TestHostname:
         # that decides whether to accept it as an in-scope target.
         assert _HostnameProbe(value="10.0.0.1").value == "10.0.0.1"
 
-    def test_lowercases_victim_host(self, victim_url):
+    def test_lowercases_victim_host(self, target_url):
         from urllib.parse import urlparse
 
-        host = urlparse(victim_url).hostname or ""
+        host = urlparse(target_url).hostname or ""
         assert _HostnameProbe(value=host.upper()).value == host
 
-    def test_strips_whitespace_around_victim_host(self, victim_url):
+    def test_strips_whitespace_around_victim_host(self, target_url):
         from urllib.parse import urlparse
 
-        host = urlparse(victim_url).hostname or ""
+        host = urlparse(target_url).hostname or ""
         assert _HostnameProbe(value=f"  {host}  ").value == host
 
-    def test_rejects_malformed(self, victim_url):
-        """Walks the malformed corpus, deriving each case from victim_url
+    def test_rejects_malformed(self, target_url):
+        """Walks the malformed corpus, deriving each case from target_url
         so test intent ("a deliberately broken version of the in-scope
         target") is readable. Pytest parametrize literals cannot consume
         fixtures, so a single dedicated method loops the corpus instead.
         """
         from urllib.parse import urlparse
 
-        host = urlparse(victim_url).hostname or ""
+        host = urlparse(target_url).hostname or ""
         cases: list[tuple[str, str]] = [
             ("", "empty"),
             ("   ", "whitespace only"),
@@ -186,19 +186,19 @@ class _HttpUrlProbe(BaseModel):
 
 
 class TestHttpUrl:
-    def test_accepts_victim_url(self, victim_url):
-        assert _HttpUrlProbe(value=victim_url).value == victim_url
+    def test_accepts_target_url(self, target_url):
+        assert _HttpUrlProbe(value=target_url).value == target_url
 
-    def test_accepts_victim_url_with_path(self, victim_url):
-        url = f"{victim_url}/api/users?id=1"
+    def test_accepts_target_url_with_path(self, target_url):
+        url = f"{target_url}/api/users?id=1"
         assert _HttpUrlProbe(value=url).value == url
 
-    def test_accepts_http_scheme(self, victim_url):
-        url = victim_url.replace("https://", "http://")
+    def test_accepts_http_scheme(self, target_url):
+        url = target_url.replace("https://", "http://")
         assert _HttpUrlProbe(value=url).value == url
 
-    def test_rejects_malformed(self, victim_url):
-        """Walks the malformed corpus, deriving each case from victim_url so
+    def test_rejects_malformed(self, target_url):
+        """Walks the malformed corpus, deriving each case from target_url so
         intent ("a deliberately broken URL based on the in-scope target") is
         readable at the call site. The Hostname-component check inside
         HttpUrl is exercised by the leading-hyphen case - a URL whose host
@@ -206,7 +206,7 @@ class TestHttpUrl:
         """
         from urllib.parse import urlparse
 
-        host = urlparse(victim_url).hostname or ""
+        host = urlparse(target_url).hostname or ""
         cases: list[tuple[str, str]] = [
             ("", "empty"),
             ("   ", "whitespace only"),
@@ -223,8 +223,8 @@ class TestHttpUrl:
                 _HttpUrlProbe.model_validate({"value": value})
             del label
 
-    def test_preserves_path_and_query(self, victim_url):
-        url = f"{victim_url}/search?q=hello&page=2#top"
+    def test_preserves_path_and_query(self, target_url):
+        url = f"{target_url}/search?q=hello&page=2#top"
         assert _HttpUrlProbe(value=url).value == url
 
 
@@ -251,21 +251,21 @@ class TestAttackPlan:
 
 
 class TestAttackPlanItem:
-    def test_accepts_vulnerability_class_probe(self, victim_url):
+    def test_accepts_vulnerability_class_probe(self, target_url):
         # The fixture covers CVE-id probes; this variant exercises the
         # vulnerability-class name shape (the second canonical probe form)
         # with a recon-evidence list to confirm the model accepts it end to end.
         item = AttackPlanItem(
             probe="reflected XSS",
-            target=f"{victim_url}/?q=test",
+            target=f"{target_url}/?q=test",
             expected_ceiling=Severity.MEDIUM,
             rationale="parameterised endpoint reflects q into response without escaping",
-            recon_evidence=[f"{victim_url} hosts a Vue 2 SPA"],
+            recon_evidence=[f"{target_url} hosts a Vue 2 SPA"],
         )
         assert item.probe == "reflected XSS"
         assert item.expected_ceiling == Severity.MEDIUM
 
-    def test_recon_evidence_strips_and_filters_empties(self, victim_url):
+    def test_recon_evidence_strips_and_filters_empties(self, target_url):
         # The recon_evidence field carries a Pydantic field_validator:
         # whitespace is trimmed off every entry, and empties are
         # dropped. Every constructor (direct call, model_validate,
@@ -275,7 +275,7 @@ class TestAttackPlanItem:
         # whitespace-only entries.
         item = AttackPlanItem(
             probe="reflected XSS",
-            target=f"{victim_url}/?q=test",
+            target=f"{target_url}/?q=test",
             expected_ceiling=Severity.MEDIUM,
             rationale="parameterised endpoint reflects q into response without escaping",
             recon_evidence=["  signal one  ", "", "   ", "signal two"],

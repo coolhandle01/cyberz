@@ -128,16 +128,16 @@ class TestScanValue:
 
 
 class TestCheckCookies:
-    def test_missing_secure_on_https_session_cookie_is_medium(self, victim_url: str):
-        ep = Endpoint(url=f"{victim_url}/", status_code=200)
+    def test_missing_secure_on_https_session_cookie_is_medium(self, target_url: str):
+        ep = Endpoint(url=f"{target_url}/", status_code=200)
         with patch("requests.get", return_value=_resp(["sid=abc; HttpOnly"])):
             findings = check_cookies([ep])
         assert len(findings) == 1
         assert findings[0].vuln_class == "CookieMissingSecure"
         assert findings[0].severity_hint == Severity.MEDIUM
 
-    def test_missing_secure_on_non_session_cookie_is_low(self, victim_url: str):
-        ep = Endpoint(url=f"{victim_url}/", status_code=200)
+    def test_missing_secure_on_non_session_cookie_is_low(self, target_url: str):
+        ep = Endpoint(url=f"{target_url}/", status_code=200)
         with patch("requests.get", return_value=_resp(["theme=dark"])):
             findings = check_cookies([ep])
         classes = {f.vuln_class for f in findings}
@@ -145,22 +145,22 @@ class TestCheckCookies:
         miss = next(f for f in findings if f.vuln_class == "CookieMissingSecure")
         assert miss.severity_hint == Severity.LOW
 
-    def test_missing_httponly_on_session_shaped(self, victim_url: str):
-        ep = Endpoint(url=f"{victim_url}/", status_code=200)
+    def test_missing_httponly_on_session_shaped(self, target_url: str):
+        ep = Endpoint(url=f"{target_url}/", status_code=200)
         with patch("requests.get", return_value=_resp(["sid=abc; Secure"])):
             findings = check_cookies([ep])
         classes = {f.vuln_class for f in findings}
         assert "CookieMissingHttpOnly" in classes
 
-    def test_samesite_none_without_secure(self, victim_url: str):
-        ep = Endpoint(url=f"{victim_url}/", status_code=200)
+    def test_samesite_none_without_secure(self, target_url: str):
+        ep = Endpoint(url=f"{target_url}/", status_code=200)
         with patch("requests.get", return_value=_resp(["sid=abc; HttpOnly; SameSite=None"])):
             findings = check_cookies([ep])
         classes = {f.vuln_class for f in findings}
         assert "CookieWeakSameSite" in classes
 
-    def test_domain_too_broad(self, victim_url: str):
-        ep = Endpoint(url=f"{victim_url}/", status_code=200)
+    def test_domain_too_broad(self, target_url: str):
+        ep = Endpoint(url=f"{target_url}/", status_code=200)
         with patch(
             "requests.get",
             return_value=_resp(["sid=abc; Secure; HttpOnly; Domain=.example.com; SameSite=Lax"]),
@@ -169,8 +169,8 @@ class TestCheckCookies:
         classes = {f.vuln_class for f in findings}
         assert "CookieDomainTooBroad" in classes
 
-    def test_domain_exact_match_is_fine(self, victim_url: str):
-        ep = Endpoint(url=f"{victim_url}/", status_code=200)
+    def test_domain_exact_match_is_fine(self, target_url: str):
+        ep = Endpoint(url=f"{target_url}/", status_code=200)
         with patch(
             "requests.get",
             return_value=_resp(["sid=abc; Secure; HttpOnly; Domain=app.example.com; SameSite=Lax"]),
@@ -179,8 +179,8 @@ class TestCheckCookies:
         classes = {f.vuln_class for f in findings}
         assert "CookieDomainTooBroad" not in classes
 
-    def test_persistent_session_cookie(self, victim_url: str):
-        ep = Endpoint(url=f"{victim_url}/", status_code=200)
+    def test_persistent_session_cookie(self, target_url: str):
+        ep = Endpoint(url=f"{target_url}/", status_code=200)
         with patch(
             "requests.get",
             return_value=_resp(["sid=abc; Secure; HttpOnly; SameSite=Lax; Max-Age=86400"]),
@@ -189,8 +189,8 @@ class TestCheckCookies:
         classes = {f.vuln_class for f in findings}
         assert "CookiePersistentSession" in classes
 
-    def test_high_severity_secret_in_cookie_value(self, victim_url: str):
-        ep = Endpoint(url=f"{victim_url}/", status_code=200)
+    def test_high_severity_secret_in_cookie_value(self, target_url: str):
+        ep = Endpoint(url=f"{target_url}/", status_code=200)
         with patch(
             "requests.get",
             return_value=_resp(["sid=AKIAIOSFODNN7EXAMPLE; Secure; HttpOnly; SameSite=Lax"]),

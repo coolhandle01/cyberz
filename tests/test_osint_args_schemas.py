@@ -146,7 +146,7 @@ class TestSchemaAcceptReject:
     """Accept / reject contract per schema.
 
     The parametrize below carries cases that do not involve a hostname or
-    URL - those use the conftest ``victim_url`` / ``bystander_url`` /
+    URL - those use the conftest ``target_url`` / ``bystander_url`` /
     ``callback_url`` domain fixtures via the dedicated test methods further
     down, so test intent ("this is the in-scope target") is readable at the
     call site rather than via opaque ``example.com`` literals.
@@ -186,31 +186,31 @@ class TestSchemaAcceptReject:
     # method rather than a parametrize entry because parametrize literals
     # cannot consume fixtures.
 
-    def test_recon_open_ports_accepts_victim_host(self, victim_url: str) -> None:
+    def test_recon_open_ports_accepts_victim_host(self, target_url: str) -> None:
         """Recon Open Ports accepts a real hostname filter."""
-        host = urlparse(victim_url).hostname
+        host = urlparse(target_url).hostname
         _ReconOpenPortsArgs.model_validate({"host": host})
 
-    def test_cert_transparency_accepts_victim_apex(self, victim_url: str) -> None:
+    def test_cert_transparency_accepts_target_apex(self, target_url: str) -> None:
         """Certificate Transparency takes the apex domain of the in-scope target."""
-        host = urlparse(victim_url).hostname or ""
+        host = urlparse(target_url).hostname or ""
         apex = host.split(".", 1)[-1] if "." in host else host
         _CertTransparencyArgs.model_validate({"domain": apex})
 
-    def test_historical_urls_accepts_victim_apex(self, victim_url: str) -> None:
+    def test_historical_urls_accepts_target_apex(self, target_url: str) -> None:
         """Historical URL Discovery takes the apex domain of the in-scope target."""
-        host = urlparse(victim_url).hostname or ""
+        host = urlparse(target_url).hostname or ""
         apex = host.split(".", 1)[-1] if "." in host else host
         _HistoricalUrlsArgs.model_validate({"domain": apex})
 
-    def test_probe_hostnames_accepts_victim_hostname(self, victim_url: str) -> None:
+    def test_probe_hostnames_accepts_victim_hostname(self, target_url: str) -> None:
         """Probe Hostnames takes a list of hostnames - no programme handle.
 
         The wrapper-level ``scope_filter`` sources the Programme from
         the workspace (``current_programme()`` -> ``programme.json``),
         so the schema does not require a per-call handle.
         """
-        _ProbeHostnamesArgs.model_validate({"hostnames": [urlparse(victim_url).hostname]})
+        _ProbeHostnamesArgs.model_validate({"hostnames": [urlparse(target_url).hostname]})
 
     def test_detect_takeover_candidates_accepts_bystander_hostname(
         self, bystander_url: str
@@ -223,9 +223,9 @@ class TestSchemaAcceptReject:
             {"hostnames": [urlparse(bystander_url).hostname]}
         )
 
-    def test_annotate_host_accepts_victim_hostname(self, victim_url: str) -> None:
+    def test_annotate_host_accepts_victim_hostname(self, target_url: str) -> None:
         """Annotate Host takes a hostname plus role / priority / notes / tech."""
-        host = urlparse(victim_url).hostname or ""
+        host = urlparse(target_url).hostname or ""
         _AnnotateHostArgs.model_validate(
             {
                 **_annotate_host_base(host),
@@ -266,21 +266,21 @@ class TestSchemaAcceptReject:
         with pytest.raises(ValidationError):
             schema_cls.model_validate({})
 
-    def test_annotate_host_requires_core_fields(self, victim_url: str) -> None:
+    def test_annotate_host_requires_core_fields(self, target_url: str) -> None:
         """hostname / role / priority / notes are all required."""
-        base = _annotate_host_base(urlparse(victim_url).hostname or "")
+        base = _annotate_host_base(urlparse(target_url).hostname or "")
         for missing in ("hostname", "role", "priority", "notes"):
             kwargs = {k: v for k, v in base.items() if k != missing}
             with pytest.raises(ValidationError):
                 _AnnotateHostArgs.model_validate(kwargs)
 
-    def test_annotate_host_rejects_unknown_role_and_priority(self, victim_url: str) -> None:
+    def test_annotate_host_rejects_unknown_role_and_priority(self, target_url: str) -> None:
         """role and priority are typed as HostRole / HostPriority StrEnums.
 
         Unknown values reject upstream of the wrapper rather than in the
         body's ``HostRole(role)`` / ``HostPriority(priority)`` coercion.
         """
-        base = _annotate_host_base(urlparse(victim_url).hostname or "")
+        base = _annotate_host_base(urlparse(target_url).hostname or "")
         with pytest.raises(ValidationError):
             _AnnotateHostArgs.model_validate({**base, "role": "not-a-real-role"})
         with pytest.raises(ValidationError):
@@ -291,11 +291,11 @@ class TestSchemaAcceptReject:
     # rejects upstream, before the scope filter sees the value.
     # test_models.py's TestHostname covers the validator exhaustively;
     # this method asserts the OSINT schemas actually wire it, with each
-    # malformed case derived from ``victim_url`` so the deliberately broken
+    # malformed case derived from ``target_url`` so the deliberately broken
     # input is recognisably "the in-scope target, mis-shaped" rather than
     # an opaque literal.
-    def test_hostname_field_rejects_malformed_input(self, victim_url: str) -> None:
-        host = urlparse(victim_url).hostname or ""
+    def test_hostname_field_rejects_malformed_input(self, target_url: str) -> None:
+        host = urlparse(target_url).hostname or ""
         cases: list[tuple[type[BaseModel], str, object, dict[str, object]]] = [
             (_CertTransparencyArgs, "domain", f"https://{host}", {}),
             (_HistoricalUrlsArgs, "domain", f"{host}:8080", {}),
@@ -307,13 +307,13 @@ class TestSchemaAcceptReject:
             with pytest.raises(ValidationError):
                 schema_cls.model_validate({**base, field: value})
 
-    def test_annotate_host_hostname_rejects_url(self, victim_url: str) -> None:
+    def test_annotate_host_hostname_rejects_url(self, target_url: str) -> None:
         """Annotate Host's hostname is Hostname-typed; passing the full URL fails."""
         with pytest.raises(ValidationError):
-            _AnnotateHostArgs.model_validate(_annotate_host_base(victim_url))
+            _AnnotateHostArgs.model_validate(_annotate_host_base(target_url))
 
-    def test_hostname_fields_lowercase_input(self, victim_url: str) -> None:
+    def test_hostname_fields_lowercase_input(self, target_url: str) -> None:
         """Hostname validator lowercases - the schema returns the normalised form."""
-        host = (urlparse(victim_url).hostname or "").upper()
+        host = (urlparse(target_url).hostname or "").upper()
         validated = _AnnotateHostArgs.model_validate(_annotate_host_base(host))
         assert validated.hostname == host.lower()

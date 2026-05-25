@@ -15,9 +15,9 @@ pytestmark = pytest.mark.unit
 
 class TestCheckCmdInjection:
     def test_detects_canary_in_response(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/ping", status_code=200, parameters=["host"])
+        ep = Endpoint(url=f"{target_url}/ping", status_code=200, parameters=["host"])
 
         with patch(
             "requests.get", return_value=make_response(body=f"PING output\n{_CANARY}\ndone")
@@ -31,9 +31,9 @@ class TestCheckCmdInjection:
         assert _CANARY in results[0].evidence
 
     def test_stops_after_first_matching_payload(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/ping", status_code=200, parameters=["host"])
+        ep = Endpoint(url=f"{target_url}/ping", status_code=200, parameters=["host"])
 
         with patch("requests.get", return_value=make_response(body=f"{_CANARY}")) as mock_get:
             check_cmd_injection([ep])
@@ -41,9 +41,9 @@ class TestCheckCmdInjection:
         assert mock_get.call_count == 1
 
     def test_no_finding_when_canary_absent(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/ping", status_code=200, parameters=["host"])
+        ep = Endpoint(url=f"{target_url}/ping", status_code=200, parameters=["host"])
 
         with patch(
             "requests.get", return_value=make_response(body="PING 127.0.0.1: 56 data bytes")
@@ -53,10 +53,10 @@ class TestCheckCmdInjection:
         assert results == []
 
     def test_partial_canary_match_is_not_a_finding(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
         # A substring of the canary appearing coincidentally must not trigger.
-        ep = Endpoint(url=f"{victim_url}/ping", status_code=200, parameters=["host"])
+        ep = Endpoint(url=f"{target_url}/ping", status_code=200, parameters=["host"])
         partial = _CANARY[:6]
 
         with patch("requests.get", return_value=make_response(body=f"result: {partial} ok")):
@@ -64,8 +64,8 @@ class TestCheckCmdInjection:
 
         assert results == []
 
-    def test_skips_endpoints_without_parameters(self, victim_url: str) -> None:
-        ep = Endpoint(url=f"{victim_url}/ping", status_code=200)
+    def test_skips_endpoints_without_parameters(self, target_url: str) -> None:
+        ep = Endpoint(url=f"{target_url}/ping", status_code=200)
 
         with patch("requests.get") as mock_get:
             results = check_cmd_injection([ep])
@@ -73,8 +73,8 @@ class TestCheckCmdInjection:
         mock_get.assert_not_called()
         assert results == []
 
-    def test_skips_server_error_endpoints(self, victim_url: str) -> None:
-        ep = Endpoint(url=f"{victim_url}/ping", status_code=500, parameters=["host"])
+    def test_skips_server_error_endpoints(self, target_url: str) -> None:
+        ep = Endpoint(url=f"{target_url}/ping", status_code=500, parameters=["host"])
 
         with patch("requests.get") as mock_get:
             results = check_cmd_injection([ep])
@@ -83,10 +83,10 @@ class TestCheckCmdInjection:
         assert results == []
 
     def test_one_finding_per_endpoint_multiple_params(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
         ep = Endpoint(
-            url=f"{victim_url}/ping",
+            url=f"{target_url}/ping",
             status_code=200,
             parameters=["host", "port"],
         )
@@ -97,10 +97,10 @@ class TestCheckCmdInjection:
         assert len(results) == 1
 
     def test_deduplicates_same_url(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep1 = Endpoint(url=f"{victim_url}/ping", status_code=200, parameters=["host"])
-        ep2 = Endpoint(url=f"{victim_url}/ping", status_code=200, parameters=["ip"])
+        ep1 = Endpoint(url=f"{target_url}/ping", status_code=200, parameters=["host"])
+        ep2 = Endpoint(url=f"{target_url}/ping", status_code=200, parameters=["ip"])
 
         with patch("requests.get", return_value=make_response(body=_CANARY)):
             results = check_cmd_injection([ep1, ep2])
@@ -108,18 +108,18 @@ class TestCheckCmdInjection:
         assert len(results) == 1
 
     def test_multiple_distinct_endpoints_each_get_a_finding(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep1 = Endpoint(url=f"{victim_url}/ping", status_code=200, parameters=["host"])
-        ep2 = Endpoint(url=f"{victim_url}/exec", status_code=200, parameters=["cmd"])
+        ep1 = Endpoint(url=f"{target_url}/ping", status_code=200, parameters=["host"])
+        ep2 = Endpoint(url=f"{target_url}/exec", status_code=200, parameters=["cmd"])
 
         with patch("requests.get", return_value=make_response(body=_CANARY)):
             results = check_cmd_injection([ep1, ep2])
 
         assert len(results) == 2
 
-    def test_network_exception_is_swallowed(self, victim_url: str) -> None:
-        ep = Endpoint(url=f"{victim_url}/ping", status_code=200, parameters=["host"])
+    def test_network_exception_is_swallowed(self, target_url: str) -> None:
+        ep = Endpoint(url=f"{target_url}/ping", status_code=200, parameters=["host"])
 
         with patch("requests.get", side_effect=OSError("connection refused")):
             results = check_cmd_injection([ep])
@@ -142,12 +142,12 @@ class TestCheckCmdInjection:
             assert _CANARY in payload, f"canary missing from payload {label!r}"
 
     def test_payload_filter_runs_only_named_variants(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
         # When the agent passes a single payload name we should issue exactly
         # one request per parameter and use only that variant. This is the
         # core "be surgical" affordance for stealth and chained probes.
-        ep = Endpoint(url=f"{victim_url}/ping", status_code=200, parameters=["host"])
+        ep = Endpoint(url=f"{target_url}/ping", status_code=200, parameters=["host"])
 
         seen_urls: list[str] = []
 
@@ -163,11 +163,11 @@ class TestCheckCmdInjection:
         # The single request must have used the semicolon variant.
         assert "%3B" in seen_urls[0] or "; echo" in seen_urls[0]
 
-    def test_payload_filter_with_unknown_name_runs_no_payloads(self, victim_url: str) -> None:
+    def test_payload_filter_with_unknown_name_runs_no_payloads(self, target_url: str) -> None:
         # Pydantic validation already prevents invalid enum strings reaching
         # the function in production, but at the Python layer a wrong name
         # should be a no-op rather than a fallback to all-payloads.
-        ep = Endpoint(url=f"{victim_url}/ping", status_code=200, parameters=["host"])
+        ep = Endpoint(url=f"{target_url}/ping", status_code=200, parameters=["host"])
 
         with patch("requests.get") as mock_get:
             results = check_cmd_injection([ep], payload_names=[])
@@ -177,11 +177,11 @@ class TestCheckCmdInjection:
         mock_get.assert_not_called()
 
     def test_payload_filter_finding_evidence_names_the_variant(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
         # When a filtered probe fires, the evidence must name which variant
         # triggered - the agent needs that to chain follow-up requests.
-        ep = Endpoint(url=f"{victim_url}/ping", status_code=200, parameters=["host"])
+        ep = Endpoint(url=f"{target_url}/ping", status_code=200, parameters=["host"])
 
         with patch("requests.get", return_value=make_response(body=_CANARY)):
             results = check_cmd_injection([ep], payload_names=[CmdPayload.dollar_paren])
@@ -190,11 +190,11 @@ class TestCheckCmdInjection:
         assert "dollar-paren" in results[0].evidence
 
     def test_payload_filter_none_runs_all_variants(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
         # Explicit None (the default) preserves the original behaviour:
         # every payload is tried until one matches.
-        ep = Endpoint(url=f"{victim_url}/ping", status_code=200, parameters=["host"])
+        ep = Endpoint(url=f"{target_url}/ping", status_code=200, parameters=["host"])
 
         seen_urls: list[str] = []
 

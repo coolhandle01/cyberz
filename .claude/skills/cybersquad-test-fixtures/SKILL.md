@@ -12,17 +12,17 @@ description: Use the shared pytest fixtures in tests/conftest.py instead of rede
 | Fixture | What it provides |
 |---|---|
 | `make_response` | Factory for `MagicMock` shaped like `requests.Response`. Accepts `status`, `body`, `headers`, `cookies`, `json`. |
-| `make_html_page` | Factory for minimal HTML pages with `<script>` tags. Default: one script at `{victim_url}/app.js`. |
-| `victim_url` | `https://victim.example.com` - in-scope target. **Single knob**: every in-scope fixture derives from this via `victim_apex`. Flip `victim_url` and `scope_item_url`, `scope_item_wildcard`, `programme`, `endpoint`, `recon_result`, `attack_plan_item` all follow. |
-| `victim_apex` | Apex domain parsed out of `victim_url` (e.g. `example.com`). The derivation point every in-scope fixture builds against - use it when authoring a new in-scope fixture rather than embedding a literal. |
+| `make_html_page` | Factory for minimal HTML pages with `<script>` tags. Default: one script at `{target_url}/app.js`. |
+| `target_url` | `https://victim.example.com` - in-scope target. **Single knob**: every in-scope fixture derives from this via `target_apex`. Flip `target_url` and `scope_item_url`, `scope_item_wildcard`, `programme`, `endpoint`, `recon_result`, `attack_plan_item` all follow. |
+| `target_apex` | Apex domain parsed out of `target_url` (e.g. `example.com`). The derivation point every in-scope fixture builds against - use it when authoring a new in-scope fixture rather than embedding a literal. |
 | `bystander_url` | `https://bystander.example.org` - out-of-scope; use whenever a test exercises the scope guard. |
 | `callback_url` | `https://callback.cybersquad.com` - OOB receiver placeholder. |
 | `run_dir` | Points `runtime.run_dir()` at the test's `tmp_path` and returns the `Path`. Take this instead of patching `runtime.run_dir` at every consumer's import alias (`tools.workspace.runtime.run_dir` / `tools.triage_tools.runtime.run_dir` / etc) - every consumer `import runtime` so the single setattr propagates everywhere. Tests that need a *non-existent* rundir (to exercise `mkdir` behaviour or the missing-dir branch) stay on an explicit `monkeypatch.setattr("runtime.run_dir", ...)` since the fixture always returns an existing path. |
-| `programme` | A `Programme` model. In-scope: `https://<victim_apex>` and `*.<victim_apex>`. |
+| `programme` | A `Programme` model. In-scope: `https://<target_apex>` and `*.<target_apex>`. |
 | `programme_in_workspace` | `programme` staged into the test's rundir as `<run_dir>/programme.json`, with `runtime.programme_handle` monkeypatched. Composes on top of `run_dir`. Tests that need `current_programme()` to work end-to-end take this fixture instead of patching the loader at every import site. |
 | `dvwa_programme` | A `Programme` shaped like Damn Vulnerable Web Application on `http://localhost` / `http://127.0.0.1`. Use for BDD scenarios and integration work that point at a real runnable target (the usual deployment is a local Docker container). |
 | `dvwa_in_workspace` | DVWA staged into the rundir - same shape as `programme_in_workspace` but the in-flight programme is DVWA. Composes on top of `run_dir`. |
-| `endpoint` | An `Endpoint` model at `https://api.<victim_apex>`. |
+| `endpoint` | An `Endpoint` model at `https://api.<target_apex>`. |
 | `recon_result` | A `ReconResult` combining `programme` and `endpoint`. |
 | `raw_finding_high` / `raw_finding_low` / `raw_finding_oos` | `RawFinding` instances at each severity / scope tier. |
 | `verified_vuln` | A `VerifiedVulnerability` model. |
@@ -32,21 +32,21 @@ description: Use the shared pytest fixtures in tests/conftest.py instead of rede
 
 ## Authoring a new in-scope fixture
 
-Derive from `victim_apex`, never embed the apex literal:
+Derive from `target_apex`, never embed the apex literal:
 
 ```python
 # correct
 @pytest.fixture()
-def my_admin_endpoint(victim_apex: str) -> Endpoint:
-    return Endpoint(url=f"https://admin.{victim_apex}", status_code=200, ...)
+def my_admin_endpoint(target_apex: str) -> Endpoint:
+    return Endpoint(url=f"https://admin.{target_apex}", status_code=200, ...)
 
-# wrong - hardcoded apex won't follow when victim_url changes
+# wrong - hardcoded apex won't follow when target_url changes
 @pytest.fixture()
 def my_admin_endpoint() -> Endpoint:
     return Endpoint(url="https://admin.example.com", status_code=200, ...)
 ```
 
-The chain `victim_url -> victim_apex -> in-scope fixtures` is the single knob for retargeting the suite (e.g. flipping to DVWA on localhost would adjust `victim_url` and the dependent fixtures follow). A new fixture that hardcodes `example.com` breaks that property and gets caught at review.
+The chain `target_url -> target_apex -> in-scope fixtures` is the single knob for retargeting the suite (e.g. flipping to DVWA on localhost would adjust `target_url` and the dependent fixtures follow). A new fixture that hardcodes `example.com` breaks that property and gets caught at review.
 
 ## Derive variants with `model_copy`
 

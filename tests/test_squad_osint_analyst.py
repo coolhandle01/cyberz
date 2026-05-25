@@ -52,14 +52,14 @@ class TestOsintAnalystTools:
         assert (tmp_path / "host_insights" / "api.example.com.json").exists()
 
     def test_annotate_host_tool_surfaces_validation_issues(
-        self, programme_in_workspace, recon_result, tmp_path
+        self, programme_in_workspace, recon_result, tmp_path, target_apex
     ) -> None:
         from squad.osint_analyst import annotate_host_tool
 
         (tmp_path / "sweep.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
 
         result = annotate_host_tool.func(
-            hostname="api.example.com",
+            hostname=f"api.{target_apex}",
             role="api",
             priority="high",
             notes="too short",  # < 30 chars, also < 60 high-priority floor
@@ -84,14 +84,14 @@ class TestOsintAnalystTools:
         assert "api.example.com" in result
 
     def test_finalise_recon_tool_writes_recon_json(
-        self, programme_in_workspace, recon_result, run_dir
+        self, programme_in_workspace, recon_result, run_dir, target_apex
     ) -> None:
         from squad.osint_analyst import annotate_host_tool, finalise_recon_tool
 
         (run_dir / "sweep.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
 
         annotate_host_tool.func(
-            hostname="api.example.com",
+            hostname=f"api.{target_apex}",
             role="api",
             priority="high",
             notes=(

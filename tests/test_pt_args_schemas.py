@@ -455,22 +455,22 @@ class TestSchemaAcceptReject:
         with pytest.raises(ValidationError):
             _SaveFindingsArgs.model_validate({"findings": [{"not_a_real_field": "x"}]})
 
-    def test_recon_open_ports_accepts_victim_host(self, victim_url: str) -> None:
+    def test_recon_open_ports_accepts_victim_host(self, target_url: str) -> None:
         """``Recon Open Ports`` accepts a bare hostname filter.
 
-        The ``host`` field is ``Hostname``-typed; using the ``victim_url``
+        The ``host`` field is ``Hostname``-typed; using the ``target_url``
         fixture (the conftest's in-scope-target handle) and stripping the
         scheme keeps the test intent readable at the call site rather than
         via an opaque ``api.example.com`` literal.
         """
         from urllib.parse import urlparse
 
-        host = urlparse(victim_url).hostname
+        host = urlparse(target_url).hostname
         _PtReconOpenPortsArgs.model_validate({"recon_path": "recon.json", "host": host})
 
-    def test_recon_open_ports_rejects_url_in_host(self, victim_url: str) -> None:
+    def test_recon_open_ports_rejects_url_in_host(self, target_url: str) -> None:
         """The ``Hostname`` primitive rejects a URL where a bare hostname
-        is expected - ``victim_url`` carries the ``https://`` scheme, so
+        is expected - ``target_url`` carries the ``https://`` scheme, so
         passing it directly trips the validator upstream of the wrapper."""
         with pytest.raises(ValidationError):
-            _PtReconOpenPortsArgs.model_validate({"recon_path": "recon.json", "host": victim_url})
+            _PtReconOpenPortsArgs.model_validate({"recon_path": "recon.json", "host": target_url})

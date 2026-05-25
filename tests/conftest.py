@@ -45,7 +45,7 @@ def _no_real_sleep(monkeypatch):
 # Domain fixtures
 #
 # Use these instead of ad-hoc hostnames so test intent is readable at a glance.
-# victim_url    - the scanning target (an app we are testing); in-scope per
+# target_url    - the scanning target (an app we are testing); in-scope per
 #                 the ``programme`` fixture's ``*.example.com`` wildcard rule.
 # bystander_url - an out-of-scope host on a different TLD. Use it whenever a
 #                 test exercises the scope guard - the name makes the intent
@@ -53,7 +53,7 @@ def _no_real_sleep(monkeypatch):
 # callback_url  - OOB receiver (a server we control, used for blind injection);
 #                 placeholder until #77 lands real interactsh infrastructure.
 @pytest.fixture()
-def victim_url() -> str:
+def target_url() -> str:
     return "https://victim.example.com"
 
 
@@ -68,15 +68,15 @@ def callback_url() -> str:
 
 
 @pytest.fixture()
-def make_html_page(victim_url: str):
+def make_html_page(target_url: str):
     """Factory for minimal HTML pages containing script tags.
 
     Returns a callable: make_html_page(scripts=[...]) -> str.
-    Defaults to a single <script> pointing at {victim_url}/app.js.
+    Defaults to a single <script> pointing at {target_url}/app.js.
     """
 
     def _make(scripts: list[str] | None = None) -> str:
-        _scripts = scripts if scripts is not None else [f"{victim_url}/app.js"]
+        _scripts = scripts if scripts is not None else [f"{target_url}/app.js"]
         tags = "".join(f'<script src="{s}"></script>' for s in _scripts)
         return f"<html><head>{tags}</head></html>"
 
@@ -104,35 +104,35 @@ def run_dir(tmp_path, monkeypatch):
 
 # Programme fixtures
 @pytest.fixture()
-def victim_apex(victim_url: str) -> str:
-    """Apex domain derived from ``victim_url``.
+def target_apex(target_url: str) -> str:
+    """Apex domain derived from ``target_url``.
 
     Every fixture that builds an in-scope ScopeItem, hostname, or URL
     derives from this rather than embedding the apex literal. That way
-    flipping ``victim_url`` (e.g. to point the suite at DVWA on
+    flipping ``target_url`` (e.g. to point the suite at DVWA on
     localhost) propagates through every dependent fixture - no
     per-fixture hardcoded ``example.com`` left to chase.
     """
     from urllib.parse import urlparse
 
-    host = urlparse(victim_url).hostname or ""
+    host = urlparse(target_url).hostname or ""
     parts = host.split(".")
     return ".".join(parts[-2:]) if len(parts) >= 2 else host
 
 
 @pytest.fixture()
-def scope_item_url(victim_apex: str) -> ScopeItem:
+def scope_item_url(target_apex: str) -> ScopeItem:
     return ScopeItem(
-        asset_identifier=f"https://{victim_apex}",
+        asset_identifier=f"https://{target_apex}",
         asset_type=ScopeType.URL,
         eligible_for_bounty=True,
     )
 
 
 @pytest.fixture()
-def scope_item_wildcard(victim_apex: str) -> ScopeItem:
+def scope_item_wildcard(target_apex: str) -> ScopeItem:
     return ScopeItem(
-        asset_identifier=f"*.{victim_apex}",
+        asset_identifier=f"*.{target_apex}",
         asset_type=ScopeType.WILDCARD,
         eligible_for_bounty=True,
     )
@@ -238,9 +238,9 @@ def dvwa_in_workspace(dvwa_programme: Programme, run_dir, monkeypatch) -> Progra
 
 # Recon fixtures
 @pytest.fixture()
-def endpoint(victim_apex: str) -> Endpoint:
+def endpoint(target_apex: str) -> Endpoint:
     return Endpoint(
-        url=f"https://api.{victim_apex}",
+        url=f"https://api.{target_apex}",
         status_code=200,
         technologies=["nginx", "React"],
         parameters=["q", "page"],
@@ -248,12 +248,12 @@ def endpoint(victim_apex: str) -> Endpoint:
 
 
 @pytest.fixture()
-def recon_result(programme, endpoint, victim_apex: str) -> ReconResult:
+def recon_result(programme, endpoint, target_apex: str) -> ReconResult:
     return ReconResult(
         programme=programme,
-        subdomains=[f"api.{victim_apex}", f"admin.{victim_apex}"],
+        subdomains=[f"api.{target_apex}", f"admin.{target_apex}"],
         endpoints=[endpoint],
-        open_ports={f"api.{victim_apex}": [80, 443]},
+        open_ports={f"api.{target_apex}": [80, 443]},
         technologies=["nginx", "React"],
         notes="Test recon result.",
     )
@@ -261,17 +261,17 @@ def recon_result(programme, endpoint, victim_apex: str) -> ReconResult:
 
 # Attack plan fixtures
 @pytest.fixture()
-def attack_plan_item(victim_apex: str) -> AttackPlanItem:
+def attack_plan_item(target_apex: str) -> AttackPlanItem:
     return AttackPlanItem(
         probe="CVE-2022-22965",
-        target=f"https://api.{victim_apex}",
+        target=f"https://api.{target_apex}",
         expected_ceiling=Severity.CRITICAL,
         rationale=(
             "Tomcat-served Spring Boot 2.3 detected in recon; test the standard "
             "POST payload and look for arbitrary file write in the webroot."
         ),
         recon_evidence=[
-            f"api.{victim_apex} runs Tomcat 9.0",
+            f"api.{target_apex} runs Tomcat 9.0",
             "Spring Boot 2.3 banner observed on /actuator/info",
         ],
     )

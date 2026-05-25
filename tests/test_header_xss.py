@@ -36,9 +36,9 @@ def _make_reflecting_fake(
 
 class TestCheckHeaderXss:
     def test_detects_user_agent_reflection(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/error", status_code=200)
+        ep = Endpoint(url=f"{target_url}/error", status_code=200)
 
         with patch("requests.get", side_effect=_make_reflecting_fake(make_response, "User-Agent")):
             results = check_header_xss([ep])
@@ -49,9 +49,9 @@ class TestCheckHeaderXss:
         assert "User-Agent" in results[0].evidence
 
     def test_detects_referer_reflection(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/page", status_code=200)
+        ep = Endpoint(url=f"{target_url}/page", status_code=200)
 
         with patch("requests.get", side_effect=_make_reflecting_fake(make_response, "Referer")):
             results = check_header_xss([ep])
@@ -60,9 +60,9 @@ class TestCheckHeaderXss:
         assert "Referer" in results[0].evidence
 
     def test_detects_x_forwarded_for_reflection(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/page", status_code=200)
+        ep = Endpoint(url=f"{target_url}/page", status_code=200)
 
         with patch(
             "requests.get",
@@ -74,9 +74,9 @@ class TestCheckHeaderXss:
         assert "X-Forwarded-For" in results[0].evidence
 
     def test_no_finding_when_canary_is_html_encoded(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/page", status_code=200)
+        ep = Endpoint(url=f"{target_url}/page", status_code=200)
 
         with patch(
             "requests.get",
@@ -87,17 +87,17 @@ class TestCheckHeaderXss:
         assert results == []
 
     def test_no_finding_when_canary_absent(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/page", status_code=200)
+        ep = Endpoint(url=f"{target_url}/page", status_code=200)
 
         with patch("requests.get", return_value=make_response(body="<html>Normal</html>")):
             results = check_header_xss([ep])
 
         assert results == []
 
-    def test_skips_server_error_endpoints(self, victim_url: str) -> None:
-        ep = Endpoint(url=f"{victim_url}/", status_code=500)
+    def test_skips_server_error_endpoints(self, target_url: str) -> None:
+        ep = Endpoint(url=f"{target_url}/", status_code=500)
 
         with patch("requests.get") as mock_get:
             results = check_header_xss([ep])
@@ -106,9 +106,9 @@ class TestCheckHeaderXss:
         assert results == []
 
     def test_one_finding_per_endpoint_even_when_multiple_headers_reflect(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/page", status_code=200)
+        ep = Endpoint(url=f"{target_url}/page", status_code=200)
 
         with patch("requests.get", side_effect=_make_reflecting_fake(make_response)):
             results = check_header_xss([ep])
@@ -116,9 +116,9 @@ class TestCheckHeaderXss:
         assert len(results) == 1
 
     def test_stops_after_first_reflecting_header(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/page", status_code=200)
+        ep = Endpoint(url=f"{target_url}/page", status_code=200)
         call_count = 0
 
         def fake_get(url: str, headers: dict | None = None, **kwargs: object) -> MagicMock:
@@ -132,8 +132,8 @@ class TestCheckHeaderXss:
 
         assert call_count == 1
 
-    def test_network_exception_is_swallowed(self, victim_url: str) -> None:
-        ep = Endpoint(url=f"{victim_url}/page", status_code=200)
+    def test_network_exception_is_swallowed(self, target_url: str) -> None:
+        ep = Endpoint(url=f"{target_url}/page", status_code=200)
 
         with patch("requests.get", side_effect=OSError("connection refused")):
             results = check_header_xss([ep])
@@ -141,9 +141,9 @@ class TestCheckHeaderXss:
         assert results == []
 
     def test_canary_contains_angle_brackets(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/page", status_code=200)
+        ep = Endpoint(url=f"{target_url}/page", status_code=200)
         seen_canaries: list[str] = []
 
         def fake_get(url: str, headers: dict | None = None, **kwargs: object) -> MagicMock:
@@ -159,9 +159,9 @@ class TestCheckHeaderXss:
         assert all(c.startswith("<") and c.endswith(">") for c in seen_canaries)
 
     def test_all_five_headers_probed_when_no_reflection(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/page", status_code=200)
+        ep = Endpoint(url=f"{target_url}/page", status_code=200)
         probed: set[str] = set()
 
         def fake_get(url: str, headers: dict | None = None, **kwargs: object) -> MagicMock:
@@ -176,11 +176,11 @@ class TestCheckHeaderXss:
         assert probed == set(XSSHeader)
 
     def test_deduplicates_same_url_across_endpoint_list(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
         eps = [
-            Endpoint(url=f"{victim_url}/page", status_code=200),
-            Endpoint(url=f"{victim_url}/page", status_code=200),
+            Endpoint(url=f"{target_url}/page", status_code=200),
+            Endpoint(url=f"{target_url}/page", status_code=200),
         ]
 
         with patch("requests.get", side_effect=_make_reflecting_fake(make_response)):
@@ -189,9 +189,9 @@ class TestCheckHeaderXss:
         assert len(results) == 1
 
     def test_evidence_includes_header_payload_and_snippet(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/page", status_code=200)
+        ep = Endpoint(url=f"{target_url}/page", status_code=200)
 
         with patch("requests.get", side_effect=_make_reflecting_fake(make_response, "Referer")):
             results = check_header_xss([ep])
@@ -203,9 +203,9 @@ class TestCheckHeaderXss:
         assert "Response snippet" in ev
 
     def test_header_names_restricts_probed_headers(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/page", status_code=200)
+        ep = Endpoint(url=f"{target_url}/page", status_code=200)
         probed: set[str] = set()
 
         def fake_get(url: str, headers: dict | None = None, **kwargs: object) -> MagicMock:
@@ -220,9 +220,9 @@ class TestCheckHeaderXss:
         assert probed == {"Referer", "X-Forwarded-For"}
 
     def test_header_names_none_probes_all_headers(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/page", status_code=200)
+        ep = Endpoint(url=f"{target_url}/page", status_code=200)
         probed: set[str] = set()
 
         def fake_get(url: str, headers: dict | None = None, **kwargs: object) -> MagicMock:
@@ -237,9 +237,9 @@ class TestCheckHeaderXss:
         assert probed == set(XSSHeader)
 
     def test_header_names_single_header_finds_reflection(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/page", status_code=200)
+        ep = Endpoint(url=f"{target_url}/page", status_code=200)
 
         with patch(
             "requests.get",
@@ -250,8 +250,8 @@ class TestCheckHeaderXss:
         assert len(results) == 1
         assert "User-Agent" in results[0].evidence
 
-    def test_header_names_empty_list_makes_no_requests(self, victim_url: str) -> None:
-        ep = Endpoint(url=f"{victim_url}/page", status_code=200)
+    def test_header_names_empty_list_makes_no_requests(self, target_url: str) -> None:
+        ep = Endpoint(url=f"{target_url}/page", status_code=200)
 
         with patch("requests.get") as mock_get:
             results = check_header_xss([ep], header_names=[])
@@ -260,9 +260,9 @@ class TestCheckHeaderXss:
         assert results == []
 
     def test_unique_canary_per_request(
-        self, make_response: Callable[..., MagicMock], victim_url: str
+        self, make_response: Callable[..., MagicMock], target_url: str
     ) -> None:
-        ep = Endpoint(url=f"{victim_url}/page", status_code=200)
+        ep = Endpoint(url=f"{target_url}/page", status_code=200)
         canaries: list[str] = []
 
         def fake_get(url: str, headers: dict | None = None, **kwargs: object) -> MagicMock:

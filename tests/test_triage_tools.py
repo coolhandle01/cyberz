@@ -71,8 +71,8 @@ class TestAboveFloor:
 
 
 class TestInScope:
-    def test_in_scope(self, programme, victim_url):
-        assert in_scope(f"{victim_url}/x", programme) is True
+    def test_in_scope(self, programme, target_url):
+        assert in_scope(f"{target_url}/x", programme) is True
 
     def test_out_of_scope(self, programme, bystander_url):
         assert in_scope(f"{bystander_url}/x", programme) is False
@@ -404,8 +404,8 @@ class TestLoadDiscards:
         assert load_discards() == []
 
 
-# The `programme` and `victim_url` / `bystander_url` fixtures come from
+# The `programme` and `target_url` / `bystander_url` fixtures come from
 # tests/conftest.py - the shared `programme` includes `*.example.com` which
-# covers `victim_url` (https://victim.example.com), and `bystander_url`
+# covers `target_url` (https://victim.example.com), and `bystander_url`
 # (https://bystander.example.org) sits cleanly outside it for the scope-guard
 # tests.
