@@ -81,6 +81,16 @@ if [ "$in_tests" = 0 ]; then
             matches+=(cybersquad-pentest-tool)
             ;;
     esac
+    # cybersquad-prompteng stacks on cybersquad-tool with the
+    # communication layer - docstring-vs-Field division of labour,
+    # what to say in each, what NOT to say twice. Same trigger
+    # surface as cybersquad-tool so wrapper edits load mechanics +
+    # communication side by side, specialist last.
+    case "$file_path" in
+        */squad/*.py)
+            matches+=(cybersquad-prompteng)
+            ;;
+    esac
 fi
 
 # cybersquad-models covers the LLM-facing schema layer - typed primitives,

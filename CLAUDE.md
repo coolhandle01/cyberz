@@ -26,6 +26,7 @@ Skills under `.claude/skills/` auto-load via a `PreToolUse` hook on `Write`/`Edi
 |---|---|
 | `cybersquad-tool` | Any `*.py` file under `squad/` at any depth - member `__init__.py`s, sub-package wrappers under `probes/` and `cloud/`, the `recon.py` / `findings.py` / `research.py` / `triage.py` / `curation.py` / `discovery.py` modules, and the `workspace_tools.py` shared layer. Guarded out of the `tests/squad/` mirror so test edits do not over-trigger. |
 | `cybersquad-pentest-tool` | `tools/pentest/**` and the `@pentest_tool` wrapper surface: `squad/penetration_tester/__init__.py`, `squad/penetration_tester/_decorator.py`, `squad/penetration_tester/probes/**`. Cloud wrappers use `@cyber_tool` (not `@pentest_tool`) so they stack on the universal skill only. |
+| `cybersquad-prompteng` | Same trigger as `cybersquad-tool` (`*/squad/*.py`). Carries the *communication* layer - the two LLM-visible surfaces (tool docstring + `Field(description=...)`), the division of labour between them, what to say in each, what NOT to say twice. Specialist after `cybersquad-tool` (mechanics) so the communication rules land more prominently. |
 | `cybersquad-models` | Any `*.py` file under `models/`. Carries the LLM-facing contract: typed primitives, workspace artefact shapes, prompt-injection awareness on free-text fields. The consumer-side rules (how a wrapper *uses* these models) live in `cybersquad-tool`. |
 | `cybersquad-runtime` | `runtime.py`, `main.py` |
 | `cybersquad-agent-llm` | `crew.py` |
