@@ -10,11 +10,6 @@ email) plus the in-flight programme handle read from ``runtime.programme_handle`
 A SOC operator seeing this UA can verify the H1 username and programme handle
 against their HackerOne dashboard and use the contact email to reach the
 operator without having to ban the IP first. See issue #46.
-
-There is no ``set_programme()`` registry: the Programme Manager has already
-written ``runtime.programme_handle`` (and ``<run_dir>/programme.json``) before
-any other tool fires an outbound request, so the UA builder reads workspace
-state directly and every per-tool ``http.set_programme(...)`` call is gone.
 """
 
 from __future__ import annotations

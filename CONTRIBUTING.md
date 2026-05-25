@@ -62,16 +62,6 @@ The mechanism, briefly: modern LLM tokenisers are byte-pair-encoding variants tr
 
 One PR does one thing. Before any commit, run `git diff origin/main --stat` and ask: does every changed file relate to the stated task? If not, revert the unrelated change or move it to its own branch. Leave whitespace, formatting, and import order alone unless the linter required the change. Do not rewrite working code to a "cleaner" form unless cleanliness was the task.
 
-### Preserve names, comments, and structure unless the change is the task
-
-Code carries intent. Symbol names, comment wording, and file layout all encode what the original author understood. A drive-by rename inside an unrelated PR breaks `git blame` continuity, loses the author's framing, and makes the diff argue about two things at once.
-
-- **Comments**: leave them alone unless they are actively incorrect (lying about what the code does). Do not reword for "style".
-- **Symbol names**: rename only when (a) the new name is materially clearer, *and* (b) renaming is in scope for this PR.
-- **Structure**: moving code between files, splitting functions, extracting helpers - all valid, all out of scope unless that *is* the task.
-
-Before deleting or simplifying anything that looks redundant (Chesterton's Fence): find out why it was put there. See the safety invariants below for documented examples.
-
 ### Cite the standard you diverge from
 
 When the codebase deliberately departs from a documented standard, named best practice, or upstream framework convention, the divergence must carry a link to the thing it diverges from. Future-you reading the code six months from now needs to be able to follow the URL, read the upstream practice, and recover the *reasoning* behind the departure - not infer it from the absence of a citation, and not rediscover it by reading the spec from scratch.
@@ -107,6 +97,16 @@ Skills already practicing this, as the worked register:
 - `cybersquad-models` defers to [Pydantic v2 documentation](https://docs.pydantic.dev/2.12/) for general Pydantic usage.
 
 A new contributor skill that does **not** carry an Upstream alignment section is fine if either: (a) there is no canonical upstream for the topic - some patterns are genuinely cybersquad-specific (the `runtime.bind_*` singleton-per-pipeline pattern is an example) - or (b) the skill explicitly builds on another cybersquad skill, named in its frontmatter `description:` (e.g. `cybersquad-pentest-tool` builds on `cybersquad-tool`; `cybersquad-prompteng` builds on `cybersquad-tool`). State the case in either form so the absence is read as deliberate, not as oversight.
+
+### Preserve names, comments, and structure unless the change is the task
+
+Code carries intent. Symbol names, comment wording, and file layout all encode what the original author understood. A drive-by rename inside an unrelated PR breaks `git blame` continuity, loses the author's framing, and makes the diff argue about two things at once.
+
+- **Comments**: leave them alone unless they are actively incorrect (lying about what the code does). Do not reword for "style".
+- **Symbol names**: rename only when (a) the new name is materially clearer, *and* (b) renaming is in scope for this PR.
+- **Structure**: moving code between files, splitting functions, extracting helpers - all valid, all out of scope unless that *is* the task.
+
+Before deleting or simplifying anything that looks redundant (Chesterton's Fence): find out why it was put there. See the safety invariants below for documented examples.
 
 ### Linter and SAST findings are engineering signal
 
