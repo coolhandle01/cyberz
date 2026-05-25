@@ -83,6 +83,15 @@ if [ "$in_tests" = 0 ]; then
     esac
 fi
 
+# cybersquad-models covers the LLM-facing schema layer - typed primitives,
+# workspace artefact shapes, args_schema return models. Triggers on any
+# Python file under models/ at any depth.
+case "$file_path" in
+    */models/*.py)
+        matches+=(cybersquad-models)
+        ;;
+esac
+
 # Pipeline plumbing - one skill per file; no stacking.
 case "$file_path" in
     */runtime.py|*/main.py)
