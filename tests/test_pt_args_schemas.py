@@ -69,8 +69,12 @@ from squad.penetration_tester import (
     _PostgresqlCheckArgs,
     _PromptInjectionArgs,
     _PrototypePollutionArgs,
+    _PtReconEndpointsArgs,
+    _PtReconOpenPortsArgs,
+    _PtReconSubdomainsArgs,
     _RedisCheckArgs,
     _S3CheckArgs,
+    _SaveFindingsArgs,
     _SensitiveFilesArgs,
     _SourceMapsArgs,
     _SqlmapArgs,
@@ -81,15 +85,19 @@ from squad.penetration_tester import (
     _XssArgs,
     _XxeArgs,
 )
+from squad.workspace_tools import (
+    _ListRunFilesArgs,
+    _ReadAttackPlanArgs,
+    _ReadRunFileArgs,
+)
 
 pytestmark = pytest.mark.unit
 
 
 # Tool-name -> explicit schema class. Covers every PT @cyber_tool /
-# @pentest_tool wrapper. Recon / write / workspace tools that intentionally
-# keep the signature-inferred schema (Recon Subdomains, Recon Endpoints,
-# Recon Open Ports, Save Findings, plus the three workspace readers) are
-# absent: they are out of scope for #143 / #147, and #150 covers them.
+# @pentest_tool wrapper, including the four recon / save tools and the
+# three shared workspace readers swept in #150 (the final-pass sweep
+# that completed the args_schema discipline started in #143 / #146).
 _PT_SCHEMAS: dict[str, type[BaseModel]] = {
     # @pentest_tool probes (#143 / #146)
     "Nuclei Scan": _NucleiScanArgs,
@@ -136,6 +144,15 @@ _PT_SCHEMAS: dict[str, type[BaseModel]] = {
     "Kibana Check": _KibanaArgs,
     "Portainer Check": _PortainerArgs,
     "Consul/Vault Check": _ConsulVaultArgs,
+    # PT recon / save wrappers (#150 - final-pass sweep)
+    "Recon Subdomains": _PtReconSubdomainsArgs,
+    "Recon Endpoints": _PtReconEndpointsArgs,
+    "Recon Open Ports": _PtReconOpenPortsArgs,
+    "Save Findings": _SaveFindingsArgs,
+    # Shared workspace wrappers (#150 - re-exported via squad.workspace_tools)
+    "List Run Files": _ListRunFilesArgs,
+    "Read Run File": _ReadRunFileArgs,
+    "Read Attack Plan": _ReadAttackPlanArgs,
 }
 
 # Cloud / infra wrappers that take ``recon_path: str``. Used by the
@@ -275,6 +292,30 @@ class TestSchemaAcceptReject:
             (_KibanaArgs, {"recon_path": "recon.json"}),
             (_PortainerArgs, {"recon_path": "recon.json"}),
             (_ConsulVaultArgs, {"recon_path": "recon.json"}),
+            # PT recon / save acceptance cases (#150)
+            (_PtReconSubdomainsArgs, {"recon_path": "recon.json"}),
+            (_PtReconSubdomainsArgs, {"recon_path": "recon.json", "host_filter": "api"}),
+            (_PtReconEndpointsArgs, {"recon_path": "recon.json"}),
+            (
+                _PtReconEndpointsArgs,
+                {
+                    "recon_path": "recon.json",
+                    "status": 200,
+                    "tech": "wordpress",
+                    "host_contains": "admin",
+                    "offset": 0,
+                    "limit": 25,
+                },
+            ),
+            (_PtReconOpenPortsArgs, {"recon_path": "recon.json"}),
+            (_PtReconOpenPortsArgs, {"recon_path": "recon.json", "host": "api.example.com"}),
+            (_SaveFindingsArgs, {"findings": []}),
+            # Shared workspace acceptance cases (#150). List Run Files and
+            # Read Attack Plan take no parameters - the empty payload is the
+            # canonical call.
+            (_ListRunFilesArgs, {}),
+            (_ReadAttackPlanArgs, {}),
+            (_ReadRunFileArgs, {"relative_path": "recon.json"}),
         ],
     )
     def test_schema_accepts_known_input(
@@ -357,6 +398,10 @@ class TestSchemaAcceptReject:
             _SourceMapsArgs,
             _SriCheckArgs,
             *_RECON_PATH_CLOUD_SCHEMAS,
+            # PT recon wrappers (#150) - all take a required ``recon_path``
+            _PtReconSubdomainsArgs,
+            _PtReconEndpointsArgs,
+            _PtReconOpenPortsArgs,
         ],
     )
     def test_missing_required_recon_path_rejected(self, schema_cls: type[BaseModel]) -> None:
@@ -370,3 +415,20 @@ class TestSchemaAcceptReject:
             _JwtCheckArgs.model_validate({"token": "eyJ.x.y"})
         with pytest.raises(ValidationError):
             _JwtCheckArgs.model_validate({"endpoint": "https://victim.example.com/api"})
+
+    def test_save_findings_requires_findings(self) -> None:
+        """``Save Findings`` rejects an empty payload - ``findings`` has no default."""
+        with pytest.raises(ValidationError):
+            _SaveFindingsArgs.model_validate({})
+
+    def test_read_run_file_requires_relative_path(self) -> None:
+        """``Read Run File`` rejects an empty payload - ``relative_path`` is required."""
+        with pytest.raises(ValidationError):
+            _ReadRunFileArgs.model_validate({})
+
+    def test_save_findings_rejects_mis_shaped_finding(self) -> None:
+        """A dict that does not validate as ``RawFinding`` rejects upstream of
+        the wrapper - the whole point of the typed ``list[RawFinding]``
+        parameter is the schema reject before findings.json is written."""
+        with pytest.raises(ValidationError):
+            _SaveFindingsArgs.model_validate({"findings": [{"not_a_real_field": "x"}]})

@@ -5,7 +5,6 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol, cast
 
-from crewai.tools import tool
 from pydantic import BaseModel, Field
 
 from models import Endpoint, EndpointPage, OpenPortsMap, RawFinding, ReconResult
@@ -1764,7 +1763,30 @@ def jwt_check_tool(
     return list(check_jwt(token, endpoint, attacks))
 
 
-@tool("Recon Subdomains")
+class _PtReconSubdomainsArgs(BaseModel):
+    """Explicit args_schema for the PT's Recon Subdomains tool (#150)."""
+
+    recon_path: str = Field(
+        description=(
+            "Relative path to the OSINT Analyst's ``recon.json`` in the"
+            " current run directory. The PT receives the handle"
+            " (typically ``recon.json``) from the OA's ``Finalise"
+            " Recon`` call - pass it through directly."
+        ),
+    )
+    host_filter: str | None = Field(
+        default=None,
+        description=(
+            "Optional case-insensitive substring filter on the returned"
+            " subdomains. Passing ``api`` returns every subdomain"
+            " containing ``api``; omit (None) for the full list."
+            " Substring (not glob) - the wrapper does not interpret"
+            " ``*`` or shell-style patterns."
+        ),
+    )
+
+
+@cyber_tool("Recon Subdomains", args_schema=_PtReconSubdomainsArgs)
 def recon_subdomains_tool(recon_path: str, host_filter: str | None = None) -> list[str]:
     """
     Return the in-scope subdomains discovered during recon. Pass the recon.json
@@ -1776,7 +1798,63 @@ def recon_subdomains_tool(recon_path: str, host_filter: str | None = None) -> li
     return recon_subdomains(recon_path, host_filter=host_filter)
 
 
-@tool("Recon Endpoints")
+class _PtReconEndpointsArgs(BaseModel):
+    """Explicit args_schema for the PT's Recon Endpoints tool (#150)."""
+
+    recon_path: str = Field(
+        description=(
+            "Relative path to the OSINT Analyst's ``recon.json`` in the"
+            " current run directory. Same semantics as on ``Recon"
+            " Subdomains``."
+        ),
+    )
+    status: int | None = Field(
+        default=None,
+        description=(
+            "Conjunctive HTTP status filter (e.g. ``200`` returns only"
+            " endpoints that responded 200 during the sweep). Omit"
+            " (None) to skip the filter."
+        ),
+    )
+    tech: str | None = Field(
+        default=None,
+        description=(
+            "Conjunctive case-insensitive tech filter against the"
+            " endpoint's detected ``technologies`` list (e.g."
+            " ``wordpress`` returns only WordPress endpoints). Pair"
+            " with ``status`` to narrow further."
+        ),
+    )
+    host_contains: str | None = Field(
+        default=None,
+        description=(
+            "Conjunctive case-insensitive substring filter on the"
+            " endpoint URL. Use to scope to a host segment (``admin``"
+            " returns every endpoint whose URL contains ``admin``)."
+        ),
+    )
+    offset: int = Field(
+        default=0,
+        description=(
+            "Pagination offset into the filtered endpoint list. Combined"
+            " with ``limit`` to walk the surface in pages - re-call"
+            " with a larger offset to paginate through."
+        ),
+    )
+    limit: int = Field(
+        default=50,
+        description=(
+            "Page size for the pagination cursor (default 50). The"
+            " returned ``EndpointPage`` carries ``total`` / ``offset``"
+            " / ``returned`` so you can tell whether more remain."
+        ),
+    )
+
+
+@cyber_tool("Recon Endpoints", args_schema=_PtReconEndpointsArgs)
+# Every filter is a named parameter so the LLM can pick the slice it wants;
+# collapsing into a payload dict would force the agent to guess valid keys.
+# pylint: disable=R0913,R0917
 def recon_endpoints_tool(
     recon_path: str,
     status: int | None = None,
@@ -1806,7 +1884,29 @@ def recon_endpoints_tool(
     )
 
 
-@tool("Recon Open Ports")
+class _PtReconOpenPortsArgs(BaseModel):
+    """Explicit args_schema for the PT's Recon Open Ports tool (#150)."""
+
+    recon_path: str = Field(
+        description=(
+            "Relative path to the OSINT Analyst's ``recon.json`` in the"
+            " current run directory. Same semantics as on ``Recon"
+            " Subdomains``."
+        ),
+    )
+    host: str | None = Field(
+        default=None,
+        description=(
+            "Optional hostname to restrict the open-port map to a"
+            " single host. Useful when deciding which port-specific"
+            " probe to run against one target (Elasticsearch on 9200,"
+            " Redis on 6379, MongoDB on 27017, etc.). Omit (None) to"
+            " return the per-host map for every scanned host."
+        ),
+    )
+
+
+@cyber_tool("Recon Open Ports", args_schema=_PtReconOpenPortsArgs)
 def recon_open_ports_tool(recon_path: str, host: str | None = None) -> OpenPortsMap:
     """
     Return the open-port map per host from recon.json. Passing a ``host``
@@ -1817,7 +1917,32 @@ def recon_open_ports_tool(recon_path: str, host: str | None = None) -> OpenPorts
     return OpenPortsMap(hosts=recon_open_ports(recon_path, host=host))
 
 
-@tool("Save Findings")
+class _SaveFindingsArgs(BaseModel):
+    """Explicit args_schema for the PT's Save Findings tool (#150).
+
+    ``findings.json`` is the contract the VR's triage reads against;
+    a mis-shaped findings list either refuses validation upstream
+    (the wrapper re-validates every entry as ``RawFinding``) or
+    persists an artefact the VR cannot load. The per-field
+    description names that hand-off explicitly.
+    """
+
+    findings: list[RawFinding] = Field(
+        description=(
+            "Typed list of every raw finding the PT collected this"
+            " run. Pass the accumulated list once after all probe"
+            " tools have run - one call per session, not one call"
+            " per probe. CrewAI hands the wrapper ``list[dict]`` from"
+            " the LLM JSON; the body re-validates each entry as"
+            " ``RawFinding`` so the persisted artefact is the canonical"
+            " typed shape the VR's ``List Raw Findings`` / ``Read Raw"
+            " Finding`` slicers depend on. A wrong-shape entry rejects"
+            " at validation time, before the artefact is written."
+        ),
+    )
+
+
+@cyber_tool("Save Findings", args_schema=_SaveFindingsArgs)
 def save_findings_tool(findings: list[RawFinding]) -> str:
     """
     Write the collected raw findings to findings.json in the run directory.

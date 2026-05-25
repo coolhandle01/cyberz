@@ -10,9 +10,10 @@ The per-field description for ``report`` names the consequence; the
 contract test ensures the description is present and that the
 irreversibility wording survives any future rewording.
 
-The two workspace tools on the DC (``List Run Files``, ``Read Run
-File``) intentionally keep the signature-inferred schema and are out
-of scope here.
+The two shared workspace readers re-exported into the DC's registry
+(``List Run Files``, ``Read Run File``) gained explicit schemas via
+``squad.workspace_tools`` in #150 (the final-pass sweep); they are now
+part of the closed-world check below.
 
 The wrappers do not call the H1 API at validation time - the existing
 H1 behavioural tests in ``test_tools.py`` keep their mocking; this
@@ -29,16 +30,23 @@ from squad.disclosure_coordinator import (
     _CheckDuplicateArgs,
     _SubmitReportArgs,
 )
+from squad.workspace_tools import (
+    _ListRunFilesArgs,
+    _ReadRunFileArgs,
+)
 
 pytestmark = pytest.mark.unit
 
 
-# Tool-name -> explicit schema class. Covers every DC @cyber_tool wrapper.
-# The two workspace readers (``List Run Files``, ``Read Run File``) on
-# the DC keep the signature-inferred schema and are out of scope.
+# Tool-name -> explicit schema class. Covers every DC @cyber_tool wrapper
+# plus the two shared workspace readers swept in #150 (the final-pass
+# sweep that completed the args_schema discipline started in #143 / #146).
 _DC_SCHEMAS: dict[str, type[BaseModel]] = {
     "Submit Report": _SubmitReportArgs,
     "Check H1 Duplicate": _CheckDuplicateArgs,
+    # Shared workspace wrappers (#150 - re-exported via squad.workspace_tools)
+    "List Run Files": _ListRunFilesArgs,
+    "Read Run File": _ReadRunFileArgs,
 }
 
 

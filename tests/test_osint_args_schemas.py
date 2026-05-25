@@ -16,9 +16,10 @@ into the run and silently corrupt every downstream stage. Filter-
 parameter discipline is the bulk of what the per-field descriptions are
 doing.
 
-The workspace tools on the OSINT Analyst (``List Run Files``, ``Read Run
-File``) intentionally keep the signature-inferred schema and are out of
-scope here - #150 covers them.
+The two shared workspace readers re-exported into the OSINT Analyst's
+registry (``List Run Files``, ``Read Run File``) gained explicit
+schemas via ``squad.workspace_tools`` in #150 (the final-pass sweep);
+they are now part of the closed-world check below.
 """
 
 from __future__ import annotations
@@ -45,14 +46,18 @@ from squad.osint_analyst import (
     _RunInitialSweepArgs,
     _UncoveredHostsArgs,
 )
+from squad.workspace_tools import (
+    _ListRunFilesArgs,
+    _ReadRunFileArgs,
+)
 
 pytestmark = pytest.mark.unit
 
 
 # Tool-name -> explicit schema class. Covers every OSINT @cyber_tool
-# wrapper. The workspace readers (List Run Files, Read Run File) on the
-# OSINT Analyst keep the inferred schema and are out of scope - #150 owns
-# them.
+# wrapper plus the two shared workspace readers swept in #150 (the
+# final-pass sweep that completed the args_schema discipline started
+# in #143 / #146).
 _OSINT_SCHEMAS: dict[str, type[BaseModel]] = {
     "Run Initial Sweep": _RunInitialSweepArgs,
     "Recon Subdomains": _ReconSubdomainsArgs,
@@ -68,6 +73,9 @@ _OSINT_SCHEMAS: dict[str, type[BaseModel]] = {
     "Annotate Host": _AnnotateHostArgs,
     "Uncovered Hosts": _UncoveredHostsArgs,
     "Finalise Recon": _FinaliseReconArgs,
+    # Shared workspace wrappers (#150 - re-exported via squad.workspace_tools)
+    "List Run Files": _ListRunFilesArgs,
+    "Read Run File": _ReadRunFileArgs,
 }
 
 
@@ -162,6 +170,10 @@ class TestSchemaAcceptReject:
             (_OsintLookupOwaspArgs, {"query": "csrf"}),
             (_UncoveredHostsArgs, {}),
             (_FinaliseReconArgs, {"programme_handle": "example"}),
+            # Shared workspace acceptance cases (#150). List Run Files takes
+            # no parameters; Read Run File needs a relative path.
+            (_ListRunFilesArgs, {}),
+            (_ReadRunFileArgs, {"relative_path": "recon.json"}),
         ],
     )
     def test_schema_accepts_known_input(

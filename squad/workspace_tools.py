@@ -2,15 +2,27 @@
 
 from __future__ import annotations
 
-from crewai.tools import tool
+from pydantic import BaseModel, Field
 
 from models import RunFile, RunFileContent
 from models.attack import AttackPlan
+from squad import cyber_tool
 from tools import workspace
 from tools.research_tools import attack_plan_path, load_attack_plan
 
 
-@tool("List Run Files")
+class _ListRunFilesArgs(BaseModel):
+    """Explicit args_schema for the List Run Files tool (#150).
+
+    The tool takes no parameters - the run directory is resolved from
+    ``runtime.run_dir()`` at call time. The empty schema is still
+    declared so the closed-world contract test in each consuming
+    agent's ``test_args_schemas.py`` accounts for the tool, and so
+    every shared workspace wrapper goes through ``@cyber_tool``.
+    """
+
+
+@cyber_tool("List Run Files", args_schema=_ListRunFilesArgs)
 def read_run_filelist_tool() -> list[RunFile]:
     """List the artefacts written to the current run directory by the squad
     so far, each with its name and byte size. Use this to discover what an
@@ -19,7 +31,26 @@ def read_run_filelist_tool() -> list[RunFile]:
     return [RunFile(**entry) for entry in workspace.list_run_files()]
 
 
-@tool("Read Run File")
+class _ReadRunFileArgs(BaseModel):
+    """Explicit args_schema for the Read Run File tool (#150)."""
+
+    relative_path: str = Field(
+        description=(
+            "Path of the artefact to read, relative to the current run"
+            " directory (e.g. ``recon.json``, ``findings.json``,"
+            " ``attack_plan.json``). Absolute paths and any segment"
+            " containing ``..`` are rejected by the workspace layer; the"
+            " agent should pass the bare filename a finalise tool returned"
+            " (or one List Run Files surfaced). A wrong ``relative_path``"
+            " here loads the wrong artefact and the agent reasons over the"
+            " wrong inputs - prefer the typed slicers (``Recon Endpoints``"
+            " / ``Read Attack Plan`` / ``List Raw Findings``) when one"
+            " exists for the artefact you want."
+        ),
+    )
+
+
+@cyber_tool("Read Run File", args_schema=_ReadRunFileArgs)
 def read_run_file_tool(relative_path: str) -> RunFileContent:
     """Read a file from the current run directory and return its full contents.
     ``relative_path`` is a path relative to the run directory (e.g.
@@ -27,7 +58,18 @@ def read_run_file_tool(relative_path: str) -> RunFileContent:
     return RunFileContent(**workspace.read_run_file(relative_path))
 
 
-@tool("Read Attack Plan")
+class _ReadAttackPlanArgs(BaseModel):
+    """Explicit args_schema for the Read Attack Plan tool (#150).
+
+    The tool takes no parameters - the attack plan path is resolved
+    from ``runtime.run_dir()`` via ``attack_plan_path()`` at call
+    time. The empty schema is still declared so the closed-world
+    contract test in each consuming agent's ``test_args_schemas.py``
+    accounts for the tool.
+    """
+
+
+@cyber_tool("Read Attack Plan", args_schema=_ReadAttackPlanArgs)
 def read_attack_plan_tool() -> AttackPlan:
     """Load the Vulnerability Researcher's typed attack plan from
     ``attack_plan.json`` in the current run directory.

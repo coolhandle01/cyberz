@@ -35,12 +35,6 @@ from crewai import Agent, Task
 from crewai.tools import tool
 from pydantic import BaseModel
 
-from squad.workspace_tools import (
-    read_attack_plan_tool,
-    read_run_file_tool,
-    read_run_filelist_tool,
-)
-
 SQUAD_SKILLS_DIR = Path(__file__).parent / "skills"
 
 
@@ -77,10 +71,13 @@ def cyber_tool(
 
     Equivalent to ``tool(name)`` except that ``args_schema`` is keyword-
     required: the explicit Pydantic class overrides the signature-inferred
-    schema CrewAI would otherwise build. Per #143/#146 every cybersquad
-    ``@tool`` wrapper carries one, because the inferred path cannot attach
-    per-field ``Field(description=...)`` and the agent reads those
-    descriptions when picking the tool.
+    schema CrewAI would otherwise build. Per #143/#146 (PT probes), #147
+    (PT cloud / infra), #148 (OSINT), #149 (H1 API), and #150 (the
+    final-pass sweep covering the VR / TA / workspace surface and the
+    last four PT recon / save wrappers), every cybersquad ``@tool``
+    wrapper carries one - the inferred path is no longer reachable
+    anywhere in the squad. Per-field ``Field(description=...)`` is the
+    targeting guidance the agent reads when picking the tool.
 
     ``pentest_tool`` and ``research_brief_tool`` compose on top of this
     helper: they call ``cyber_tool`` underneath and then layer their own
@@ -95,6 +92,17 @@ def cyber_tool(
         return cast(CrewAITool, wrapped)
 
     return decorator
+
+
+# Shared workspace wrappers are imported after ``cyber_tool`` is defined,
+# because ``squad/workspace_tools.py`` decorates with ``@cyber_tool`` and
+# would hit a circular import if pulled in alongside the top-of-module
+# imports.
+from squad.workspace_tools import (  # noqa: E402
+    read_attack_plan_tool,
+    read_run_file_tool,
+    read_run_filelist_tool,
+)
 
 
 @dataclass(frozen=True)
