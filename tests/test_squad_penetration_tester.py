@@ -24,7 +24,7 @@ class TestPenetrationTesterTools:
         from squad.penetration_tester import nuclei_scan_tool
 
         with patch(
-            "squad.penetration_tester.probes.run_nuclei",
+            "squad.penetration_tester.probes.external.run_nuclei",
             return_value=[raw_finding_low],
         ):
             result = nuclei_scan_tool.func([endpoint.model_dump(mode="json")], ["wordpress"])
@@ -35,7 +35,7 @@ class TestPenetrationTesterTools:
         from squad.penetration_tester import sqlmap_tool
 
         with patch(
-            "squad.penetration_tester.probes.run_sqlmap",
+            "squad.penetration_tester.probes.injection.run_sqlmap",
             return_value=[raw_finding_low],
         ):
             result = sqlmap_tool.func([endpoint.model_dump(mode="json")])
@@ -51,7 +51,7 @@ class TestPenetrationTesterTools:
             patch("tools.workspace.runtime.run_dir", return_value=tmp_path),
             patch("squad.penetration_tester._decorator.http.set_programme") as mhttp,
             patch(
-                "squad.penetration_tester.probes.check_cookies",
+                "squad.penetration_tester.probes.headers.check_cookies",
                 return_value=[raw_finding_low],
             ),
         ):
@@ -69,7 +69,7 @@ class TestPenetrationTesterTools:
             patch("tools.workspace.runtime.run_dir", return_value=tmp_path),
             patch("squad.penetration_tester._decorator.http.set_programme"),
             patch(
-                "squad.penetration_tester.probes.check_cors_misconfiguration",
+                "squad.penetration_tester.probes.headers.check_cors_misconfiguration",
                 return_value=[raw_finding_low],
             ),
         ):
@@ -86,7 +86,7 @@ class TestPenetrationTesterTools:
             patch("tools.workspace.runtime.run_dir", return_value=tmp_path),
             patch("squad.penetration_tester._decorator.http.set_programme"),
             patch(
-                "squad.penetration_tester.probes.check_csrf",
+                "squad.penetration_tester.probes.headers.check_csrf",
                 return_value=[raw_finding_low],
             ),
         ):
@@ -98,7 +98,7 @@ class TestPenetrationTesterTools:
         from squad.penetration_tester import ssrf_probe_tool
 
         with patch(
-            "squad.penetration_tester.probes.check_ssrf",
+            "squad.penetration_tester.probes.network.check_ssrf",
             return_value=[raw_finding_low],
         ):
             result = ssrf_probe_tool.func([endpoint.model_dump(mode="json")], None)
@@ -114,7 +114,7 @@ class TestPenetrationTesterTools:
             patch("tools.workspace.runtime.run_dir", return_value=tmp_path),
             patch("squad.penetration_tester._decorator.http.set_programme"),
             patch(
-                "squad.penetration_tester.probes.check_header_injection",
+                "squad.penetration_tester.probes.headers.check_header_injection",
                 return_value=[raw_finding_low],
             ),
         ):
@@ -131,7 +131,7 @@ class TestPenetrationTesterTools:
             patch("tools.workspace.runtime.run_dir", return_value=tmp_path),
             patch("squad.penetration_tester._decorator.http.set_programme"),
             patch(
-                "squad.penetration_tester.probes.check_host_headers",
+                "squad.penetration_tester.probes.headers.check_host_headers",
                 return_value=[raw_finding_low],
             ),
         ):
