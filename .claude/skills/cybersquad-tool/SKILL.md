@@ -18,17 +18,19 @@ from squad import cyber_tool
 class _S3CheckArgs(BaseModel):
     """Explicit args_schema for the S3 Bucket Check tool."""
 
-    recon_path: str = Field(
+    hostnames: list[Hostname] = Field(
         description=(
-            "Relative path to recon.json in the run directory. Buckets are"
-            " derived from the programme handle and any S3 subdomains the"
-            " OSINT Analyst surfaced."
+            "S3 hostnames the OSINT Analyst surfaced in recon.subdomains"
+            " (matching ``*.s3.*.amazonaws.com``) or via cert"
+            " transparency / historical URLs. Probes each for public"
+            " listing or bare 200. The wrapper's scope filter drops"
+            " out-of-scope hostnames before any HTTP request."
         ),
     )
 
 
-@cyber_tool("S3 Bucket Check", args_schema=_S3CheckArgs)
-def s3_check_tool(recon_path: str) -> list[RawFinding]:
+@cyber_tool("S3 Bucket Check", args_schema=_S3CheckArgs, scope_filter=("hostnames", filter_in_scope))
+def s3_check_tool(hostnames: list[Hostname]) -> list[RawFinding]:
     ...
 ```
 
@@ -46,6 +48,8 @@ Rules:
 Specialist wrappers compose on top of `@cyber_tool`: `@pentest_tool` (pentest probes - layers OWASP categories from `check_fn.owasp_categories` into the docstring) and `@research_brief_tool` (Vulnerability Researcher - layers `PROBE_VOCABULARY` and `RECON_EVIDENCE_KINDS`) both call `cyber_tool` underneath and pass `args_schema=` through.
 
 ### Scope guards belong on the wrapper, not in the body
+
+The pipeline split this discipline supports: **PM transcribes scope** (from H1's programme detail into a `Programme` snapshot at `<run_dir>/programme.json`); **OSINT inventories the surface** (the discovered hostnames / endpoints in `recon.json` are already filtered through `filter_in_scope` against `programme.in_scope`); **PT attacks the inventoried surface** (every wrapper-level `scope_filter` is a defence-in-depth re-check on the agent's pick, against the same `programme.in_scope`). The PT never invents targets; it only attacks what OSINT inventoried. Wrappers that fuzz / guess / enumerate beyond OSINT's inventory belong in policy-gated high-risk tooling (see #65 and #67 for the precedent), not in the unconditional probe surface.
 
 Any tool that takes an agent-supplied target (hostname, endpoint, URL) and runs an external scan / attack against it declares the guard on the decorator, not inline in the body:
 
@@ -191,6 +195,7 @@ Dependency layers flow `primitives -> finding -> h1 -> asset`; modules import on
 - New workspace writer with no typed reader.
 - `from squad.workspace_tools import ...` in a consumer instead of `from squad import ...` - the re-export exists so the import path stays stable when shared tools move.
 - Inline scope dance in a tool body that takes agent-supplied targets (the `_load_programme + filter_in_scope` pattern). Lift it onto the decorator via `scope_filter=(field_name, filter_fn)` so the guarantee lives at the wrapper site.
+- Fuzzing or guessing customer cloud-tenant names / bucket names / account names to probe `*.s3.amazonaws.com`, `*.blob.core.windows.net`, or any other third-party infrastructure. The PT only attacks what OSINT inventoried in `recon.subdomains` / `recon.endpoints`; if a candidate name isn't there, OSINT didn't surface it through legitimate discovery (DNS / cert transparency / historical URLs) and the PT can't fabricate it. High-risk post-discovery exploitation that goes beyond OSINT's inventory (credential checks against discovered panels, brute-force, ...) is policy-gated; see #65 (default credential checks) and #67 (credential stuffing) for the canonical pattern (programme-policy parser confirms authorisation, hard per-target cap enforced in code, full rate-limiter respected).
 - A new `programme_handle: str` field on an args_schema for a tool whose body would only thread it into `current_programme()` or `filter_in_scope`. Workspace state (`runtime.programme_handle` / `<run_dir>/programme.json`) is the contract; the per-call handle is duplication.
 - Direct assignment to `runtime.programme_handle` or `runtime.run_id`. Use the `runtime.bind_programme(...)` / `runtime.bind_run_id(...)` setters - they enforce the single-pipeline-at-a-time invariant by raising on a conflicting rebind (same-value rebind is a no-op for retries and tests). Reads stay on the module attribute. The invariant is load-bearing for the planned Flow refactor in #128 where parallel sub-flows would otherwise silently stomp each other's run folders.
 
@@ -198,7 +203,7 @@ Dependency layers flow `primitives -> finding -> h1 -> asset`; modules import on
 
 These rules apply to every agent's `@cyber_tool` / `@pentest_tool` / `@research_brief_tool` wrappers, not just the pentester's.
 
-- `squad/penetration_tester/__init__.py` and `squad/osint_analyst/__init__.py` are the largest reference surfaces. Each wrapper carries an explicit `_<ToolName>Args` schema directly above the decorator with `Field(description=...)` on every field. Pentest probes (`ssrf_probe_tool`, `idor_probe_tool`) are the shortest StrEnum examples; cloud / infra wrappers (`s3_check_tool`, `mongodb_tool`) show the bare `recon_path: str`; OSINT (`probe_hostnames_tool`, `annotate_host_tool`) show `Hostname` composition.
+- `squad/penetration_tester/__init__.py` and `squad/osint_analyst/__init__.py` are the largest reference surfaces. Each wrapper carries an explicit `_<ToolName>Args` schema directly above the decorator with `Field(description=...)` on every field. Pentest probes (`ssrf_probe_tool`, `idor_probe_tool`) are the shortest StrEnum examples; cloud / infra wrappers (`s3_check_tool`, `mongodb_tool`, `grafana_port_check_tool`) show `list[Hostname]` + `scope_filter=("hostnames", filter_in_scope)`; path-style cloud wrappers (`sensitive_files_tool`, `grafana_path_check_tool`, `azure_sas_token_check_tool`) show `list[Endpoint]` + `scope_filter=("endpoints", filter_endpoints_in_scope)`; OSINT (`probe_hostnames_tool`, `annotate_host_tool`) show `Hostname` composition with normalisation on top of the filter.
 - `squad/penetration_tester/__init__.py` `recon_endpoints_tool` returns `EndpointPage` - the canonical typed-return example. The wrapper lives on PT but reads OSINT's recon output, so the pattern is cross-agent.
 - `squad/workspace_tools.py` `read_attack_plan_tool` returns `AttackPlan` - mirror this shape on any new workspace reader (typed return, no `dict`).
 - The workspace-handle string family demonstrates the `str` exception (writer returns the filename, next agent passes it to a typed reader):

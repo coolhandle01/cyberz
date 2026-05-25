@@ -1,4 +1,13 @@
-"""AWS S3 bucket misconfiguration checks."""
+"""AWS S3 bucket misconfiguration checks.
+
+We probe S3 hostnames OSINT actually surfaced through legitimate
+discovery (DNS / cert transparency / historical URLs). No bucket-name
+fuzzing - guessing customer cloud-tenant names is not in-scope
+behaviour. High-risk post-discovery exploitation that goes beyond
+OSINT's inventory (credential checks against discovered panels,
+brute-force, ...) belongs in the policy-gated tooling tracked in #65
+and #67.
+"""
 
 from __future__ import annotations
 

@@ -1,12 +1,14 @@
 """
-tests/test_squad_penetration_tester.py - exercise a representative sample of
-the @tool wrappers on the Penetration Tester.
+tests/test_squad_penetration_tester.py - exercise the @tool wrappers on
+the Penetration Tester.
 
-42 tools live on this agent; the bodies are near-identical thin wrappers, so a
-representative sample is enough for regression value without inflating the
-test suite to no benefit. The wrappers unmarshal JSON, call into tools/*
-helpers, and serialise the result; the underlying helpers are exercised in
-their own dedicated test files.
+Roughly 55 tools live on this agent; the bodies are near-identical thin
+wrappers, so the per-wrapper bespoke tests at the top cover the unique
+shapes (probes that mock specific helpers) and the parametrize tables
+further down (``TestHostnameWrapperPassThrough`` and
+``TestEndpointWrapperPassThrough``) cover every typed cloud wrapper for
+the wrapper-level scope-filter + helper-forwarding contract at once.
+The underlying helpers are exercised in their own dedicated test files.
 """
 
 from __future__ import annotations
@@ -152,24 +154,34 @@ class TestPenetrationTesterTools:
         assert result.hosts == recon_result.open_ports
 
 
-# Hostname-passing cloud wrappers (Path B): the wrapper-level
-# ``scope_filter`` runs against the supplied hostnames, then the body
-# either iterates (databases call ``check_X(host)`` per host) or
-# forwards the list (panels / dashboards / consul / storage call
-# ``check_X(hostnames)`` once). Both shapes are covered here; the
-# pass-through assertion below accepts either positional shape.
-_HOSTNAME_PASSING_CLOUD_WRAPPERS: list[tuple[str, str]] = [
-    ("s3_check_tool", "squad.penetration_tester.cloud.storage.check_s3_buckets"),
-    (
-        "azure_blob_container_check_tool",
-        "squad.penetration_tester.cloud.storage.check_azure_blob_containers",
-    ),
+# Hostname-passing cloud wrappers split by body shape: each takes
+# ``list[Hostname]`` and scope-filters at the wrapper, but the body
+# differs in how it forwards to ``check_X``.
+#
+# - Iterating: the databases call ``check_X(host)`` per host inside a
+#   loop. When the filtered list is empty, ``check_X`` is never called.
+# - List-passing: panels / dashboards / consul / storage call
+#   ``check_X(hostnames)`` once with the whole list. The downstream
+#   helper handles empty internally - the per-hostname HTTP probe
+#   never fires - but ``check_X`` itself IS called with ``[]``.
+#
+# Splitting per body shape lets each parametrize assert exactly what
+# the body does, rather than a both-shapes "or" assertion.
+_HOSTNAME_PASSING_ITERATING_WRAPPERS: list[tuple[str, str]] = [
     ("elasticsearch_tool", "squad.penetration_tester.cloud.databases.check_elasticsearch"),
     ("couchdb_tool", "squad.penetration_tester.cloud.databases.check_couchdb"),
     ("redis_tool", "squad.penetration_tester.cloud.databases.check_redis"),
     ("mongodb_tool", "squad.penetration_tester.cloud.databases.check_mongodb"),
     ("postgresql_tool", "squad.penetration_tester.cloud.databases.check_postgresql"),
     ("mysql_tool", "squad.penetration_tester.cloud.databases.check_mysql"),
+]
+
+_HOSTNAME_PASSING_LIST_WRAPPERS: list[tuple[str, str]] = [
+    ("s3_check_tool", "squad.penetration_tester.cloud.storage.check_s3_buckets"),
+    (
+        "azure_blob_container_check_tool",
+        "squad.penetration_tester.cloud.storage.check_azure_blob_containers",
+    ),
     ("cpanel_tool", "squad.penetration_tester.cloud.panels.check_cpanel"),
     ("plesk_tool", "squad.penetration_tester.cloud.panels.check_plesk"),
     ("directadmin_tool", "squad.penetration_tester.cloud.panels.check_directadmin"),
@@ -187,18 +199,81 @@ _HOSTNAME_PASSING_CLOUD_WRAPPERS: list[tuple[str, str]] = [
 ]
 
 
-class TestHostnameWrapperPassThrough:
-    """Each hostname-passing cloud wrapper scope-filters the typed
-    ``list[Hostname]`` and forwards the survivors to ``check_X``. The
-    body shape is one of two: panels / dashboards / consul call the
-    helper once with the whole list; databases iterate per-host. This
-    class pins the wrapper-level pass-through and the scope-filter
-    guard for all 14 at once."""
+def _resolve_check_fn(check_fn_path: str) -> tuple[object, str]:
+    import importlib
+
+    module_path, attr = check_fn_path.rsplit(".", 1)
+    return importlib.import_module(module_path), attr
+
+
+class TestHostnameIteratingWrappers:
+    """Databases iterate the supplied hostnames and call
+    ``check_X(host)`` per host. The wrapper-level scope_filter drops
+    OOS hosts before the loop body runs, so on an empty filtered list
+    the loop is a no-op and ``check_X`` is never called."""
 
     @pytest.mark.parametrize(
         ("tool_name", "check_fn_path"),
-        _HOSTNAME_PASSING_CLOUD_WRAPPERS,
-        ids=[name.removesuffix("_tool") for name, _ in _HOSTNAME_PASSING_CLOUD_WRAPPERS],
+        _HOSTNAME_PASSING_ITERATING_WRAPPERS,
+        ids=[name.removesuffix("_tool") for name, _ in _HOSTNAME_PASSING_ITERATING_WRAPPERS],
+    )
+    def test_wrapper_calls_check_fn_per_in_scope_host(
+        self,
+        tool_name: str,
+        check_fn_path: str,
+        programme_in_workspace,
+        raw_finding_low,
+        target_apex: str,
+    ) -> None:
+        import squad.penetration_tester as pt_module
+
+        wrapper = getattr(pt_module, tool_name)
+        in_scope_host = f"api.{target_apex}"
+
+        check_module, check_attr = _resolve_check_fn(check_fn_path)
+        with patch.object(check_module, check_attr, return_value=[raw_finding_low]) as mcheck:
+            result = wrapper.func([in_scope_host])
+
+        assert result == [raw_finding_low]
+        mcheck.assert_called_once_with(in_scope_host)
+
+    @pytest.mark.parametrize(
+        ("tool_name", "check_fn_path"),
+        _HOSTNAME_PASSING_ITERATING_WRAPPERS,
+        ids=[name.removesuffix("_tool") for name, _ in _HOSTNAME_PASSING_ITERATING_WRAPPERS],
+    )
+    def test_wrapper_skips_check_fn_when_all_hosts_out_of_scope(
+        self,
+        tool_name: str,
+        check_fn_path: str,
+        programme_in_workspace,
+        bystander_url: str,
+    ) -> None:
+        from urllib.parse import urlparse
+
+        import squad.penetration_tester as pt_module
+
+        wrapper = getattr(pt_module, tool_name)
+        oos_host = urlparse(bystander_url).hostname
+
+        check_module, check_attr = _resolve_check_fn(check_fn_path)
+        with patch.object(check_module, check_attr, return_value=[]) as mcheck:
+            result = wrapper.func([oos_host])
+
+        assert result == []
+        mcheck.assert_not_called()
+
+
+class TestHostnameListPassingWrappers:
+    """Panels / dashboards / consul / storage call ``check_X(hostnames)``
+    once with the filtered list. When everything filters out, the
+    wrapper calls ``check_X([])`` - the helper handles empty internally
+    and no per-hostname HTTP probe fires."""
+
+    @pytest.mark.parametrize(
+        ("tool_name", "check_fn_path"),
+        _HOSTNAME_PASSING_LIST_WRAPPERS,
+        ids=[name.removesuffix("_tool") for name, _ in _HOSTNAME_PASSING_LIST_WRAPPERS],
     )
     def test_wrapper_forwards_in_scope_hostnames_to_check_fn(
         self,
@@ -208,56 +283,30 @@ class TestHostnameWrapperPassThrough:
         raw_finding_low,
         target_apex: str,
     ) -> None:
-        import importlib
-
         import squad.penetration_tester as pt_module
 
         wrapper = getattr(pt_module, tool_name)
         in_scope_host = f"api.{target_apex}"
 
-        check_module_path, check_attr = check_fn_path.rsplit(".", 1)
-        check_module = importlib.import_module(check_module_path)
+        check_module, check_attr = _resolve_check_fn(check_fn_path)
         with patch.object(check_module, check_attr, return_value=[raw_finding_low]) as mcheck:
             result = wrapper.func([in_scope_host])
 
         assert result == [raw_finding_low]
-        mcheck.assert_called()
-        # The body either iterates per-host (databases) or passes the
-        # list (panels / dashboards / consul); both shapes carry the
-        # in-scope host as the first positional arg.
-        call_arg = mcheck.call_args[0][0]
-        if isinstance(call_arg, list):
-            assert call_arg == [in_scope_host]
-        else:
-            assert call_arg == in_scope_host
+        mcheck.assert_called_once_with([in_scope_host])
 
     @pytest.mark.parametrize(
         ("tool_name", "check_fn_path"),
-        _HOSTNAME_PASSING_CLOUD_WRAPPERS,
-        ids=[name.removesuffix("_tool") for name, _ in _HOSTNAME_PASSING_CLOUD_WRAPPERS],
+        _HOSTNAME_PASSING_LIST_WRAPPERS,
+        ids=[name.removesuffix("_tool") for name, _ in _HOSTNAME_PASSING_LIST_WRAPPERS],
     )
-    def test_wrapper_drops_out_of_scope_hostnames(
+    def test_wrapper_calls_check_fn_with_empty_list_when_out_of_scope(
         self,
         tool_name: str,
         check_fn_path: str,
         programme_in_workspace,
         bystander_url: str,
     ) -> None:
-        """The wrapper-level ``scope_filter`` empties the list before the
-        body fires. Two body shapes here:
-
-        - Iterating bodies (databases) never call ``check_X`` once the
-          filtered list is empty.
-        - List-passing bodies (panels / dashboards / consul) still call
-          ``check_X([])`` because the helper accepts a hostname list and
-          handles empty internally - the per-hostname HTTP probe never
-          fires.
-
-        The contract being tested is the same in both shapes: no probe
-        fires against the OOS host. Asserts on the result and on the
-        absence of an OOS-carrying call.
-        """
-        import importlib
         from urllib.parse import urlparse
 
         import squad.penetration_tester as pt_module
@@ -265,17 +314,17 @@ class TestHostnameWrapperPassThrough:
         wrapper = getattr(pt_module, tool_name)
         oos_host = urlparse(bystander_url).hostname
 
-        check_module_path, check_attr = check_fn_path.rsplit(".", 1)
-        check_module = importlib.import_module(check_module_path)
+        check_module, check_attr = _resolve_check_fn(check_fn_path)
         with patch.object(check_module, check_attr, return_value=[]) as mcheck:
             result = wrapper.func([oos_host])
 
         assert result == []
-        for call in mcheck.call_args_list:
-            args = call.args[0] if call.args else None
-            assert args in ([], None), (
-                f"{tool_name}: scope_filter let the OOS host reach check_X; got call args {args!r}"
-            )
+        mcheck.assert_called_once_with([])
+        # Sanity-check: the OOS host never reached the helper.
+        passed = mcheck.call_args[0][0]
+        assert oos_host not in passed, (
+            f"{tool_name}: scope_filter let the OOS host reach check_X; got {passed!r}"
+        )
 
 
 _ENDPOINT_DRIVEN_CLOUD_WRAPPERS: list[tuple[str, str]] = [

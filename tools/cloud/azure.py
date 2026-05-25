@@ -1,4 +1,15 @@
-"""Azure Blob Storage misconfiguration checks."""
+"""Azure Blob Storage misconfiguration checks.
+
+We probe Azure Blob hostnames OSINT actually surfaced through
+legitimate discovery (DNS / cert transparency / historical URLs). No
+account-name fuzzing - guessing customer Azure-tenant names is not
+in-scope behaviour. The canonical container-name list iterated against
+each discovered hostname is the well-known Azure-pattern set
+(equivalent to the canonical ``/admin`` paths probed against
+discovered web origins), not customer-name guessing. High-risk
+post-discovery exploitation that goes beyond OSINT's inventory
+belongs in the policy-gated tooling tracked in #65 and #67.
+"""
 
 from __future__ import annotations
 
