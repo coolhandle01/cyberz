@@ -43,48 +43,50 @@ mkdir -p "$state_dir"
 # layer on top. Each branch is independent so a path can match more than one.
 matches=()
 
+# Tool wrappers - generic -> specialist stacks so the specialist
+# appears later (more prominent) in context.
 case "$file_path" in
     */squad/__init__.py|*/squad/workspace_tools.py|*/squad/*/__init__.py)
         matches+=(cybersquad-tool)
         ;;
 esac
-
 case "$file_path" in
     */tools/pentest/*|*/squad/penetration_tester/__init__.py)
         matches+=(cybersquad-pentest-tool)
         ;;
 esac
 
-case "$file_path" in
-    */tests/*)
-        matches+=(cybersquad-test-fixtures)
-        ;;
-esac
-
-case "$file_path" in
-    */tests/features/*|*/tests/bdd/*)
-        matches+=(cybersquad-bdd)
-        ;;
-esac
-
-case "$file_path" in
-    */crew.py)
-        matches+=(cybersquad-agent-llm)
-        ;;
-esac
-
+# Pipeline plumbing - one skill per file; no stacking.
 case "$file_path" in
     */runtime.py|*/main.py)
         matches+=(cybersquad-runtime)
         ;;
 esac
-
+case "$file_path" in
+    */crew.py)
+        matches+=(cybersquad-agent-llm)
+        ;;
+esac
 case "$file_path" in
     */tasks.py)
         matches+=(cybersquad-task)
         ;;
 esac
 
+# Tests - generic -> specialist stacks so BDD-specific guidance lands
+# on top of the shared-fixture catalogue for BDD edits.
+case "$file_path" in
+    */tests/*)
+        matches+=(cybersquad-test-fixtures)
+        ;;
+esac
+case "$file_path" in
+    */tests/features/*|*/tests/bdd/*)
+        matches+=(cybersquad-bdd)
+        ;;
+esac
+
+# Agent-facing prose (runtime CrewAI sees these, not Claude).
 case "$file_path" in
     */squad/skills/*/SKILL.md \
     |*/squad/*/skills/*/SKILL.md \
