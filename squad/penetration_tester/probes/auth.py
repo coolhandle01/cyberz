@@ -91,13 +91,12 @@ class _JwtCheckArgs(BaseModel):
     )
     endpoint: Endpoint = Field(
         description=(
-            "Endpoint object covering the URL that validates the JWT -"
-            " should return 401 / 403 without a valid token and 200 on"
-            " success. Use the endpoint where the token was first"
-            " observed (e.g. /api/profile, /api/me, /dashboard). Typed"
-            " ``Endpoint`` so the agent passes the full recon shape and"
-            " the validator rejects malformed URLs upstream of the JWT"
-            " replay; the wrapper extracts ``.url`` for ``check_jwt``."
+            "Endpoint that validates the JWT - one that returns 401 / 403"
+            " without a valid token and 200 on success. Use the endpoint"
+            " where the token was first observed (Authorization header"
+            " on /api/profile, /api/me, /dashboard, etc.). Pass the full"
+            " Endpoint shape from recon (``Recon Endpoints``); the URL"
+            " has to parse as HTTP/S."
         ),
     )
     attacks: list[JwtAttack] | None = Field(

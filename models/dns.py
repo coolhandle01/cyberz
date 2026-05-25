@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from models.primitives import Hostname
+
 
 class TakeoverCandidate(BaseModel):
     """A subdomain flagged as a potential takeover target.
@@ -22,7 +24,7 @@ class TakeoverCandidate(BaseModel):
         any A records. The CNAME target may have been deprovisioned.
     """
 
-    hostname: str
+    hostname: Hostname
     cname: str
     reason: str
     service: str | None = None

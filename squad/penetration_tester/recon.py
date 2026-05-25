@@ -50,10 +50,9 @@ def recon_subdomains_tool(recon_path: str, host_filter: str | None = None) -> li
     path you received from the OSINT Analyst. ``host_filter`` is a
     case-insensitive substring (e.g. "api" returns every subdomain containing
     "api"). Use this instead of reading recon.json directly when you only need
-    the subdomain list.
-
-    Returned as ``list[Hostname]``: each entry is RFC-1123 validated,
-    matching the OSINT Analyst's same-named slicer.
+    the subdomain list. Each returned hostname is ready to drop into the
+    port-specific probes (``Recon Open Ports``, ``Unauthenticated
+    Elasticsearch Check``, etc.) without further normalisation.
     """
     return [Hostname(h) for h in recon_subdomains(recon_path, host_filter=host_filter)]
 
@@ -163,13 +162,12 @@ class _PtReconOpenPortsArgs(BaseModel):
     host: Hostname | None = Field(
         default=None,
         description=(
-            "Optional bare hostname (RFC 1123, no scheme / port / path)"
-            " to restrict the open-port map to a single target. Useful"
-            " when deciding which port-specific probe to run against"
-            " one host (Elasticsearch on 9200, Redis on 6379, MongoDB"
-            " on 27017, etc.). The typed primitive rejects URLs and"
-            " ``host:port`` strings upstream of the wrapper. Omit"
-            " (None) to return the per-host map for every scanned host."
+            "Optional bare hostname to restrict the open-port map to a"
+            " single target - no scheme, no port suffix, no path. Useful"
+            " when deciding which port-specific probe to run against one"
+            " host (Elasticsearch on 9200, Redis on 6379, MongoDB on"
+            " 27017, etc.). Omit (None) to return the per-host map for"
+            " every scanned host."
         ),
     )
 

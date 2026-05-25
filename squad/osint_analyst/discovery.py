@@ -105,12 +105,9 @@ def recon_subdomains_tool(
     Return the in-scope subdomains in the OA's draft sweep. ``host_filter`` is
     a case-insensitive substring (e.g. "api" returns every subdomain
     containing "api"). Use this to inspect the sweep before deciding which
-    hosts to annotate.
-
-    Returned as ``list[Hostname]``: each entry is RFC-1123 validated, so
-    consumers see "validated hostnames" rather than "arbitrary strings"
-    and any malformed entry in the sweep refuses upstream of downstream
-    use (probe targeting, scope filtering).
+    hosts to annotate. Each returned hostname is ready to pass straight
+    into ``Annotate Host``, ``Probe Hostnames``, or ``Detect Takeover
+    Candidates`` - no further normalisation needed.
     """
     return [Hostname(h) for h in recon_subdomains(sweep_path, host_filter=host_filter)]
 
