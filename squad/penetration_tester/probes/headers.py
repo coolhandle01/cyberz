@@ -17,7 +17,7 @@ from tools.pentest.webapp_headers import check_header_injection, check_host_head
 
 
 class _CookieCheckArgs(BaseModel):
-    """Explicit args_schema for the Cookie Security Check tool (#143)."""
+    """Explicit args_schema for the Cookie Security Check tool."""
 
     recon_path: str = Field(
         description=(
@@ -47,7 +47,7 @@ def cookie_check_tool(recon_path: str) -> list[RawFinding]:
 
 
 class _CorsCheckArgs(BaseModel):
-    """Explicit args_schema for the CORS Misconfiguration Check tool (#143)."""
+    """Explicit args_schema for the CORS Misconfiguration Check tool."""
 
     recon_path: str = Field(
         description=(
@@ -74,7 +74,7 @@ def cors_check_tool(recon_path: str) -> list[RawFinding]:
 
 
 class _CsrfCheckArgs(BaseModel):
-    """Explicit args_schema for the CSRF Detection tool (#143)."""
+    """Explicit args_schema for the CSRF Detection tool."""
 
     recon_path: str = Field(
         description=(
@@ -115,7 +115,7 @@ def csrf_check_tool(recon_path: str) -> list[RawFinding]:
 
 
 class _HeaderInjectionArgs(BaseModel):
-    """Explicit args_schema for the Header Injection Check tool (#143)."""
+    """Explicit args_schema for the Header Injection Check tool."""
 
     recon_path: str = Field(
         description=(
@@ -141,7 +141,7 @@ def header_injection_tool(recon_path: str) -> list[RawFinding]:
 
 
 class _HostHeaderArgs(BaseModel):
-    """Explicit args_schema for the Host Header Attack Check tool (#143)."""
+    """Explicit args_schema for the Host Header Attack Check tool."""
 
     recon_path: str = Field(
         description=(
@@ -168,7 +168,7 @@ def host_header_tool(recon_path: str) -> list[RawFinding]:
 
 
 class _HppArgs(BaseModel):
-    """Explicit args_schema for the HTTP Parameter Pollution Probe tool (#143)."""
+    """Explicit args_schema for the HTTP Parameter Pollution Probe tool."""
 
     endpoints: list[Endpoint] = Field(
         description=(

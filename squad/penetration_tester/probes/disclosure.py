@@ -14,7 +14,7 @@ from tools.pentest.sri import check_sri
 
 
 class _SourceMapsArgs(BaseModel):
-    """Explicit args_schema for the JS Source Map Scan tool (#143)."""
+    """Explicit args_schema for the JS Source Map Scan tool."""
 
     recon_path: str = Field(
         description=(
@@ -42,7 +42,7 @@ def source_maps_tool(recon_path: str) -> list[RawFinding]:
 
 
 class _SriCheckArgs(BaseModel):
-    """Explicit args_schema for the Subresource Integrity Check tool (#143)."""
+    """Explicit args_schema for the Subresource Integrity Check tool."""
 
     recon_path: str = Field(
         description=(
@@ -68,7 +68,7 @@ def sri_check_tool(recon_path: str) -> list[RawFinding]:
 
 
 class _ErrorDisclosureArgs(BaseModel):
-    """Explicit args_schema for the Error and Stack Trace Disclosure Check tool (#143)."""
+    """Explicit args_schema for the Error and Stack Trace Disclosure Check tool."""
 
     endpoints: list[Endpoint] = Field(
         description=(

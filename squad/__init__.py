@@ -56,14 +56,14 @@ class SquadTool(Protocol):
     ``@pentest_tool``, ``@research_brief_tool`` - all produce CrewAI
     ``Tool`` instances that carry ``name``, ``description``, ``func``,
     and ``args_schema``. ``args_schema`` is part of the Protocol because
-    every cybersquad wrapper carries an explicit Pydantic schema post-
-    #150 (the universal sweep) - the contract tests in
-    ``tests/squad/<agent>/test_args_schemas.py`` walk it on every
-    registered tool. ``func`` is declared via ``@property`` (rather than
-    as a plain class attribute) so the Protocol is satisfied by CrewAI's
-    ``Tool`` model - its ``func`` field is typed ``Callable[P, R |
-    Awaitable[R]]`` for the concrete wrapped function and would
-    otherwise fail Protocol variance against ``Callable[..., object]``.
+    every cybersquad wrapper carries an explicit Pydantic schema; the
+    contract tests in ``tests/squad/<agent>/test_args_schemas.py`` walk
+    it on every registered tool. ``func`` is declared via ``@property``
+    (rather than as a plain class attribute) so the Protocol is
+    satisfied by CrewAI's ``Tool`` model - its ``func`` field is typed
+    ``Callable[P, R | Awaitable[R]]`` for the concrete wrapped function
+    and would otherwise fail Protocol variance against
+    ``Callable[..., object]``.
     """
 
     name: str
@@ -81,12 +81,9 @@ def cyber_tool(
 
     Equivalent to ``tool(name)`` except that ``args_schema`` is keyword-
     required: the explicit Pydantic class overrides the signature-inferred
-    schema CrewAI would otherwise build. Per #143/#146 (PT probes), #147
-    (PT cloud / infra), #148 (OSINT), #149 (H1 API), and #150 (the
-    final-pass sweep covering the VR / TA / workspace surface and the
-    last four PT recon / save wrappers), every cybersquad ``@tool``
-    wrapper carries one - the inferred path is no longer reachable
-    anywhere in the squad. Per-field ``Field(description=...)`` is the
+    schema CrewAI would otherwise build. Every cybersquad ``@tool``
+    wrapper carries one - the inferred path is not reachable anywhere
+    in the squad. Per-field ``Field(description=...)`` is the
     targeting guidance the agent reads when picking the tool.
 
     ``pentest_tool`` and ``research_brief_tool`` compose on top of this

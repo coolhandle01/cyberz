@@ -39,7 +39,7 @@ from tools.recon_insights import (
 
 
 class _OsintLookupCweArgs(BaseModel):
-    """Explicit args_schema for the OSINT Lookup CWE tool (#148)."""
+    """Explicit args_schema for the OSINT Lookup CWE tool."""
 
     query: str = Field(
         description=(
@@ -65,7 +65,7 @@ def lookup_cwe_tool(query: str) -> list[CWEEntry]:
 
 
 class _OsintLookupOwaspArgs(BaseModel):
-    """Explicit args_schema for the OSINT Lookup OWASP Guidance tool (#148)."""
+    """Explicit args_schema for the OSINT Lookup OWASP Guidance tool."""
 
     query: str = Field(
         description=(
@@ -88,7 +88,7 @@ def lookup_owasp_tool(query: str) -> list[OWASPEntry]:
 
 
 class _AnnotateHostArgs(BaseModel):
-    """Explicit args_schema for the Annotate Host tool (#148)."""
+    """Explicit args_schema for the Annotate Host tool."""
 
     hostname: Hostname = Field(
         description=(
@@ -194,7 +194,7 @@ def annotate_host_tool(
 
 
 class _UncoveredHostsArgs(BaseModel):
-    """Explicit args_schema for the Uncovered Hosts tool (#148)."""
+    """Explicit args_schema for the Uncovered Hosts tool."""
 
     sweep_path: str = Field(
         default="sweep.json",
@@ -221,7 +221,7 @@ def uncovered_hosts_tool(sweep_path: str = "sweep.json") -> list[str]:
 
 
 class _FinaliseReconArgs(BaseModel):
-    """Explicit args_schema for the Finalise Recon tool (#148)."""
+    """Explicit args_schema for the Finalise Recon tool."""
 
     programme_handle: str = Field(
         description=(

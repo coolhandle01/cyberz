@@ -26,7 +26,7 @@ from tools.pentest.xxe import XxePayload, check_xxe
 
 
 class _SqlmapArgs(BaseModel):
-    """Explicit args_schema for the SQLMap Injection Scan tool (#143)."""
+    """Explicit args_schema for the SQLMap Injection Scan tool."""
 
     endpoints: list[Endpoint] = Field(
         description=(
@@ -58,7 +58,7 @@ def sqlmap_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
 
 
 class _SstiArgs(BaseModel):
-    """Explicit args_schema for the Server-Side Template Injection Probe tool (#143)."""
+    """Explicit args_schema for the Server-Side Template Injection Probe tool."""
 
     endpoints: list[Endpoint] = Field(
         description=(
@@ -117,7 +117,7 @@ def ssti_probe_tool(
 
 
 class _PromptInjectionArgs(BaseModel):
-    """Explicit args_schema for the Prompt Injection Probe tool (#143)."""
+    """Explicit args_schema for the Prompt Injection Probe tool."""
 
     endpoints: list[Endpoint] = Field(
         description=(
@@ -172,7 +172,7 @@ def prompt_injection_tool(
 
 
 class _NosqliArgs(BaseModel):
-    """Explicit args_schema for the NoSQL Injection Scan tool (#143)."""
+    """Explicit args_schema for the NoSQL Injection Scan tool."""
 
     endpoints: list[Endpoint] = Field(
         description=(
@@ -204,7 +204,7 @@ def nosqli_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
 
 
 class _LdapInjectionArgs(BaseModel):
-    """Explicit args_schema for the LDAP Injection Probe tool (#143)."""
+    """Explicit args_schema for the LDAP Injection Probe tool."""
 
     endpoints: list[Endpoint] = Field(
         description=(
@@ -264,7 +264,7 @@ def ldap_injection_tool(
 
 
 class _CmdInjectionArgs(BaseModel):
-    """Explicit args_schema for the Command Injection Probe tool (#143)."""
+    """Explicit args_schema for the Command Injection Probe tool."""
 
     endpoints: list[Endpoint] = Field(
         description=(
@@ -325,7 +325,7 @@ def cmd_injection_tool(
 
 
 class _XxeArgs(BaseModel):
-    """Explicit args_schema for the XXE Probe tool (#143)."""
+    """Explicit args_schema for the XXE Probe tool."""
 
     endpoints: list[Endpoint] = Field(
         description=(
@@ -385,7 +385,7 @@ def xxe_probe_tool(
 
 
 class _PrototypePollutionArgs(BaseModel):
-    """Explicit args_schema for the Prototype Pollution Check tool (#143)."""
+    """Explicit args_schema for the Prototype Pollution Check tool."""
 
     endpoints: list[Endpoint] = Field(
         description=(

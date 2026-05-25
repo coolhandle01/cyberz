@@ -15,7 +15,7 @@ from tools.pentest.xss import check_reflected_xss
 
 
 class _HeaderXssArgs(BaseModel):
-    """Explicit args_schema for the Header XSS Probe tool (#143)."""
+    """Explicit args_schema for the Header XSS Probe tool."""
 
     endpoints: list[Endpoint] = Field(
         description=(
@@ -69,7 +69,7 @@ def header_xss_tool(
 
 
 class _PathTraversalArgs(BaseModel):
-    """Explicit args_schema for the Path Traversal Probe tool (#143)."""
+    """Explicit args_schema for the Path Traversal Probe tool."""
 
     endpoints: list[Endpoint] = Field(
         description=(
@@ -129,7 +129,7 @@ def path_traversal_tool(
 
 
 class _XssArgs(BaseModel):
-    """Explicit args_schema for the Reflected XSS Probe tool (#143)."""
+    """Explicit args_schema for the Reflected XSS Probe tool."""
 
     endpoints: list[Endpoint] = Field(
         description=(

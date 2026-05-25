@@ -15,11 +15,10 @@ in one hop.
 
 from __future__ import annotations
 
-# OWASPEntry moved to models/owasp.py per the typed-shapes-live-in-models
-# rule (review feedback on #150). Re-exported here so existing
-# ``from tools.owasp_data import OWASPEntry`` consumers keep working
-# without churn while the canonical import path becomes
-# ``from models import OWASPEntry`` / ``from models.owasp import OWASPEntry``.
+# OWASPEntry lives in models/owasp.py per the typed-shapes-live-in-
+# models rule. Re-exported here so existing ``from tools.owasp_data
+# import OWASPEntry`` consumers keep working; the canonical import
+# path is ``from models import OWASPEntry``.
 from models.owasp import OWASPEntry
 
 # Curated subset of the OWASP Cheat Sheet Series covering the vuln_class

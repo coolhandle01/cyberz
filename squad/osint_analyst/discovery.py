@@ -36,7 +36,7 @@ from tools.recon.scope import filter_in_scope as filter_in_scope_impl
 
 
 class _RunInitialSweepArgs(BaseModel):
-    """Explicit args_schema for the Run Initial Sweep tool (#148)."""
+    """Explicit args_schema for the Run Initial Sweep tool."""
 
     programme_handle: str = Field(
         description=(
@@ -75,7 +75,7 @@ def run_initial_sweep_tool(programme_handle: str) -> str:
 
 
 class _ReconSubdomainsArgs(BaseModel):
-    """Explicit args_schema for the OSINT Recon Subdomains tool (#148)."""
+    """Explicit args_schema for the OSINT Recon Subdomains tool."""
 
     sweep_path: str = Field(
         default="sweep.json",
@@ -113,7 +113,7 @@ def recon_subdomains_tool(
 
 
 class _ReconEndpointsArgs(BaseModel):
-    """Explicit args_schema for the OSINT Recon Endpoints tool (#148)."""
+    """Explicit args_schema for the OSINT Recon Endpoints tool."""
 
     sweep_path: str = Field(
         default="sweep.json",
@@ -186,7 +186,7 @@ def recon_endpoints_tool(
 
 
 class _ReconOpenPortsArgs(BaseModel):
-    """Explicit args_schema for the OSINT Recon Open Ports tool (#148)."""
+    """Explicit args_schema for the OSINT Recon Open Ports tool."""
 
     sweep_path: str = Field(
         default="sweep.json",
@@ -217,7 +217,7 @@ def recon_open_ports_tool(
 
 
 class _CertTransparencyArgs(BaseModel):
-    """Explicit args_schema for the Certificate Transparency Lookup tool (#148)."""
+    """Explicit args_schema for the Certificate Transparency Lookup tool."""
 
     domain: Hostname = Field(
         description=(
@@ -241,7 +241,7 @@ def cert_transparency_tool(domain: Hostname) -> list[str]:
 
 
 class _HistoricalUrlsArgs(BaseModel):
-    """Explicit args_schema for the Historical URL Discovery tool (#148)."""
+    """Explicit args_schema for the Historical URL Discovery tool."""
 
     domain: Hostname = Field(
         description=(
@@ -265,7 +265,7 @@ def historical_urls_tool(domain: Hostname) -> list[str]:
 
 
 class _LlmDetectionArgs(BaseModel):
-    """Explicit args_schema for the LLM Endpoint Detection tool (#148)."""
+    """Explicit args_schema for the LLM Endpoint Detection tool."""
 
     endpoints: list[Endpoint] = Field(
         description=(
@@ -295,7 +295,7 @@ def llm_detection_tool(endpoints: list[Endpoint]) -> list[LlmEndpoint]:
 
 
 class _ProbeHostnamesArgs(BaseModel):
-    """Explicit args_schema for the Probe Hostnames tool (#148)."""
+    """Explicit args_schema for the Probe Hostnames tool."""
 
     hostnames: list[Hostname] = Field(
         description=(
@@ -344,7 +344,7 @@ def probe_hostnames_tool(hostnames: list[Hostname], programme_handle: str) -> li
 
 
 class _DetectTakeoverCandidatesArgs(BaseModel):
-    """Explicit args_schema for the Detect Takeover Candidates tool (#148)."""
+    """Explicit args_schema for the Detect Takeover Candidates tool."""
 
     hostnames: list[Hostname] = Field(
         description=(

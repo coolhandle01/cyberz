@@ -46,7 +46,7 @@ def load_programme(programme_handle: str | None) -> Programme:
 
 
 class _ListRunFilesArgs(BaseModel):
-    """Explicit args_schema for the List Run Files tool (#150).
+    """Explicit args_schema for the List Run Files tool.
 
     The tool takes no parameters - the run directory is resolved from
     ``runtime.run_dir()`` at call time. The empty schema is still
@@ -66,7 +66,7 @@ def read_run_filelist_tool() -> list[RunFile]:
 
 
 class _ReadRunFileArgs(BaseModel):
-    """Explicit args_schema for the Read Run File tool (#150)."""
+    """Explicit args_schema for the Read Run File tool."""
 
     relative_path: str = Field(
         description=(
@@ -93,7 +93,7 @@ def read_run_file_tool(relative_path: str) -> RunFileContent:
 
 
 class _ReadAttackPlanArgs(BaseModel):
-    """Explicit args_schema for the Read Attack Plan tool (#150).
+    """Explicit args_schema for the Read Attack Plan tool.
 
     The tool takes no parameters - the attack plan path is resolved
     from ``runtime.run_dir()`` via ``attack_plan_path()`` at call

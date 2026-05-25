@@ -19,7 +19,7 @@ from squad import cyber_tool
 
 
 class _SaveFindingsArgs(BaseModel):
-    """Explicit args_schema for the PT's Save Findings tool (#150).
+    """Explicit args_schema for the PT's Save Findings tool.
 
     ``findings.json`` is the contract the VR's triage reads against;
     a mis-shaped findings list either refuses validation upstream

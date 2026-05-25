@@ -6,8 +6,8 @@ endpoints discovered, hostnames classified by role and priority, open
 ports per host, LLM-backed endpoint flags, and the bundled ``ReconResult``
 that wraps the lot for downstream agents.
 
-Hostname-typed fields compose the ``Hostname`` primitive (#152) so
-mis-shaped hostnames reject upstream of any downstream consumer rather
+Hostname-typed fields compose the ``Hostname`` primitive so mis-
+shaped hostnames reject upstream of any downstream consumer rather
 than silently flowing through the scope filter.
 """
 

@@ -16,12 +16,10 @@ import logging
 
 from pydantic import BaseModel
 
-# TakeoverCandidate moved to models/dns.py per the typed-shapes-live-in-
-# models rule (review feedback on #150). Re-exported below so existing
-# ``from tools.recon.dnsx import TakeoverCandidate`` consumers keep
-# working without churn while the canonical import path becomes
-# ``from models import TakeoverCandidate`` / ``from models.dns import
-# TakeoverCandidate``.
+# TakeoverCandidate lives in models/dns.py per the typed-shapes-live-
+# in-models rule. Re-exported here so existing ``from tools.recon.dnsx
+# import TakeoverCandidate`` consumers keep working; the canonical
+# import path is ``from models import TakeoverCandidate``.
 from models.dns import TakeoverCandidate
 from tools._helpers import _require_binary, _run
 

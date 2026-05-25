@@ -19,7 +19,7 @@ from tools.cloud import check_admin_panels, check_sensitive_files
 
 
 class _SensitiveFilesArgs(BaseModel):
-    """Explicit args_schema for the Sensitive Files Check tool (#147)."""
+    """Explicit args_schema for the Sensitive Files Check tool."""
 
     endpoints: list[Endpoint] = Field(
         description=(
@@ -49,7 +49,7 @@ def sensitive_files_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
 
 
 class _AdminPanelsArgs(BaseModel):
-    """Explicit args_schema for the Admin Panels Check tool (#147)."""
+    """Explicit args_schema for the Admin Panels Check tool."""
 
     endpoints: list[Endpoint] = Field(
         description=(

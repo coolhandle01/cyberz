@@ -15,7 +15,7 @@ from tools.cloud import check_azure_storage, check_s3_buckets
 
 
 class _S3CheckArgs(BaseModel):
-    """Explicit args_schema for the S3 Bucket Check tool (#147)."""
+    """Explicit args_schema for the S3 Bucket Check tool."""
 
     recon_path: str = Field(
         description=(
@@ -41,7 +41,7 @@ def s3_check_tool(recon_path: str) -> list[RawFinding]:
 
 
 class _AzureStorageCheckArgs(BaseModel):
-    """Explicit args_schema for the Azure Blob Storage Check tool (#147)."""
+    """Explicit args_schema for the Azure Blob Storage Check tool."""
 
     recon_path: str = Field(
         description=(

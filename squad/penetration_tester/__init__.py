@@ -137,7 +137,7 @@ from squad.penetration_tester.recon import (
 MEMBER = SquadMember(
     dir=Path(__file__).parent,
     tools=[
-        # @pentest_tool probes (#143 / #146)
+        # @pentest_tool probes
         nuclei_scan_tool,
         sqlmap_tool,
         cookie_check_tool,
@@ -163,7 +163,7 @@ MEMBER = SquadMember(
         prototype_pollution_tool,
         idor_probe_tool,
         jwt_check_tool,
-        # @cyber_tool cloud / infra (#147)
+        # @cyber_tool cloud / infra
         s3_check_tool,
         azure_storage_check_tool,
         elasticsearch_tool,
@@ -182,7 +182,7 @@ MEMBER = SquadMember(
         kibana_tool,
         portainer_tool,
         consul_vault_tool,
-        # PT recon slicers + Save Findings (#150 - final-pass sweep)
+        # PT recon slicers + Save Findings
         recon_subdomains_tool,
         recon_endpoints_tool,
         recon_open_ports_tool,

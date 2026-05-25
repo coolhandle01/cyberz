@@ -18,7 +18,7 @@ from tools.cloud import check_cpanel, check_directadmin, check_plesk, check_webm
 
 
 class _CpanelArgs(BaseModel):
-    """Explicit args_schema for the cPanel/WHM Check tool (#147)."""
+    """Explicit args_schema for the cPanel/WHM Check tool."""
 
     recon_path: str = Field(
         description=(
@@ -45,7 +45,7 @@ def cpanel_tool(recon_path: str) -> list[RawFinding]:
 
 
 class _PleskArgs(BaseModel):
-    """Explicit args_schema for the Plesk Check tool (#147)."""
+    """Explicit args_schema for the Plesk Check tool."""
 
     recon_path: str = Field(
         description=(
@@ -70,7 +70,7 @@ def plesk_tool(recon_path: str) -> list[RawFinding]:
 
 
 class _DirectadminArgs(BaseModel):
-    """Explicit args_schema for the DirectAdmin Check tool (#147)."""
+    """Explicit args_schema for the DirectAdmin Check tool."""
 
     recon_path: str = Field(
         description=(
@@ -93,7 +93,7 @@ def directadmin_tool(recon_path: str) -> list[RawFinding]:
 
 
 class _WebminArgs(BaseModel):
-    """Explicit args_schema for the Webmin Check tool (#147)."""
+    """Explicit args_schema for the Webmin Check tool."""
 
     recon_path: str = Field(
         description=(

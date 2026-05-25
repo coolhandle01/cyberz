@@ -11,9 +11,8 @@ contract test ensures the description is present and that the
 irreversibility wording survives any future rewording.
 
 The two shared workspace readers re-exported into the DC's registry
-(``List Run Files``, ``Read Run File``) gained explicit schemas via
-``squad.workspace_tools`` in #150 (the final-pass sweep); they are now
-part of the closed-world check below.
+(``List Run Files``, ``Read Run File``) are part of the closed-world
+check below.
 
 The wrappers do not call the H1 API at validation time - the existing
 H1 behavioural tests in ``test_tools.py`` keep their mocking; this
@@ -39,13 +38,12 @@ from squad.workspace_tools import (
 pytestmark = pytest.mark.unit
 
 
-# Tool-name -> explicit schema class. Covers every DC @cyber_tool wrapper
-# plus the two shared workspace readers swept in #150 (the final-pass
-# sweep that completed the args_schema discipline started in #143 / #146).
+# Tool-name -> explicit schema class. Covers every DC @cyber_tool
+# wrapper plus the two shared workspace readers.
 _DC_SCHEMAS: dict[str, type[BaseModel]] = {
     "Submit Report": _SubmitReportArgs,
     "Check H1 Duplicate": _CheckDuplicateArgs,
-    # Shared workspace wrappers (#150 - re-exported via squad.workspace_tools)
+    # Shared workspace wrappers (re-exported via squad.workspace_tools)
     "List Run Files": _ListRunFilesArgs,
     "Read Run File": _ReadRunFileArgs,
 }

@@ -18,7 +18,7 @@ from tools.recon.query import recon_endpoints, recon_open_ports, recon_subdomain
 
 
 class _PtReconSubdomainsArgs(BaseModel):
-    """Explicit args_schema for the PT's Recon Subdomains tool (#150)."""
+    """Explicit args_schema for the PT's Recon Subdomains tool."""
 
     recon_path: str = Field(
         description=(
@@ -58,7 +58,7 @@ def recon_subdomains_tool(recon_path: str, host_filter: str | None = None) -> li
 
 
 class _PtReconEndpointsArgs(BaseModel):
-    """Explicit args_schema for the PT's Recon Endpoints tool (#150)."""
+    """Explicit args_schema for the PT's Recon Endpoints tool."""
 
     recon_path: str = Field(
         description=(
@@ -148,7 +148,7 @@ def recon_endpoints_tool(
 
 
 class _PtReconOpenPortsArgs(BaseModel):
-    """Explicit args_schema for the PT's Recon Open Ports tool (#150)."""
+    """Explicit args_schema for the PT's Recon Open Ports tool."""
 
     recon_path: str = Field(
         description=(

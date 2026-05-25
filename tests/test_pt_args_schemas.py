@@ -1,33 +1,25 @@
 """
 tests/test_pt_args_schemas.py - contract tests for the explicit Pydantic
-``args_schema`` every Penetration Tester ``@cyber_tool`` / ``@pentest_tool``
-wrapper carries.
-
-Started life under #143/#146 covering the 25 ``@pentest_tool`` probes;
-#147 extended it to cover the 18 cloud / infra ``@cyber_tool`` wrappers on
-the same agent. Both decorators go through the same ``cyber_tool`` helper
-so the contract is identical: the schema class is hand-written, every
-field carries a non-empty ``description``, and ``args_schema`` on the
-registered ``Tool`` ``is`` (identity) the explicit class - not the
-title-cased one CrewAI synthesises from the function signature.
+``args_schema`` every Penetration Tester wrapper carries.
 
 The PT agent's tools hit live programmes; a mis-call costs money and
-noise. The ``args_schema`` is the per-tool contract the LLM is shown when
-picking the tool, so the rules below enforce three things in CI:
+noise. The ``args_schema`` is the per-tool contract the LLM is shown
+when picking the tool, so the rules below enforce three things in CI:
 
-  1. Every PT tool with a hand-written schema is in ``_PT_SCHEMAS``, and
-     every entry in ``_PT_SCHEMAS`` resolves to a registered tool with the
-     expected schema. Closed-world check: a new PT typed-tool added
-     without a mapping entry fires this test before review.
+  1. Every PT tool with a hand-written schema is in ``_PT_SCHEMAS``,
+     and every entry in ``_PT_SCHEMAS`` resolves to a registered tool
+     with the expected schema. Closed-world check: a new PT typed
+     tool added without a mapping entry fires this test before review.
   2. Every field on every schema carries a non-empty ``description`` -
-     the explicit path can address fields individually and the inferred
-     path cannot, so we make sure the new capability is actually used.
+     the explicit path can address fields individually and the
+     inferred path cannot, so we make sure the new capability is
+     actually used.
   3. Schemas with StrEnum filter parameters reject unknown values;
      required-field schemas reject missing fields. The contract is
      enforced upstream of any HTTP request.
 
-The existing behavioural tests (``test_ssrf.py``, ``test_idor.py`` etc.)
-cover probe behaviour separately and are unchanged.
+The behavioural tests (``test_ssrf.py``, ``test_idor.py`` etc.) cover
+probe behaviour separately.
 """
 
 from __future__ import annotations
@@ -97,10 +89,9 @@ pytestmark = pytest.mark.unit
 
 # Tool-name -> explicit schema class. Covers every PT @cyber_tool /
 # @pentest_tool wrapper, including the four recon / save tools and the
-# three shared workspace readers swept in #150 (the final-pass sweep
-# that completed the args_schema discipline started in #143 / #146).
+# three shared workspace readers.
 _PT_SCHEMAS: dict[str, type[BaseModel]] = {
-    # @pentest_tool probes (#143 / #146)
+    # @pentest_tool probes
     "Nuclei Scan": _NucleiScanArgs,
     "SQLMap Injection Scan": _SqlmapArgs,
     "Cookie Security Check": _CookieCheckArgs,
@@ -126,7 +117,7 @@ _PT_SCHEMAS: dict[str, type[BaseModel]] = {
     "Prototype Pollution Check": _PrototypePollutionArgs,
     "IDOR Probe": _IdorArgs,
     "JWT Vulnerability Check": _JwtCheckArgs,
-    # @cyber_tool cloud / infra wrappers (#147)
+    # @cyber_tool cloud / infra wrappers
     "S3 Bucket Check": _S3CheckArgs,
     "Azure Blob Storage Check": _AzureStorageCheckArgs,
     "Unauthenticated Elasticsearch Check": _ElasticsearchCheckArgs,
@@ -145,12 +136,12 @@ _PT_SCHEMAS: dict[str, type[BaseModel]] = {
     "Kibana Check": _KibanaArgs,
     "Portainer Check": _PortainerArgs,
     "Consul/Vault Check": _ConsulVaultArgs,
-    # PT recon / save wrappers (#150 - final-pass sweep)
+    # PT recon / save wrappers
     "Recon Subdomains": _PtReconSubdomainsArgs,
     "Recon Endpoints": _PtReconEndpointsArgs,
     "Recon Open Ports": _PtReconOpenPortsArgs,
     "Save Findings": _SaveFindingsArgs,
-    # Shared workspace wrappers (#150 - re-exported via squad.workspace_tools)
+    # Shared workspace wrappers (re-exported via squad.workspace_tools)
     "List Run Files": _ListRunFilesArgs,
     "Read Run File": _ReadRunFileArgs,
     "Read Attack Plan": _ReadAttackPlanArgs,
@@ -199,7 +190,7 @@ class TestPtArgsSchemaContracts:
         ids=sorted(_PT_SCHEMAS),
     )
     def test_every_field_has_description(self, tool_name: str, schema_cls: type[BaseModel]) -> None:
-        """Per #143 / #147: every field on every PT typed-tool schema carries a description."""
+        """Every field on every PT typed-tool schema carries a non-empty description."""
         for field_name, field_info in schema_cls.model_fields.items():
             desc = field_info.description
             assert desc, f"{tool_name}::{field_name} missing Field(description=...)"
@@ -275,7 +266,7 @@ class TestSchemaAcceptReject:
             (_HostHeaderArgs, {"recon_path": "recon.json"}),
             (_SourceMapsArgs, {"recon_path": "recon.json"}),
             (_SriCheckArgs, {"recon_path": "recon.json"}),
-            # @cyber_tool cloud / infra acceptance cases (#147)
+            # @cyber_tool cloud / infra acceptance cases
             (_S3CheckArgs, {"recon_path": "recon.json"}),
             (_AzureStorageCheckArgs, {"recon_path": "recon.json"}),
             (_ElasticsearchCheckArgs, {"recon_path": "recon.json"}),
@@ -294,7 +285,7 @@ class TestSchemaAcceptReject:
             (_KibanaArgs, {"recon_path": "recon.json"}),
             (_PortainerArgs, {"recon_path": "recon.json"}),
             (_ConsulVaultArgs, {"recon_path": "recon.json"}),
-            # PT recon / save acceptance cases (#150)
+            # PT recon / save acceptance cases
             (_PtReconSubdomainsArgs, {"recon_path": "recon.json"}),
             (_PtReconSubdomainsArgs, {"recon_path": "recon.json", "host_filter": "api"}),
             (_PtReconEndpointsArgs, {"recon_path": "recon.json"}),
@@ -316,7 +307,7 @@ class TestSchemaAcceptReject:
             # fixture-derived hostname makes test intent ("in-scope target")
             # readable at the call site rather than via an opaque literal.
             (_SaveFindingsArgs, {"findings": []}),
-            # Shared workspace acceptance cases (#150). List Run Files and
+            # Shared workspace acceptance cases. List Run Files and
             # Read Attack Plan take no parameters - the empty payload is the
             # canonical call.
             (_ListRunFilesArgs, {}),
@@ -386,7 +377,7 @@ class TestSchemaAcceptReject:
             _XssArgs,
             _HppArgs,
             _ErrorDisclosureArgs,
-            # @cyber_tool cloud wrappers that take endpoints (#147)
+            # @cyber_tool cloud wrappers that take endpoints
             _SensitiveFilesArgs,
             _AdminPanelsArgs,
         ],
@@ -407,7 +398,7 @@ class TestSchemaAcceptReject:
             _SourceMapsArgs,
             _SriCheckArgs,
             *_RECON_PATH_CLOUD_SCHEMAS,
-            # PT recon wrappers (#150) - all take a required ``recon_path``
+            # PT recon wrappers - all take a required ``recon_path``
             _PtReconSubdomainsArgs,
             _PtReconEndpointsArgs,
             _PtReconOpenPortsArgs,

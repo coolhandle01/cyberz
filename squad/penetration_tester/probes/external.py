@@ -15,7 +15,7 @@ from tools.pentest.nuclei import run_nuclei
 
 
 class _NucleiScanArgs(BaseModel):
-    """Explicit args_schema for the Nuclei Scan tool (#143)."""
+    """Explicit args_schema for the Nuclei Scan tool."""
 
     endpoints: list[Endpoint] = Field(
         description=(

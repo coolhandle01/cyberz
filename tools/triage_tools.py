@@ -57,10 +57,10 @@ _STALE_STEP = "observe the following evidence:"
 # Enumerations
 
 
-# SeverityDecision moved to models/triage.py per the typed-shapes-live-
-# in-models rule (review feedback on #150). Re-exported here so existing
-# ``from tools.triage_tools import SeverityDecision`` consumers keep
-# working without churn.
+# SeverityDecision lives in models/triage.py per the typed-shapes-live-
+# in-models rule. Re-exported here so existing ``from tools.triage_tools
+# import SeverityDecision`` consumers keep working; the canonical
+# import path is ``from models import SeverityDecision``.
 from models.triage import SeverityDecision  # noqa: E402
 
 

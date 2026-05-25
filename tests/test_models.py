@@ -266,12 +266,11 @@ class TestAttackPlanItem:
         assert item.expected_ceiling == Severity.MEDIUM
 
     def test_recon_evidence_strips_and_filters_empties(self, victim_url):
-        # The recon_evidence field carries a Pydantic field_validator
-        # (added in #150 when Finalise Research's args_schema gained a
-        # typed list[AttackPlanItem] contract): whitespace is trimmed off
-        # every entry, and empties are dropped. Every constructor (direct
-        # call, model_validate, model_validate_json on a re-loaded plan)
-        # sees the same cleaned list, so the wrapper does not need its
+        # The recon_evidence field carries a Pydantic field_validator:
+        # whitespace is trimmed off every entry, and empties are
+        # dropped. Every constructor (direct call, model_validate,
+        # model_validate_json on a re-loaded plan) sees the same
+        # cleaned list, so the wrapper does not need its
         # own defensive shaping and the persisted artefact never carries
         # whitespace-only entries.
         item = AttackPlanItem(

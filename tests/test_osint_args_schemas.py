@@ -3,23 +3,20 @@ tests/test_osint_args_schemas.py - contract tests for the explicit Pydantic
 ``args_schema`` every OSINT Analyst ``@cyber_tool`` wrapper carries.
 
 Sibling of ``test_pt_args_schemas.py``: same shape of structural and
-accept/reject checks, scoped to the OSINT Analyst's tool surface. Closes
-#148.
+accept / reject checks, scoped to the OSINT Analyst's tool surface.
 
 OSINT tools fire external recon (subfinder, httpx, nmap, testssl.sh,
-ffuf, crt.sh, waybackurls, dnsx, LLM endpoint detection) against in-scope
-hosts. The "live programmes, mis-call costs money" framing that motivated
-#143 / #146 / #147 applies identically here, plus a scope-leak risk that
-is specific to recon: a mis-targeted ``host_filter`` or wrong
-``host_contains`` substring can pull a sibling programme's endpoints
-into the run and silently corrupt every downstream stage. Filter-
-parameter discipline is the bulk of what the per-field descriptions are
-doing.
+ffuf, crt.sh, waybackurls, dnsx, LLM endpoint detection) against in-
+scope hosts. The "live programmes, mis-call costs money" framing
+applies here plus a recon-specific scope-leak risk: a mis-targeted
+``host_filter`` or wrong ``host_contains`` substring can pull a
+sibling programme's endpoints into the run and silently corrupt every
+downstream stage. Filter-parameter discipline is the bulk of what the
+per-field descriptions are doing.
 
 The two shared workspace readers re-exported into the OSINT Analyst's
-registry (``List Run Files``, ``Read Run File``) gained explicit
-schemas via ``squad.workspace_tools`` in #150 (the final-pass sweep);
-they are now part of the closed-world check below.
+registry (``List Run Files``, ``Read Run File``) are part of the
+closed-world check below.
 """
 
 from __future__ import annotations
@@ -56,9 +53,9 @@ pytestmark = pytest.mark.unit
 
 
 # Tool-name -> explicit schema class. Covers every OSINT @cyber_tool
-# wrapper plus the two shared workspace readers swept in #150 (the
-# final-pass sweep that completed the args_schema discipline started
-# in #143 / #146).
+# wrapper plus the two shared workspace readers re-exported via
+# ``squad.workspace_tools``. The shared ``Lookup CWE`` / ``Lookup OWASP
+# Guidance`` / ``Calculate CVSS Score`` wrappers are declared per-agent
 _OSINT_SCHEMAS: dict[str, type[BaseModel]] = {
     "Run Initial Sweep": _RunInitialSweepArgs,
     "Recon Subdomains": _ReconSubdomainsArgs,
@@ -74,7 +71,7 @@ _OSINT_SCHEMAS: dict[str, type[BaseModel]] = {
     "Annotate Host": _AnnotateHostArgs,
     "Uncovered Hosts": _UncoveredHostsArgs,
     "Finalise Recon": _FinaliseReconArgs,
-    # Shared workspace wrappers (#150 - re-exported via squad.workspace_tools)
+    # Shared workspace wrappers (re-exported via squad.workspace_tools)
     "List Run Files": _ListRunFilesArgs,
     "Read Run File": _ReadRunFileArgs,
 }
@@ -115,7 +112,7 @@ class TestOsintArgsSchemaContracts:
         ids=sorted(_OSINT_SCHEMAS),
     )
     def test_every_field_has_description(self, tool_name: str, schema_cls: type[BaseModel]) -> None:
-        """Per #148: every field on every OSINT typed-tool schema carries a description."""
+        """Every field on every OSINT typed-tool schema carries a non-empty description."""
         for field_name, field_info in schema_cls.model_fields.items():
             desc = field_info.description
             assert desc, f"{tool_name}::{field_name} missing Field(description=...)"
@@ -171,7 +168,7 @@ class TestSchemaAcceptReject:
             (_OsintLookupOwaspArgs, {"query": "csrf"}),
             (_UncoveredHostsArgs, {}),
             (_FinaliseReconArgs, {"programme_handle": "example"}),
-            # Shared workspace acceptance cases (#150). List Run Files takes
+            # Shared workspace acceptance cases. List Run Files takes
             # no parameters; Read Run File needs a relative path.
             (_ListRunFilesArgs, {}),
             (_ReadRunFileArgs, {"relative_path": "recon.json"}),
@@ -302,7 +299,7 @@ class TestSchemaAcceptReject:
         with pytest.raises(ValidationError):
             _AnnotateHostArgs.model_validate({**base, "priority": "urgent"})
 
-    # Hostname-typed fields (#148 review feedback). Every schema below
+    # Hostname-typed fields. Every schema below
     # carries at least one ``Hostname`` field; passing a URL / port / path
     # rejects upstream, before the scope filter sees the value.
     # test_models.py's TestHostname covers the validator exhaustively;

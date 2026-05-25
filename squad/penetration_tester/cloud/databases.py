@@ -25,7 +25,7 @@ from tools.cloud import (
 
 
 class _ElasticsearchCheckArgs(BaseModel):
-    """Explicit args_schema for the Unauthenticated Elasticsearch Check tool (#147)."""
+    """Explicit args_schema for the Unauthenticated Elasticsearch Check tool."""
 
     recon_path: str = Field(
         description=(
@@ -54,7 +54,7 @@ def elasticsearch_tool(recon_path: str) -> list[RawFinding]:
 
 
 class _CouchdbCheckArgs(BaseModel):
-    """Explicit args_schema for the Unauthenticated CouchDB Check tool (#147)."""
+    """Explicit args_schema for the Unauthenticated CouchDB Check tool."""
 
     recon_path: str = Field(
         description=(
@@ -82,7 +82,7 @@ def couchdb_tool(recon_path: str) -> list[RawFinding]:
 
 
 class _RedisCheckArgs(BaseModel):
-    """Explicit args_schema for the Unauthenticated Redis Check tool (#147)."""
+    """Explicit args_schema for the Unauthenticated Redis Check tool."""
 
     recon_path: str = Field(
         description=(
@@ -110,7 +110,7 @@ def redis_tool(recon_path: str) -> list[RawFinding]:
 
 
 class _MongodbCheckArgs(BaseModel):
-    """Explicit args_schema for the Unauthenticated MongoDB Check tool (#147)."""
+    """Explicit args_schema for the Unauthenticated MongoDB Check tool."""
 
     recon_path: str = Field(
         description=(
@@ -140,7 +140,7 @@ def mongodb_tool(recon_path: str) -> list[RawFinding]:
 
 
 class _PostgresqlCheckArgs(BaseModel):
-    """Explicit args_schema for the Exposed PostgreSQL Check tool (#147)."""
+    """Explicit args_schema for the Exposed PostgreSQL Check tool."""
 
     recon_path: str = Field(
         description=(
@@ -171,7 +171,7 @@ def postgresql_tool(recon_path: str) -> list[RawFinding]:
 
 
 class _MysqlCheckArgs(BaseModel):
-    """Explicit args_schema for the Exposed MySQL/MariaDB Check tool (#147)."""
+    """Explicit args_schema for the Exposed MySQL/MariaDB Check tool."""
 
     recon_path: str = Field(
         description=(

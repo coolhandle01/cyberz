@@ -94,7 +94,7 @@ def _load_workspace_schemas() -> dict[str, type[BaseModel]]:
 
 class TestWorkspaceArgsSchemas:
     """Contract tests for the shared workspace tools' explicit
-    ``args_schema`` classes (#150).
+    ``args_schema`` classes.
 
     The workspace wrappers are reachable from every agent's ``MEMBER.tools``;
     a mis-call costs a wrong artefact loaded (or the wrong agent reasoning

@@ -16,7 +16,7 @@ from tools.cloud import check_consul_vault
 
 
 class _ConsulVaultArgs(BaseModel):
-    """Explicit args_schema for the Consul/Vault Check tool (#147)."""
+    """Explicit args_schema for the Consul/Vault Check tool."""
 
     recon_path: str = Field(
         description=(

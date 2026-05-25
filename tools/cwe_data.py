@@ -19,11 +19,10 @@ slug from `tools/owasp_data.py`.
 
 from __future__ import annotations
 
-# CWEEntry moved to models/cwe.py per the typed-shapes-live-in-models rule
-# (review feedback on #150). Re-exported here so existing
-# ``from tools.cwe_data import CWEEntry`` consumers keep working without
-# churn while the canonical import path becomes ``from models import
-# CWEEntry`` / ``from models.cwe import CWEEntry``.
+# CWEEntry lives in models/cwe.py per the typed-shapes-live-in-models
+# rule. Re-exported here so existing ``from tools.cwe_data import
+# CWEEntry`` consumers keep working; the canonical import path is
+# ``from models import CWEEntry``.
 from models.cwe import CWEEntry
 
 # Catalogue. One entry per vuln_class the pentest stage can emit, plus a few

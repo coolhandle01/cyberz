@@ -34,13 +34,12 @@ import runtime
 from models import HostInsight, HostPriority, ReconResult
 from models.h1 import Programme
 
-# HostAnnotation / InsightValidationIssue / InsightValidationReport /
-# ReconFinalisationError moved to models/insight.py per the typed-shapes
-# -live-in-models rule (review feedback on #150). Re-exported here so
-# existing ``from tools.recon_insights import HostAnnotation`` consumers
-# keep working without churn while the canonical import path becomes
-# ``from models import HostAnnotation`` / ``from models.insight import
-# HostAnnotation``.
+# The insight shapes (HostAnnotation, InsightValidationIssue,
+# InsightValidationReport, ReconFinalisationError) live in
+# models/insight.py per the typed-shapes-live-in-models rule. Re-
+# exported here so existing ``from tools.recon_insights import X``
+# consumers keep working; the canonical import path is ``from models
+# import X``.
 from models.insight import (
     InsightValidationIssue,
     InsightValidationReport,

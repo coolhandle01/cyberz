@@ -18,7 +18,7 @@ from tools.cloud import check_grafana, check_kibana, check_portainer
 
 
 class _GrafanaArgs(BaseModel):
-    """Explicit args_schema for the Grafana Check tool (#147)."""
+    """Explicit args_schema for the Grafana Check tool."""
 
     recon_path: str = Field(
         description=(
@@ -44,7 +44,7 @@ def grafana_tool(recon_path: str) -> list[RawFinding]:
 
 
 class _KibanaArgs(BaseModel):
-    """Explicit args_schema for the Kibana Check tool (#147)."""
+    """Explicit args_schema for the Kibana Check tool."""
 
     recon_path: str = Field(
         description=(
@@ -70,7 +70,7 @@ def kibana_tool(recon_path: str) -> list[RawFinding]:
 
 
 class _PortainerArgs(BaseModel):
-    """Explicit args_schema for the Portainer Check tool (#147)."""
+    """Explicit args_schema for the Portainer Check tool."""
 
     recon_path: str = Field(
         description=(

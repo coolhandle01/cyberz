@@ -14,7 +14,7 @@ from tools.pentest.ssrf import SsrfPayload, check_ssrf
 
 
 class _SsrfArgs(BaseModel):
-    """Explicit args_schema for the SSRF Probe tool (#143)."""
+    """Explicit args_schema for the SSRF Probe tool."""
 
     endpoints: list[Endpoint] = Field(
         description=(
@@ -58,7 +58,7 @@ def ssrf_probe_tool(
 
 
 class _OpenRedirectArgs(BaseModel):
-    """Explicit args_schema for the Open Redirect Probe tool (#143)."""
+    """Explicit args_schema for the Open Redirect Probe tool."""
 
     endpoints: list[Endpoint] = Field(
         description=(

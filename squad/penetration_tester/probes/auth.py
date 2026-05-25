@@ -13,7 +13,7 @@ from tools.pentest.jwt import JwtAttack, check_jwt
 
 
 class _IdorArgs(BaseModel):
-    """Explicit args_schema for the IDOR Probe tool (#143)."""
+    """Explicit args_schema for the IDOR Probe tool."""
 
     endpoints: list[Endpoint] = Field(
         description=(
@@ -78,7 +78,7 @@ def idor_probe_tool(
 
 
 class _JwtCheckArgs(BaseModel):
-    """Explicit args_schema for the JWT Vulnerability Check tool (#143)."""
+    """Explicit args_schema for the JWT Vulnerability Check tool."""
 
     token: str = Field(
         description=(

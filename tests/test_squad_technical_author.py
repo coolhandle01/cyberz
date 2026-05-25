@@ -29,12 +29,10 @@ class TestTechnicalAuthorTools:
     def _good_authoring(**overrides):
         """Build the kwargs for ``draft_report_tool.func(...)``.
 
-        The wrapper now takes a typed ``AuthoredDraft`` (post-#150
-        review feedback driving the typed-model layer home), so the
-        authored fields are nested under ``authored`` while
-        ``finding_index`` / ``verified_path`` stay top-level.
-        ``overrides`` mutate authored fields when the key matches one,
-        top-level otherwise.
+        The wrapper takes a typed ``AuthoredDraft``, so the authored
+        fields are nested under ``authored`` while ``finding_index`` /
+        ``verified_path`` stay top-level. ``overrides`` mutate authored
+        fields when the key matches one, top-level otherwise.
         """
         authored: dict[str, object] = {
             "title": "SQL Injection in /search?q allows full database extraction",

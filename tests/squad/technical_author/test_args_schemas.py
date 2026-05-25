@@ -3,9 +3,7 @@ Contract tests for the Technical Author's explicit Pydantic
 ``args_schema`` classes - one of the per-agent test pairs (sibling
 under ``tests/squad/<agent>/test_args_schemas.py``).
 
-Closes the TA half of #150 - the final-pass sweep that completes the
-``args_schema`` discipline started in #143 / #146 for the Penetration
-Tester. The TA is internal-effect (it does not fire requests at live
+The TA is internal-effect (it does not fire requests at live
 programmes), but ``Draft Vulnerability Report`` is the longest
 authored contract on any agent and its quality gate is exactly what
 keeps unfilled / under-validated drafts out of the Disclosure
@@ -109,7 +107,7 @@ def _good_draft_kwargs() -> dict[str, object]:
     """Minimal valid kwargs for ``_DraftReportArgs``.
 
     Wraps the authored shape (``_good_authored_draft``) in the
-    ``authored`` field the post-#150 args_schema expects.
+    ``authored`` field the args_schema expects.
     """
     return {
         "finding_index": 0,
@@ -235,9 +233,9 @@ class TestSchemaAcceptReject:
     def test_draft_report_accepts_full_authored_shape(self) -> None:
         """``Draft Vulnerability Report`` accepts the canonical authored payload.
 
-        Post-#150 the authored content is the typed ``AuthoredDraft``
-        (in ``models.report``) nested under the args_schema's
-        ``authored`` field; the wrapper-side plumbing (finding_index,
+        The authored content is the typed ``AuthoredDraft`` (in
+        ``models.report``) nested under the args_schema's ``authored``
+        field; the wrapper-side plumbing (finding_index,
         verified_path) stays top-level.
         """
         instance = _DraftReportArgs.model_validate(_good_draft_kwargs())

@@ -26,7 +26,7 @@ from tools.workspace import resolve_run_path
 
 
 class _SanitiseEvidenceArgs(BaseModel):
-    """Explicit args_schema for the Sanitise Evidence tool (#150)."""
+    """Explicit args_schema for the Sanitise Evidence tool."""
 
     text: str = Field(
         description=(
@@ -60,7 +60,7 @@ def sanitise_evidence_tool(text: str) -> SanitisationReport:
 
 
 class _TaLookupCweArgs(BaseModel):
-    """Explicit args_schema for the TA's Lookup CWE tool (#150)."""
+    """Explicit args_schema for the TA's Lookup CWE tool."""
 
     query: str = Field(
         description=(
@@ -88,7 +88,7 @@ def lookup_cwe_tool(query: str) -> list[CWEEntry]:
 
 
 class _TaLookupOwaspArgs(BaseModel):
-    """Explicit args_schema for the TA's Lookup OWASP Guidance tool (#150)."""
+    """Explicit args_schema for the TA's Lookup OWASP Guidance tool."""
 
     query: str = Field(
         description=(
@@ -116,7 +116,7 @@ def lookup_owasp_tool(query: str) -> list[OWASPEntry]:
 
 
 class _TaCalculateCvssArgs(BaseModel):
-    """Explicit args_schema for the TA's Calculate CVSS Score tool (#150).
+    """Explicit args_schema for the TA's Calculate CVSS Score tool.
 
     Same vector format as on the VR's copy. ``Draft Vulnerability
     Report`` re-runs the compute and refuses if the declared score
@@ -150,7 +150,7 @@ def calculate_cvss_tool(vector: str) -> float:
 
 
 class _TaListProgrammeReportsArgs(BaseModel):
-    """Explicit args_schema for the TA's List Programme Reports tool (#150)."""
+    """Explicit args_schema for the TA's List Programme Reports tool."""
 
     programme_handle: str = Field(
         description=(
@@ -198,7 +198,7 @@ def list_programme_reports_tool(
 
 
 class _DraftReportArgs(BaseModel):
-    """Explicit args_schema for the Draft Vulnerability Report tool (#150).
+    """Explicit args_schema for the Draft Vulnerability Report tool.
 
     The LLM-authored content lives on ``AuthoredDraft`` (in
     ``models.report``) alongside the per-field descriptions; this
@@ -290,7 +290,7 @@ def draft_report_tool(
 
 
 class _FinaliseReportsArgs(BaseModel):
-    """Explicit args_schema for the TA's Finalise Reports tool (#150)."""
+    """Explicit args_schema for the TA's Finalise Reports tool."""
 
     programme_handle: str = Field(
         description=(
