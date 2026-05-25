@@ -49,7 +49,6 @@ Any tool that takes an agent-supplied target (hostname, endpoint, URL) and runs 
 
 ```python
 from squad import cyber_tool
-from squad.workspace_tools import current_programme  # noqa: F401  (loaded lazily)
 
 def _normalise_and_filter_hostnames(
     hostnames: list[Hostname], programme: Programme
