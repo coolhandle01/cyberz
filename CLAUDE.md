@@ -2,9 +2,19 @@
 
 **Read `CONTRIBUTING.md` first.** It carries the universal rules (ASCII only, minimal diff, preserve names and comments, linter findings as signal, FIXME/TODO grammar, surface concerns), the `Before you commit` CI parity stack, and the safety invariants. Everything below is AI-contributor-specific layered on top.
 
+## Before you start work on an issue
+
+The contributor skills below auto-load on the first matching edit, which is too late - by then you have already chosen an approach. Read the relevant skill at issue-scoping time so the conventions are in your head while you are still deciding what to build.
+
+Then ask: what canonical knowledge will this issue produce that does not yet live in a skill? Update the skill **first** - or at least sketch the update in this conversation - so the work that follows is the skill being applied, not the skill being discovered. By the time the code lands the skill update is part of the same PR, written by an expert against captured intent rather than documented after the fact.
+
 ## Commit messages
 
 Never include session URLs (`https://claude.ai/code/session_...`) in commit messages or PR bodies. They reference private conversations.
+
+## Pull requests
+
+After creating a PR via `mcp__github__create_pull_request`, subscribe to it with `mcp__github__subscribe_pr_activity` so review comments and CI events route into the conversation as `<github-webhook-activity>` messages. Default to subscribing; skip only when the user says the PR will not be reviewed in this session.
 
 ## Skills
 
