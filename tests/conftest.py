@@ -13,6 +13,8 @@ os.environ.setdefault("H1_API_USERNAME", "ci-user")
 os.environ.setdefault("H1_API_TOKEN", "ci-token")
 os.environ.setdefault("CYBERSQUAD_CONTACT_EMAIL", "ci@example.invalid")
 
+from collections.abc import Callable  # noqa: E402
+
 import pytest  # noqa: E402
 
 from models import (  # noqa: E402
@@ -256,6 +258,83 @@ def recon_result(programme, endpoint, target_apex: str) -> ReconResult:
         open_ports={f"api.{target_apex}": [80, 443]},
         technologies=["nginx", "React"],
         notes="Test recon result.",
+    )
+
+
+# Cloud-storage fixtures. Bucket / container names are built from the
+# second-level domain of ``target_apex`` so flipping ``target_url``
+# propagates through every cloud-storage test the same way it does for
+# every other in-scope-target literal. Factories rather than single
+# values where tests need variants (e.g. the "iterate every supplied
+# hostname" tests pass two distinct ones); single-value fixtures wrap
+# the factory at its canonical suffix for the common case. Mirrors the
+# ``make_html_page`` pattern further up the file.
+@pytest.fixture()
+def target_sld(target_apex: str) -> str:
+    """Second-level-domain prefix of ``target_apex`` (``example`` from
+    ``example.com``). Cloud bucket / account names take this rather
+    than the full apex - DNS labels in a bucket name cannot contain
+    the apex's dot, so the bare SLD is what carries cleanly into
+    ``<sld>-assets.s3...`` / ``<sld>storage.blob...``."""
+    return target_apex.split(".")[0]
+
+
+@pytest.fixture()
+def make_s3_hostname(target_sld: str) -> Callable[..., str]:
+    """Factory for in-scope-themed S3 hostnames.
+
+    ``make_s3_hostname("assets")`` -> ``"example-assets.s3.us-east-1.amazonaws.com"``;
+    ``make_s3_hostname()`` -> ``"example.s3.us-east-1.amazonaws.com"``.
+    Override ``region`` for variants.
+    """
+
+    def _make(suffix: str = "", *, region: str = "us-east-1") -> str:
+        bucket = f"{target_sld}-{suffix}" if suffix else target_sld
+        return f"{bucket}.s3.{region}.amazonaws.com"
+
+    return _make
+
+
+@pytest.fixture()
+def s3_hostname(make_s3_hostname: Callable[..., str]) -> str:
+    """Single canonical S3 hostname for the simple cases - the suite's
+    equivalent of ``target_url`` for AWS S3. Use ``make_s3_hostname``
+    when a test needs more than one or a non-default region."""
+    return make_s3_hostname("assets")
+
+
+@pytest.fixture()
+def make_azure_blob_hostname(target_sld: str) -> Callable[..., str]:
+    """Factory for in-scope-themed Azure Blob hostnames.
+
+    ``make_azure_blob_hostname("storage")`` ->
+    ``"examplestorage.blob.core.windows.net"``. Azure storage account
+    names are 3-24 lowercase alphanumeric (no hyphens), so the suffix
+    concatenates without a separator.
+    """
+
+    def _make(suffix: str = "") -> str:
+        account = f"{target_sld}{suffix}"
+        return f"{account}.blob.core.windows.net"
+
+    return _make
+
+
+@pytest.fixture()
+def azure_blob_hostname(make_azure_blob_hostname: Callable[..., str]) -> str:
+    """Single canonical Azure Blob hostname for the simple cases."""
+    return make_azure_blob_hostname("storage")
+
+
+@pytest.fixture()
+def azure_sas_endpoint(target_url: str) -> Endpoint:
+    """``Endpoint`` whose URL carries embedded Azure SAS-token query
+    parameters - the canonical positive case for
+    ``check_azure_sas_tokens``. Built on ``target_url`` so the host
+    is in-scope; the test exercises the query-string detection."""
+    return Endpoint(
+        url=(f"{target_url}/files/doc.pdf?sv=2021-01-01&se=2025-12-31&sr=b&sp=r&sig=abc123"),
+        status_code=200,
     )
 
 

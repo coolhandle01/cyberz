@@ -42,7 +42,7 @@ class TestCheckS3Buckets:
     no bucket-name guessing - we only probe assets the programme has
     exposed."""
 
-    def test_detects_publicly_listable_bucket(self):
+    def test_detects_publicly_listable_bucket(self, s3_hostname):
         listing_xml = (
             '<?xml version="1.0"?><ListBucketResult><Name>example</Name></ListBucketResult>'
         )
@@ -51,33 +51,33 @@ class TestCheckS3Buckets:
         mock_resp.text = listing_xml
 
         with patch("requests.get", return_value=mock_resp):
-            results = check_s3_buckets(["myapp-assets.s3.amazonaws.com"])
+            results = check_s3_buckets([s3_hostname])
 
         listable = [r for r in results if "Publicly Listable" in r.title]
         assert len(listable) == 1
         assert listable[0].severity_hint == Severity.HIGH
         assert listable[0].vuln_class == "CloudMisconfiguration"
-        assert listable[0].target == "https://myapp-assets.s3.amazonaws.com/"
+        assert listable[0].target == f"https://{s3_hostname}/"
 
-    def test_detects_publicly_accessible_bucket(self):
+    def test_detects_publicly_accessible_bucket(self, make_s3_hostname):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.text = "some non-listing content"
 
         with patch("requests.get", return_value=mock_resp):
-            results = check_s3_buckets(["myapp.s3.amazonaws.com"])
+            results = check_s3_buckets([make_s3_hostname()])
 
         accessible = [r for r in results if "Publicly Accessible" in r.title]
         assert len(accessible) == 1
         assert accessible[0].severity_hint == Severity.MEDIUM
 
-    def test_non_200_produces_no_finding(self):
+    def test_non_200_produces_no_finding(self, s3_hostname):
         mock_resp = MagicMock()
         mock_resp.status_code = 403
         mock_resp.text = "Access Denied"
 
         with patch("requests.get", return_value=mock_resp):
-            results = check_s3_buckets(["myapp.s3.amazonaws.com"])
+            results = check_s3_buckets([s3_hostname])
 
         assert results == []
 
@@ -88,7 +88,7 @@ class TestCheckS3Buckets:
         assert results == []
         mget.assert_not_called()
 
-    def test_iterates_every_supplied_hostname(self):
+    def test_iterates_every_supplied_hostname(self, make_s3_hostname):
         seen_urls: list[str] = []
 
         def recording_get(url, **kwargs):
@@ -98,19 +98,16 @@ class TestCheckS3Buckets:
             resp.text = "Denied"
             return resp
 
-        hostnames = [
-            "myapp-assets.s3.us-east-1.amazonaws.com",
-            "myapp-backup.s3.us-east-1.amazonaws.com",
-        ]
+        hostnames = [make_s3_hostname("assets"), make_s3_hostname("backup")]
         with patch("requests.get", side_effect=recording_get):
             check_s3_buckets(hostnames)
 
         for hostname in hostnames:
             assert any(hostname in u for u in seen_urls)
 
-    def test_network_exception_is_swallowed(self):
+    def test_network_exception_is_swallowed(self, s3_hostname):
         with patch("requests.get", side_effect=Exception("timeout")):
-            results = check_s3_buckets(["myapp.s3.amazonaws.com"])
+            results = check_s3_buckets([s3_hostname])
         assert results == []
 
 
@@ -122,14 +119,14 @@ class TestCheckAzureBlobContainers:
     recon; the canonical container-name list (``public``, ``assets``,
     ``static``, ...) is probed against each."""
 
-    def test_detects_publicly_listed_container(self):
+    def test_detects_publicly_listed_container(self, azure_blob_hostname):
         listing_xml = '<?xml version="1.0"?><EnumerationResults><Blobs/></EnumerationResults>'
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.text = listing_xml
 
         with patch("requests.get", return_value=mock_resp):
-            results = check_azure_blob_containers(["myappstorage.blob.core.windows.net"])
+            results = check_azure_blob_containers([azure_blob_hostname])
 
         listed = [r for r in results if "Publicly Listed" in r.title]
         assert len(listed) >= 1
@@ -142,7 +139,7 @@ class TestCheckAzureBlobContainers:
         assert results == []
         mget.assert_not_called()
 
-    def test_probes_every_supplied_hostname(self):
+    def test_probes_every_supplied_hostname(self, make_azure_blob_hostname):
         seen_urls: list[str] = []
 
         def recording_get(url, **kwargs):
@@ -152,19 +149,16 @@ class TestCheckAzureBlobContainers:
             resp.text = "Denied"
             return resp
 
-        hostnames = [
-            "myappstorage.blob.core.windows.net",
-            "myappassets.blob.core.windows.net",
-        ]
+        hostnames = [make_azure_blob_hostname("storage"), make_azure_blob_hostname("assets")]
         with patch("requests.get", side_effect=recording_get):
             check_azure_blob_containers(hostnames)
 
         for hostname in hostnames:
             assert any(hostname in u for u in seen_urls)
 
-    def test_network_exception_is_swallowed(self):
+    def test_network_exception_is_swallowed(self, azure_blob_hostname):
         with patch("requests.get", side_effect=Exception("timeout")):
-            results = check_azure_blob_containers(["myappstorage.blob.core.windows.net"])
+            results = check_azure_blob_containers([azure_blob_hostname])
         assert results == []
 
 
@@ -174,15 +168,9 @@ class TestCheckAzureBlobContainers:
 class TestCheckAzureSasTokens:
     """Static URL inspection - no HTTP requests fire."""
 
-    def test_detects_sas_token_in_endpoint_url(self):
-        sas_url = (
-            "https://corpassets.blob.core.windows.net/files/doc.pdf"
-            "?sv=2021-01-01&se=2025-12-31&sr=b&sp=r&sig=abc123"
-        )
-        endpoint = Endpoint(url=sas_url, status_code=200)
-
+    def test_detects_sas_token_in_endpoint_url(self, azure_sas_endpoint):
         with patch("requests.get") as mget:
-            results = check_azure_sas_tokens([endpoint])
+            results = check_azure_sas_tokens([azure_sas_endpoint])
 
         sas_findings = [r for r in results if "SAS Token" in r.title]
         assert len(sas_findings) == 1
@@ -190,8 +178,8 @@ class TestCheckAzureSasTokens:
         # Static URL inspection: never fires HTTP.
         mget.assert_not_called()
 
-    def test_clean_urls_produce_no_findings(self):
-        endpoint = Endpoint(url="https://app.example.com/files/doc.pdf?download=1", status_code=200)
+    def test_clean_urls_produce_no_findings(self, target_url):
+        endpoint = Endpoint(url=f"{target_url}/files/doc.pdf?download=1", status_code=200)
 
         with patch("requests.get") as mget:
             results = check_azure_sas_tokens([endpoint])

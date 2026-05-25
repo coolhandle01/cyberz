@@ -1,18 +1,16 @@
 """
-Cloud-storage exposure probes - S3 buckets and Azure Blob storage.
+Cloud-storage exposure probes:
 
-Each wrapper takes a typed target the agent picks from recon (the
-``*.s3.*.amazonaws.com`` / ``*.blob.core.windows.net`` hostnames the
-OSINT Analyst discovered, or the endpoints whose URLs contain SAS
-tokens) and a wrapper-level ``scope_filter`` drops anything outside
-the selected programme's structured scope before the probe fires.
+- ``S3 Bucket Check`` - ``list[Hostname]`` of ``*.s3.*.amazonaws.com``
+  hostnames; probes each for public listing.
+- ``Azure Blob Container Check`` - ``list[Hostname]`` of
+  ``*.blob.core.windows.net`` hostnames; probes each for publicly
+  listable containers under the canonical Azure-pattern names.
+- ``Azure SAS Token Check`` - ``list[Endpoint]``; static URL inspection
+  for embedded SAS query parameters (no HTTP).
 
-No bucket-name or account-name guessing: every probed asset is one
-the programme has actually exposed and OSINT has actually inventoried
-in ``recon.subdomains`` / ``recon.endpoints``. Aligns with the
-pipeline split (PM transcribes scope; OSINT inventories the surface;
-PT attacks the inventoried surface) - storage is structurally the
-same shape as every other cloud wrapper.
+Each wrapper carries a single ``scope_filter`` so out-of-scope targets
+reject at the wrapper boundary before any HTTP request fires.
 """
 
 from pydantic import BaseModel, Field
@@ -20,7 +18,8 @@ from pydantic import BaseModel, Field
 from models import Endpoint, Hostname, RawFinding
 from squad import cyber_tool
 from squad.penetration_tester._decorator import _parse_endpoints
-from tools.cloud import check_azure_blob_containers, check_azure_sas_tokens, check_s3_buckets
+from tools.cloud.aws import check_s3_buckets
+from tools.cloud.azure import check_azure_blob_containers, check_azure_sas_tokens
 from tools.recon.scope import filter_endpoints_in_scope, filter_in_scope
 
 

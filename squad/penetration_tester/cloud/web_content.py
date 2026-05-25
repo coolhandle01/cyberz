@@ -1,14 +1,11 @@
 """
-Web-content exposure probes - look for sensitive files served
-unintentionally (env / config / backups / VCS metadata / build
-artefacts) and for admin-panel login pages exposed at predictable
-paths.
-
-These have always taken typed ``list[Endpoint]`` (the agent picks
-which endpoints to ask about) rather than a recon path - they are HTTP
-path probes, not host-derived service checks. The wrapper-level scope
-filter drops any endpoint whose host is outside the selected
-programme's structured scope before the probe fires.
+Web-content exposure probes - HTTP path checks against agent-picked
+endpoints. ``Sensitive Files Check`` looks for env / config / backups
+/ VCS metadata / build artefacts served unintentionally;
+``Admin Panels Check`` looks for admin-panel login pages at predictable
+paths. Both take ``list[Endpoint]``; the wrapper-level scope filter
+drops endpoints whose host is outside the selected programme's
+structured scope before the probe fires.
 """
 
 from pydantic import BaseModel, Field

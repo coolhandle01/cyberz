@@ -1,12 +1,10 @@
 """AWS S3 bucket misconfiguration checks.
 
-We probe S3 hostnames OSINT actually surfaced through legitimate
-discovery (DNS / cert transparency / historical URLs). No bucket-name
-fuzzing - guessing customer cloud-tenant names is not in-scope
-behaviour. High-risk post-discovery exploitation that goes beyond
-OSINT's inventory (credential checks against discovered panels,
-brute-force, ...) belongs in the policy-gated tooling tracked in #65
-and #67.
+``check_s3_buckets`` probes each supplied S3 hostname for public
+listing (HTTP 200 with ``<ListBucketResult``) or bare 200 (publicly
+accessible but no listing). Hostnames come from the wrapper's
+scope-filtered agent pick - typically ``*.s3.*.amazonaws.com``
+entries the OSINT Analyst surfaced in ``recon.subdomains``.
 """
 
 from __future__ import annotations

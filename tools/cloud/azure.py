@@ -1,14 +1,15 @@
 """Azure Blob Storage misconfiguration checks.
 
-We probe Azure Blob hostnames OSINT actually surfaced through
-legitimate discovery (DNS / cert transparency / historical URLs). No
-account-name fuzzing - guessing customer Azure-tenant names is not
-in-scope behaviour. The canonical container-name list iterated against
-each discovered hostname is the well-known Azure-pattern set
-(equivalent to the canonical ``/admin`` paths probed against
-discovered web origins), not customer-name guessing. High-risk
-post-discovery exploitation that goes beyond OSINT's inventory
-belongs in the policy-gated tooling tracked in #65 and #67.
+``check_azure_blob_containers`` probes each supplied Azure Blob
+hostname for publicly listable containers under the canonical
+Azure-pattern names (``public``, ``assets``, ``static``, ...). The
+container-name list is the well-known Azure-pattern set, equivalent
+to the canonical ``/admin`` paths probed against discovered web
+origins.
+
+``check_azure_sas_tokens`` scans each supplied endpoint URL for
+embedded SAS-token query parameters (sv / se / sig / sr / sp); static
+URL inspection, no HTTP fires.
 """
 
 from __future__ import annotations
