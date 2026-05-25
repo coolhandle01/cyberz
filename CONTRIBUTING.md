@@ -72,6 +72,26 @@ Code carries intent. Symbol names, comment wording, and file layout all encode w
 
 Before deleting or simplifying anything that looks redundant (Chesterton's Fence): find out why it was put there. See the safety invariants below for documented examples.
 
+### Cite the standard you diverge from
+
+When the codebase deliberately departs from a documented standard, named best practice, or upstream framework convention, the divergence must carry a link to the thing it diverges from. Future-you reading the code six months from now needs to be able to follow the URL, read the upstream practice, and recover the *reasoning* behind the departure - not infer it from the absence of a citation, and not rediscover it by reading the spec from scratch.
+
+This is the Chesterton's Fence rule with a sign on the fence. A divergence without a citation is indistinguishable from sloppiness; the citation is what marks it as deliberate.
+
+State three things in the same paragraph or docstring as the divergence:
+
+1. **Cite the upstream practice with a URL.** "RFC 9110 section 10.1.5 defines...", "CrewAI's design-agent skill recommends...", "OWASP Top 10:2021 categorises...". The URL must back the specific claim, not just be vaguely topical.
+2. **Name the departure explicitly.** "Deliberate departure from...", "Diverges from upstream by...", "This skill *deliberately diverges*...". Grep-discoverable so future-contributor `grep -ri "divergen\|departure from"` surfaces the same set every time.
+3. **Name what the departure buys.** SOC-operator parseability, cross-agent contract-test discipline, mypy verification of inter-tool wiring, avoiding a 30K-token JSON blob in every downstream context. A divergence without a stated reason is a future migration target.
+
+Current divergences in the codebase, each carrying its citation - this is the worked register, not an exhaustive list:
+
+- `tools/http.py` `user_agent()` - structured `"<product>; <key>: <value>"` UA vs the typical product-token form. Cites [RFC 9110 section 10.1.5](https://www.rfc-editor.org/rfc/rfc9110.html#section-10.1.5). Buys SOC-operator parseability of programme handle, researcher, and contact email without external metadata correlation.
+- `cybersquad-tool` skill `Divergence 1` - Pydantic typed returns from tools vs upstream's "tools return text-fodder for LLM reasoning" stance. Cites [crewAIInc/skills `design-agent/references/custom-tools.md`](https://github.com/crewAIInc/skills/blob/main/skills/design-agent/references/custom-tools.md). Buys cross-agent contract tests, mypy verification of tool wiring, and typed test access to `tool.func(...)`.
+- `cybersquad-tool` skill `Divergence 2` and `cybersquad-task` skill - workspace files (typed `finalise_X` writer + typed `load_X` reader) for inter-agent structured handoff vs CrewAI's `output_pydantic`. Cites [crewAIInc/skills `design-task`](https://github.com/crewAIInc/skills/blob/main/skills/design-task/SKILL.md). Buys: avoidance of ~30K-token recon artefacts in every downstream `context=`, and a reasoning-narrative + typed-artefact split that `output_pydantic` collapses.
+
+When you add a new divergence, append it to the register above in the same PR. A new divergence that ships without a citation is treated like a `# noqa` without an explanation: not a hard block, but a reviewer-facing flag that the assumption is unverified.
+
 ### Linter and SAST findings are engineering signal
 
 ruff / mypy / bandit / semgrep findings are not bureaucracy. Each one is the tool flagging an assumption it could not verify. Before suppressing:
