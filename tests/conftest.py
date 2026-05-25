@@ -190,6 +190,12 @@ def dvwa_programme() -> Programme:
     values so downstream consumers do not need to special-case a
     zero-bounty programme; the comment is the documentation that DVWA
     is not actually a paying programme.
+
+    FIXME(#121 Phase 3): piton for the DVWA sandboxed e2e work. Currently
+    unused - landed alongside the ``programme_in_workspace`` fixture in
+    #159 as scaffolding the BDD scenarios in Phase 3 will pick up. If
+    #121 Phase 3 is descoped or solves the runnable-target need a
+    different way, delete this fixture and ``dvwa_in_workspace`` below.
     """
     return Programme(
         handle="dvwa-localhost",
@@ -221,7 +227,10 @@ def dvwa_programme() -> Programme:
 def dvwa_in_workspace(dvwa_programme: Programme, run_dir, monkeypatch) -> Programme:
     """DVWA staged into the run dir - same shape as ``programme_in_workspace``
     but the in-flight programme is DVWA, so BDD scenarios that point the
-    squad at DVWA exercise the artefact the runtime actually consumes."""
+    squad at DVWA exercise the artefact the runtime actually consumes.
+
+    FIXME(#121 Phase 3): see ``dvwa_programme`` above - this is the
+    workspace-staged counterpart waiting on the DVWA e2e scenarios."""
     (run_dir / "programme.json").write_text(dvwa_programme.model_dump_json(), encoding="utf-8")
     monkeypatch.setattr("runtime.programme_handle", dvwa_programme.handle)
     return dvwa_programme

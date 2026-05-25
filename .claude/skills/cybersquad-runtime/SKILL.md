@@ -61,7 +61,27 @@ The shape is mechanical - mirror it for every new singleton so the conflict-dete
 - `run_dir` - points `runtime.run_dir()` at the test's `tmp_path` and returns the `Path`. Take this instead of patching `runtime.run_dir` at every consumer's import alias.
 - `programme_in_workspace` / `dvwa_in_workspace` - stage `programme.json` into the rundir and monkeypatch `runtime.programme_handle`. Composes on top of `run_dir`.
 
-Tests monkeypatch `runtime.<attr>` directly (auto-reset between tests) rather than going through `bind_*` - that path stays open intentionally so test setup does not need a disposable wrapper. The bind-conflict guard would fire on conflicting rebinds across tests; monkeypatch's setattr writes the attribute directly and bypasses the check.
+### Tests bypass the binders by design
+
+Production code writes pipeline-scoped state via `bind_programme(...)` / `bind_run_id(...)`. **Tests do not.** Fixtures and individual test cases write `runtime.programme_handle` (and the other singletons) via `monkeypatch.setattr("runtime.programme_handle", ...)` directly.
+
+This is deliberate, not a workaround:
+
+- The bind-conflict guard would fire on the *second* test that wanted a different programme (because the first test bound the value, and the guard does not know test-isolation semantics). `monkeypatch.setattr` writes the module attribute directly, and the auto-reset between tests restores the prior value cleanly.
+- The same applies inside a single test that wants to flip the in-flight programme to exercise a "different programme" branch - the guard would refuse the second bind; `monkeypatch.setattr` does not.
+- The invariant itself (same-value no-op, conflicting raise) is covered by dedicated tests in `tests/test_runtime.py`. Those tests **do** call `bind_*` because that is what they are pinning.
+
+If you write a new fixture or test that needs to set a runtime singleton, take this shape:
+
+```python
+# correct
+monkeypatch.setattr("runtime.programme_handle", "acme")
+
+# wrong - the bind-conflict guard will trip the second time this runs
+runtime.bind_programme("acme")
+```
+
+### Adding tests for a new singleton
 
 If you add a new singleton + binder, add a test class to `tests/test_runtime.py` covering:
 
