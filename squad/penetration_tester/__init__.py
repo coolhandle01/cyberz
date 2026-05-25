@@ -7,10 +7,10 @@ file owns one cohesive responsibility:
   ``_parse_endpoints`` / ``_recon_from_path`` both-shapes adapters.
 - ``probes`` - the 25 ``@pentest_tool`` probe wrappers (SQLi, SSRF, XSS,
   XXE, IDOR, JWT, etc.).
-- ``cloud`` - the 22 ``@cyber_tool`` cloud / infra wrappers (S3,
+- ``cloud`` - the 23 ``@cyber_tool`` cloud / infra wrappers (S3,
   Elasticsearch, Mongo, admin panels, etc.). Dashboards / consul
-  split into port + path variants so each carries a single
-  ``scope_filter``.
+  / Azure split into port + path / container + SAS-token variants so
+  each wrapper carries a single ``scope_filter``.
 - ``recon`` - the three typed slicers over ``recon.json``.
 - ``findings`` - the ``Save Findings`` workspace writer.
 
@@ -38,7 +38,8 @@ from squad.penetration_tester._decorator import (
 )
 from squad.penetration_tester.cloud import (
     _AdminPanelsArgs,
-    _AzureStorageCheckArgs,
+    _AzureBlobContainerArgs,
+    _AzureSasTokenArgs,
     _ConsulVaultPathArgs,
     _ConsulVaultPortArgs,
     _CouchdbCheckArgs,
@@ -60,7 +61,8 @@ from squad.penetration_tester.cloud import (
     _SensitiveFilesArgs,
     _WebminArgs,
     admin_panels_tool,
-    azure_storage_check_tool,
+    azure_blob_container_check_tool,
+    azure_sas_token_check_tool,
     consul_vault_path_check_tool,
     consul_vault_port_check_tool,
     couchdb_tool,
@@ -175,7 +177,8 @@ MEMBER = SquadMember(
         jwt_check_tool,
         # @cyber_tool cloud / infra
         s3_check_tool,
-        azure_storage_check_tool,
+        azure_blob_container_check_tool,
+        azure_sas_token_check_tool,
         elasticsearch_tool,
         couchdb_tool,
         redis_tool,
@@ -245,7 +248,8 @@ __all__ = [
     "xxe_probe_tool",
     # Cloud / infra wrappers
     "admin_panels_tool",
-    "azure_storage_check_tool",
+    "azure_blob_container_check_tool",
+    "azure_sas_token_check_tool",
     "consul_vault_path_check_tool",
     "consul_vault_port_check_tool",
     "couchdb_tool",
@@ -275,7 +279,8 @@ __all__ = [
     # tests/test_pt_args_schemas.py and any future consumer can keep
     # importing from squad.penetration_tester directly.
     "_AdminPanelsArgs",
-    "_AzureStorageCheckArgs",
+    "_AzureBlobContainerArgs",
+    "_AzureSasTokenArgs",
     "_CmdInjectionArgs",
     "_ConsulVaultPathArgs",
     "_ConsulVaultPortArgs",

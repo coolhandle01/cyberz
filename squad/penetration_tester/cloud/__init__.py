@@ -1,9 +1,16 @@
 """squad/penetration_tester/cloud - ``@cyber_tool`` cloud / infra checks.
 
 Split per-family across sibling sub-modules so each file owns one
-cohesive exposure mechanism:
+cohesive exposure mechanism. Every wrapper in this package takes a
+typed target the agent explicitly picks (``list[Hostname]`` for port-
+or container-style probes, ``list[Endpoint]`` for path-style or URL-
+inspection probes) and carries a single ``scope_filter`` so out-of-
+scope targets reject at the wrapper boundary before any HTTP request
+fires. Aligns with the pipeline split: PM transcribes scope; OSINT
+inventories the surface; PT attacks the inventoried surface.
 
-- ``storage`` - S3, Azure Blob.
+- ``storage`` - S3 Bucket Check, Azure Blob Container Check, Azure
+  SAS Token Check.
 - ``databases`` - Elasticsearch, CouchDB, Redis, MongoDB, PostgreSQL,
   MySQL / MariaDB.
 - ``web_content`` - Sensitive Files Check, Admin Panels Check
@@ -20,19 +27,6 @@ This module re-exports every wrapper + args_schema class so the parent
 agent ``squad.penetration_tester.__init__`` keeps a single import site
 (``from squad.penetration_tester.cloud import ...``) and the public
 surface of the agent module does not change.
-
-FIXME (third-party-infrastructure scope): the storage sub-module
-(``s3_check_tool``, ``azure_storage_check_tool``) still derives its
-target from ``recon.json`` because S3 / Azure buckets live on
-third-party infrastructure that is not in the programme's structured
-scope - ``filter_in_scope`` against ``programme.in_scope`` would
-reject every candidate. The scope-of-discovery boundary there is
-workspace state (``recon.programme.handle`` plus the S3 / Azure
-subdomains ``finalise_recon`` already scope-filtered into
-``recon.subdomains``). The broader scope-semantics work (third-party
-infrastructure: storage today, Entra / on-prem DCs tomorrow) is the
-``#83`` framework follow-on. Every other cloud wrapper carries a
-wrapper-level ``scope_filter`` and is structurally aligned.
 """
 
 from squad.penetration_tester.cloud.dashboards import (
@@ -80,9 +74,11 @@ from squad.penetration_tester.cloud.service_discovery import (
     consul_vault_port_check_tool,
 )
 from squad.penetration_tester.cloud.storage import (
-    _AzureStorageCheckArgs,
+    _AzureBlobContainerArgs,
+    _AzureSasTokenArgs,
     _S3CheckArgs,
-    azure_storage_check_tool,
+    azure_blob_container_check_tool,
+    azure_sas_token_check_tool,
     s3_check_tool,
 )
 from squad.penetration_tester.cloud.web_content import (
@@ -134,9 +130,11 @@ __all__ = [
     "consul_vault_path_check_tool",
     "consul_vault_port_check_tool",
     # storage
-    "_AzureStorageCheckArgs",
+    "_AzureBlobContainerArgs",
+    "_AzureSasTokenArgs",
     "_S3CheckArgs",
-    "azure_storage_check_tool",
+    "azure_blob_container_check_tool",
+    "azure_sas_token_check_tool",
     "s3_check_tool",
     # web_content
     "_AdminPanelsArgs",

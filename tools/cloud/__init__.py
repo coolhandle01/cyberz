@@ -3,7 +3,7 @@ tools/cloud - Cloud and exposed service misconfiguration checks.
 """
 
 from tools.cloud.aws import check_s3_buckets
-from tools.cloud.azure import check_azure_storage
+from tools.cloud.azure import check_azure_blob_containers, check_azure_sas_tokens
 from tools.cloud.databases import (
     check_couchdb,
     check_elasticsearch,
@@ -32,7 +32,8 @@ from tools.cloud.services import (
 
 __all__ = [
     "check_admin_panels",
-    "check_azure_storage",
+    "check_azure_blob_containers",
+    "check_azure_sas_tokens",
     "check_consul_vault_paths",
     "check_consul_vault_ports",
     "check_couchdb",

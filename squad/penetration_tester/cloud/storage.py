@@ -1,77 +1,121 @@
 """
-Cloud-storage exposure probes - S3 and Azure Blob buckets the
-programme uses (or once used) that should not be world-readable.
+Cloud-storage exposure probes - S3 buckets and Azure Blob storage.
 
-These two wrappers still take ``recon_path: str`` rather than the
-typed ``list[Hostname]`` / ``list[Endpoint]`` shape every other
-``cloud/`` wrapper moved to: third-party storage tenants
-(``*.s3.amazonaws.com``, ``*.blob.core.windows.net``) are not in the
-programme's structured scope, so ``filter_in_scope`` against
-``programme.in_scope`` would reject every candidate. The
-scope-of-discovery boundary here is workspace state
-(``recon.programme.handle`` + the S3 / Azure subdomains
-``finalise_recon`` already scope-filtered into ``recon.subdomains``),
-which the ``_bucket_candidates`` / ``_account_candidates`` helpers
-read directly.
+Each wrapper takes a typed target the agent picks from recon (the
+``*.s3.*.amazonaws.com`` / ``*.blob.core.windows.net`` hostnames the
+OSINT Analyst discovered, or the endpoints whose URLs contain SAS
+tokens) and a wrapper-level ``scope_filter`` drops anything outside
+the selected programme's structured scope before the probe fires.
 
-See the package-level FIXME in ``cloud/__init__.py`` for the broader
-third-party-infrastructure scope-semantics work (#83 follow-on).
+No bucket-name or account-name guessing: every probed asset is one
+the programme has actually exposed and OSINT has actually inventoried
+in ``recon.subdomains`` / ``recon.endpoints``. Aligns with the
+pipeline split (PM transcribes scope; OSINT inventories the surface;
+PT attacks the inventoried surface) - storage is structurally the
+same shape as every other cloud wrapper.
 """
 
 from pydantic import BaseModel, Field
 
-from models import RawFinding
+from models import Endpoint, Hostname, RawFinding
 from squad import cyber_tool
-from squad.penetration_tester._decorator import _recon_from_path
-from tools.cloud import check_azure_storage, check_s3_buckets
+from squad.penetration_tester._decorator import _parse_endpoints
+from tools.cloud import check_azure_blob_containers, check_azure_sas_tokens, check_s3_buckets
+from tools.recon.scope import filter_endpoints_in_scope, filter_in_scope
 
 
 class _S3CheckArgs(BaseModel):
     """Explicit args_schema for the S3 Bucket Check tool."""
 
-    recon_path: str = Field(
+    hostnames: list[Hostname] = Field(
         description=(
-            "Relative path to recon.json in the run directory. Buckets are"
-            " derived from the programme handle and any S3 subdomains the"
-            " OSINT Analyst surfaced. Worth firing when the target is known"
-            " to use AWS or when *.s3 / *.s3.amazonaws.com subdomains appear"
-            " in recon."
+            "S3 hostnames the OSINT Analyst surfaced in recon.subdomains"
+            " (matching ``*.s3.*.amazonaws.com``) or via cert"
+            " transparency / historical URLs. Probes each for public"
+            " listing (``<ListBucketResult``) or bare 200. The wrapper's"
+            " scope filter drops out-of-scope hostnames before any HTTP"
+            " request."
         ),
     )
 
 
-@cyber_tool("S3 Bucket Check", args_schema=_S3CheckArgs)
-def s3_check_tool(recon_path: str) -> list[RawFinding]:
+@cyber_tool(
+    "S3 Bucket Check",
+    args_schema=_S3CheckArgs,
+    scope_filter=("hostnames", filter_in_scope),
+)
+def s3_check_tool(hostnames: list[Hostname]) -> list[RawFinding]:
     """
-    Check for publicly accessible or listable AWS S3 buckets derived from the
-    programme handle and any S3 subdomains in the recon surface.
-    Use when the target is known to use AWS, or when S3 subdomains appear in recon.
-    Pass the path to the recon.json file in the run directory.
+    Check each supplied S3 hostname for public listing or accessibility.
+
+    Pick hostnames from Recon Subdomains where the entry matches
+    ``*.s3.*.amazonaws.com``, or from Recon Endpoints whose host fits
+    that pattern. The wrapper scope-filters the list against the
+    selected programme; the body probes whatever survives.
     """
-    recon = _recon_from_path(recon_path)
-    return list(check_s3_buckets(recon))
+    return list(check_s3_buckets(hostnames))
 
 
-class _AzureStorageCheckArgs(BaseModel):
-    """Explicit args_schema for the Azure Blob Storage Check tool."""
+class _AzureBlobContainerArgs(BaseModel):
+    """Explicit args_schema for the Azure Blob Container Check tool."""
 
-    recon_path: str = Field(
+    hostnames: list[Hostname] = Field(
         description=(
-            "Relative path to recon.json in the run directory. Fire when the"
-            " target is known to use Azure, or when"
-            " *.blob.core.windows.net subdomains appear in recon. Probes for"
-            " public containers and SAS-token leakage in endpoint URLs."
+            "Azure Blob hostnames the OSINT Analyst surfaced in"
+            " recon.subdomains (matching ``*.blob.core.windows.net``)."
+            " Probes each for publicly listable containers under the"
+            " canonical Azure-pattern names (``public``, ``assets``,"
+            " ``static``, ``uploads``, ...). The wrapper's scope filter"
+            " drops out-of-scope hostnames before any HTTP request."
         ),
     )
 
 
-@cyber_tool("Azure Blob Storage Check", args_schema=_AzureStorageCheckArgs)
-def azure_storage_check_tool(recon_path: str) -> list[RawFinding]:
+@cyber_tool(
+    "Azure Blob Container Check",
+    args_schema=_AzureBlobContainerArgs,
+    scope_filter=("hostnames", filter_in_scope),
+)
+def azure_blob_container_check_tool(hostnames: list[Hostname]) -> list[RawFinding]:
     """
-    Check for publicly accessible Azure Blob Storage containers and exposed SAS
-    tokens in endpoint URLs. Use when the target is known to use Azure, or when
-    *.blob.core.windows.net subdomains appear in recon.
-    Pass the path to the recon.json file in the run directory.
+    Check each supplied Azure Blob hostname for publicly listable
+    containers under the canonical Azure-pattern names.
+
+    Pick hostnames from Recon Subdomains where the entry matches
+    ``*.blob.core.windows.net``. The wrapper scope-filters the list
+    against the selected programme; the body probes whatever survives.
     """
-    recon = _recon_from_path(recon_path)
-    return list(check_azure_storage(recon))
+    return list(check_azure_blob_containers(hostnames))
+
+
+class _AzureSasTokenArgs(BaseModel):
+    """Explicit args_schema for the Azure SAS Token Check tool."""
+
+    endpoints: list[Endpoint] = Field(
+        description=(
+            "Endpoint objects. Scans each URL for embedded Azure SAS"
+            " token query parameters (sv / se / sig / sr / sp). Static"
+            " URL inspection - no HTTP requests fire. Run broadly on"
+            " all live endpoints; SAS tokens in URLs leak via proxy"
+            " logs and browser history. The wrapper's scope filter"
+            " drops endpoints whose host is outside the selected"
+            " programme's structured scope."
+        ),
+    )
+
+
+@cyber_tool(
+    "Azure SAS Token Check",
+    args_schema=_AzureSasTokenArgs,
+    scope_filter=("endpoints", filter_endpoints_in_scope),
+)
+def azure_sas_token_check_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
+    """
+    Scan each supplied endpoint URL for embedded Azure SAS-token query
+    parameters (``sv`` / ``se`` / ``sig`` / ``sr`` / ``sp``). No HTTP
+    requests fire - this is static URL inspection.
+
+    Pick a representative set of live endpoints from Recon Endpoints.
+    The wrapper scope-filters the list against the selected programme.
+    """
+    return list(check_azure_sas_tokens(_parse_endpoints(endpoints)))

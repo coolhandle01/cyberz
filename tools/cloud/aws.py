@@ -4,57 +4,36 @@ from __future__ import annotations
 
 import logging
 
-from models import RawFinding, ReconResult, Severity
+from models import RawFinding, Severity
 from tools import http
 
 logger = logging.getLogger(__name__)
 
-_BUCKET_SUFFIXES = [
-    "",
-    "-assets",
-    "-backup",
-    "-dev",
-    "-staging",
-    "-prod",
-    "-static",
-    "-uploads",
-    "-media",
-    "-data",
-    "-files",
-]
 
-
-def _bucket_candidates(recon: ReconResult) -> list[str]:
-    handle = recon.programme.handle
-    candidates = [handle + s for s in _BUCKET_SUFFIXES]
-    for sub in recon.subdomains:
-        if ".s3." in sub and ".amazonaws.com" in sub:
-            bucket = sub.split(".s3.")[0]
-            candidates.append(bucket)
-    return list(dict.fromkeys(candidates))
-
-
-def check_s3_buckets(recon: ReconResult) -> list[RawFinding]:
+def check_s3_buckets(hostnames: list[str]) -> list[RawFinding]:
     """
-    Check for publicly accessible S3 buckets derived from the programme handle
-    and any S3-pattern subdomains in the recon surface.
+    Check each supplied S3 hostname for public listing or accessibility.
 
-    Checks bucket listing only - does not attempt writes.
+    The agent picks hostnames the OSINT Analyst surfaced in
+    ``recon.subdomains`` (DNS, certificate transparency, historical
+    URLs) that match the ``*.s3.*.amazonaws.com`` pattern. No
+    bucket-name guessing - we only probe assets the programme has
+    actually exposed and OSINT has actually discovered.
     """
     findings: list[RawFinding] = []
 
-    for bucket in _bucket_candidates(recon):
-        url = f"https://{bucket}.s3.amazonaws.com/"
+    for hostname in hostnames:
+        url = f"https://{hostname}/"
         try:
             resp = http.get(url, timeout=10, allow_redirects=False)  # nosemgrep
         except Exception as exc:
-            logger.debug("S3 check failed for %s: %s", bucket, exc)
+            logger.debug("S3 check failed for %s: %s", hostname, exc)
             continue
 
         if resp.status_code == 200 and "<ListBucketResult" in resp.text:
             findings.append(
                 RawFinding(
-                    title=f"S3 Bucket Publicly Listable - {bucket}",
+                    title=f"S3 Bucket Publicly Listable - {hostname}",
                     vuln_class="CloudMisconfiguration",
                     target=url,
                     evidence=(
@@ -67,7 +46,7 @@ def check_s3_buckets(recon: ReconResult) -> list[RawFinding]:
         elif resp.status_code == 200:
             findings.append(
                 RawFinding(
-                    title=f"S3 Bucket Publicly Accessible - {bucket}",
+                    title=f"S3 Bucket Publicly Accessible - {hostname}",
                     vuln_class="CloudMisconfiguration",
                     target=url,
                     evidence="Bucket URL returned HTTP 200 without listing - verify manually.",

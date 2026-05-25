@@ -31,7 +31,8 @@ from squad import SquadTool
 from squad.penetration_tester import (
     MEMBER,
     _AdminPanelsArgs,
-    _AzureStorageCheckArgs,
+    _AzureBlobContainerArgs,
+    _AzureSasTokenArgs,
     _CmdInjectionArgs,
     _ConsulVaultPathArgs,
     _ConsulVaultPortArgs,
@@ -123,7 +124,8 @@ _PT_SCHEMAS: dict[str, type[BaseModel]] = {
     "JWT Vulnerability Check": _JwtCheckArgs,
     # @cyber_tool cloud / infra wrappers
     "S3 Bucket Check": _S3CheckArgs,
-    "Azure Blob Storage Check": _AzureStorageCheckArgs,
+    "Azure Blob Container Check": _AzureBlobContainerArgs,
+    "Azure SAS Token Check": _AzureSasTokenArgs,
     "Unauthenticated Elasticsearch Check": _ElasticsearchCheckArgs,
     "Unauthenticated CouchDB Check": _CouchdbCheckArgs,
     "Unauthenticated Redis Check": _RedisCheckArgs,
@@ -155,22 +157,15 @@ _PT_SCHEMAS: dict[str, type[BaseModel]] = {
     "Read Attack Plan": _ReadAttackPlanArgs,
 }
 
-# Cloud / infra wrappers that still take ``recon_path: str``. After the
-# Path B redesign every other cloud wrapper takes a typed
-# ``list[Hostname]`` or ``list[Endpoint]`` picked by the agent and
-# scope-filtered at the wrapper. Storage stays on ``recon_path`` because
-# S3 / Azure buckets live on third-party infrastructure outside
-# programme.in_scope (see ``cloud/__init__.py`` FIXME for the #83
-# framework follow-on).
-_RECON_PATH_CLOUD_SCHEMAS: list[type[BaseModel]] = [
-    _S3CheckArgs,
-    _AzureStorageCheckArgs,
-]
-
 # Cloud wrappers that take ``hostnames: list[Hostname]`` and scope-filter
 # via ``filter_in_scope``. Used by the missing-required-hostnames
-# parametrize below.
+# parametrize below. Every cloud wrapper now takes a typed target -
+# storage no longer needs an exception now that bucket-name fuzzing
+# is gone; the agent picks S3 / Azure hostnames OSINT actually
+# discovered in recon.subdomains.
 _HOSTNAMES_CLOUD_SCHEMAS: list[type[BaseModel]] = [
+    _S3CheckArgs,
+    _AzureBlobContainerArgs,
     _ElasticsearchCheckArgs,
     _CouchdbCheckArgs,
     _RedisCheckArgs,
@@ -193,6 +188,7 @@ _HOSTNAMES_CLOUD_SCHEMAS: list[type[BaseModel]] = [
 _ENDPOINTS_CLOUD_SCHEMAS: list[type[BaseModel]] = [
     _SensitiveFilesArgs,
     _AdminPanelsArgs,
+    _AzureSasTokenArgs,
     _GrafanaPathArgs,
     _KibanaPathArgs,
     _PortainerPathArgs,
@@ -302,10 +298,6 @@ class TestSchemaAcceptReject:
             (_SourceMapsArgs, {"recon_path": "recon.json"}),
             (_SriCheckArgs, {"recon_path": "recon.json"}),
             # @cyber_tool cloud / infra acceptance cases.
-            # Storage stays on recon_path (third-party infra, not in
-            # programme.in_scope - see _RECON_PATH_CLOUD_SCHEMAS).
-            (_S3CheckArgs, {"recon_path": "recon.json"}),
-            (_AzureStorageCheckArgs, {"recon_path": "recon.json"}),
             # The endpoint-taking shape accepts the empty list; the
             # hostname-taking shape's in-scope acceptance lives in
             # ``test_hostnames_schema_accepts_in_scope`` below where the
@@ -313,6 +305,7 @@ class TestSchemaAcceptReject:
             # hostname") readable at the call site.
             (_SensitiveFilesArgs, {"endpoints": []}),
             (_AdminPanelsArgs, {"endpoints": []}),
+            (_AzureSasTokenArgs, {"endpoints": []}),
             (_GrafanaPathArgs, {"endpoints": []}),
             (_KibanaPathArgs, {"endpoints": []}),
             (_PortainerPathArgs, {"endpoints": []}),
@@ -320,6 +313,8 @@ class TestSchemaAcceptReject:
             # Empty-list acceptance is the safe shape: scope_filter runs on
             # non-empty values only, so an empty payload validates without
             # touching the workspace.
+            (_S3CheckArgs, {"hostnames": []}),
+            (_AzureBlobContainerArgs, {"hostnames": []}),
             (_ElasticsearchCheckArgs, {"hostnames": []}),
             (_CouchdbCheckArgs, {"hostnames": []}),
             (_RedisCheckArgs, {"hostnames": []}),
@@ -476,7 +471,6 @@ class TestSchemaAcceptReject:
             _HostHeaderArgs,
             _SourceMapsArgs,
             _SriCheckArgs,
-            *_RECON_PATH_CLOUD_SCHEMAS,
             # PT recon wrappers - all take a required ``recon_path``
             _PtReconSubdomainsArgs,
             _PtReconEndpointsArgs,

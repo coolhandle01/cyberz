@@ -152,64 +152,18 @@ class TestPenetrationTesterTools:
         assert result.hosts == recon_result.open_ports
 
 
-# The two storage wrappers keep ``recon_path: str`` because S3 / Azure
-# buckets live on third-party infra outside ``programme.in_scope`` -
-# see ``squad/penetration_tester/cloud/__init__.py`` for the FIXME.
-# Every other cloud wrapper moved to typed targets + wrapper-level
-# scope_filter and is exercised by ``TestHostnameWrapperPassThrough``
-# or ``TestEndpointWrapperPassThrough`` below.
-_RECON_PASSING_CLOUD_WRAPPERS: list[tuple[str, str]] = [
-    ("s3_check_tool", "squad.penetration_tester.cloud.storage.check_s3_buckets"),
-    ("azure_storage_check_tool", "squad.penetration_tester.cloud.storage.check_azure_storage"),
-]
-
-
-class TestCloudWrapperPassThrough:
-    """The two storage wrappers load recon.json and forward the typed
-    ReconResult to their ``check_X`` callable. Pins the pass-through
-    shape (recon resolved, check_fn invoked, findings returned) for
-    both at once."""
-
-    @pytest.mark.parametrize(
-        ("tool_name", "check_fn_path"),
-        _RECON_PASSING_CLOUD_WRAPPERS,
-        ids=[name.removesuffix("_tool") for name, _ in _RECON_PASSING_CLOUD_WRAPPERS],
-    )
-    def test_wrapper_loads_recon_and_returns_check_fn_output(
-        self,
-        tool_name: str,
-        check_fn_path: str,
-        recon_result,
-        raw_finding_low,
-        run_dir,
-    ) -> None:
-        import importlib
-
-        import squad.penetration_tester as pt_module
-
-        wrapper = getattr(pt_module, tool_name)
-        (run_dir / "recon.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
-
-        check_module_path, check_attr = check_fn_path.rsplit(".", 1)
-        check_module = importlib.import_module(check_module_path)
-        with patch.object(check_module, check_attr, return_value=[raw_finding_low]) as mcheck:
-            result = wrapper.func("recon.json")
-
-        assert result == [raw_finding_low]
-        # The wrapper loaded recon.json and passed the typed ReconResult to
-        # check_X (rather than the raw path string).
-        mcheck.assert_called_once()
-        passed_recon = mcheck.call_args[0][0]
-        assert passed_recon.programme.handle == recon_result.programme.handle
-
-
 # Hostname-passing cloud wrappers (Path B): the wrapper-level
 # ``scope_filter`` runs against the supplied hostnames, then the body
-# iterates the survivors and calls ``check_X(host)`` per host. Per-
-# engine helpers vary on how many findings come back per call; the
-# pass-through shape (filter -> iterate -> aggregate) is what this
-# parametrize pins for all 14 wrappers at once.
+# either iterates (databases call ``check_X(host)`` per host) or
+# forwards the list (panels / dashboards / consul / storage call
+# ``check_X(hostnames)`` once). Both shapes are covered here; the
+# pass-through assertion below accepts either positional shape.
 _HOSTNAME_PASSING_CLOUD_WRAPPERS: list[tuple[str, str]] = [
+    ("s3_check_tool", "squad.penetration_tester.cloud.storage.check_s3_buckets"),
+    (
+        "azure_blob_container_check_tool",
+        "squad.penetration_tester.cloud.storage.check_azure_blob_containers",
+    ),
     ("elasticsearch_tool", "squad.penetration_tester.cloud.databases.check_elasticsearch"),
     ("couchdb_tool", "squad.penetration_tester.cloud.databases.check_couchdb"),
     ("redis_tool", "squad.penetration_tester.cloud.databases.check_redis"),
@@ -327,6 +281,10 @@ class TestHostnameWrapperPassThrough:
 _ENDPOINT_DRIVEN_CLOUD_WRAPPERS: list[tuple[str, str]] = [
     ("sensitive_files_tool", "squad.penetration_tester.cloud.web_content.check_sensitive_files"),
     ("admin_panels_tool", "squad.penetration_tester.cloud.web_content.check_admin_panels"),
+    (
+        "azure_sas_token_check_tool",
+        "squad.penetration_tester.cloud.storage.check_azure_sas_tokens",
+    ),
     ("grafana_path_check_tool", "squad.penetration_tester.cloud.dashboards.check_grafana_paths"),
     ("kibana_path_check_tool", "squad.penetration_tester.cloud.dashboards.check_kibana_paths"),
     (
