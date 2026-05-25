@@ -74,6 +74,12 @@ case "$file_path" in
 esac
 
 case "$file_path" in
+    */runtime.py|*/main.py)
+        matches+=(cybersquad-runtime)
+        ;;
+esac
+
+case "$file_path" in
     */tasks.py)
         matches+=(cybersquad-task)
         ;;

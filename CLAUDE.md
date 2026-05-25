@@ -27,6 +27,7 @@ Skills under `.claude/skills/` auto-load via a `PreToolUse` hook on `Write`/`Edi
 | `cybersquad-tool` | `squad/__init__.py`, `squad/workspace_tools.py`, `squad/<member>/__init__.py` |
 | `cybersquad-pentest-tool` | `tools/pentest/**` or `squad/penetration_tester/__init__.py` |
 | `cybersquad-agent-llm` | `crew.py` |
+| `cybersquad-runtime` | `runtime.py`, `main.py` |
 | `cybersquad-task` | `tasks.py` |
 | `cybersquad-skill` | Any agent-facing markdown under `squad/`: `squad/skills/<name>/SKILL.md`, `squad/<member>/skills/<name>/SKILL.md`, `squad/<member>/role.md`/`goal.md`/`backstory.md`, `squad/<member>/<task>/description.md`/`expected_output.md` |
 | `cybersquad-test-fixtures` | Any file under `tests/` |
