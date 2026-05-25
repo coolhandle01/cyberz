@@ -1,12 +1,10 @@
 """Technical Author - writes professional H1-format disclosure reports."""
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from models import CWEEntry, OWASPEntry, ProgrammeReportSummary
+from models import AuthoredDraft, CWEEntry, OWASPEntry, ProgrammeReportSummary
 from squad import SquadMember, cyber_tool, read_run_file_tool, read_run_filelist_tool
 from tools import http
 from tools.cwe_data import lookup as cwe_lookup
@@ -202,12 +200,10 @@ def list_programme_reports_tool(
 class _DraftReportArgs(BaseModel):
     """Explicit args_schema for the Draft Vulnerability Report tool (#150).
 
-    The longest authored contract on the TA: every field below feeds
-    the report quality gate that runs before any draft can roll up
-    into reports.json. The per-field descriptions are how the LLM
-    learns the gate's grammar - a wrong-shape draft refuses upstream
-    rather than after the body has written a half-validated artefact
-    the Disclosure Coordinator then has to clean up.
+    The LLM-authored content lives on ``AuthoredDraft`` (in
+    ``models.report``) alongside the per-field descriptions; this
+    schema wires that authored content to the VR's verified finding at
+    ``finding_index``.
     """
 
     finding_index: int = Field(
@@ -218,97 +214,13 @@ class _DraftReportArgs(BaseModel):
             " Vulnerability Researcher. Out-of-range refuses explicitly."
         ),
     )
-    title: str = Field(
+    authored: AuthoredDraft = Field(
         description=(
-            "H1-format title following ``[Type] in [Component/Endpoint]"
-            " allows [Outcome]``. The validator refuses generic titles -"
-            " be specific about the component AND the outcome. Pair"
-            " with ``List Programme Reports`` to check for collisions"
-            " against existing submissions before drafting."
-        ),
-    )
-    summary: str = Field(
-        description=(
-            "2-3 sentences naming root cause + location + concrete"
-            " impact. This is the first thing a triager reads; if it"
-            " does not name a concrete impact, the report ranks lower."
-        ),
-    )
-    description: str = Field(
-        description=(
-            "Developer-focused explanation of WHY the code is"
-            " vulnerable - the underlying class of flaw, not the"
-            " reproduction steps (those go in ``steps_to_reproduce``)."
-        ),
-    )
-    steps_to_reproduce: list[str] = Field(
-        description=(
-            "Minimal numbered list a triager can replay verbatim against"
-            " the live target to reproduce the finding. Each entry is"
-            " one reproduction step naming the tool used, the command /"
-            " request, the expected response excerpt, and (where the"
-            " marker is buried in a large payload) a pointer to the"
-            " supporting evidence so the triager can verify the claim"
-            " without re-running discovery. Example shape per step:"
-            " ``Use sqlmap to confirm injection at /search?q. Run:"
-            " ``sqlmap -u 'https://victim.example.com/search?q=test'"
-            " --batch``. The ``[INFO]`` line citing ``boolean-based"
-            " blind`` appears in the response and is captured in the"
-            " attached evidence (grep ``boolean-based blind`` in the"
-            " sanitised log).`` The validator refuses steps under 10"
-            " characters - prefer one fully-formed step over several"
-            " stubs."
-        ),
-    )
-    # FIXME #156: the supporting-evidence / replay-log handoff this step
-    # list references is sketched in the per-step "attached evidence"
-    # pointer above but is not yet a workspace-typed artefact; triagers
-    # verify claims against the live target until it lands.
-    evidence: str = Field(
-        description=(
-            "PRE-SANITISED tool output / HTTP excerpt. Run ``Sanitise"
-            " Evidence`` first to strip credentials, cookies, and"
-            " secret-shaped key=value pairs - the disclosure is"
-            " private, but the report is permanent and a leaked"
-            " credential cannot be quietly removed once filed."
-        ),
-    )
-    impact: str = Field(
-        description=(
-            "Specific named data / system and the worst realistic"
-            " outcome. The validator refuses hand-wavy language"
-            " (``could compromise``, ``potential``) - this section is"
-            " what the programme uses to band severity."
-        ),
-    )
-    remediation: str = Field(
-        description=(
-            "Actionable fix paired with an OWASP or CWE URL citation."
-            " The validator refuses remediations that name no fix or"
-            " carry no citation - use ``Lookup CWE`` / ``Lookup OWASP"
-            " Guidance`` to find the matching URL."
-        ),
-    )
-    # FIXME #156: type as a ``CvssVector`` primitive in
-    # ``models.primitives`` so malformed vectors reject at args_schema
-    # validation time rather than at score-compute time.
-    cvss_vector: str = Field(
-        description=(
-            "Full CVSS 3.1 vector. The wrapper recomputes ``cvss_score``"
-            " and the validator refuses drafts where the score does not"
-            " match the declared severity. Use ``Calculate CVSS Score``"
-            " upstream to double-check."
-        ),
-    )
-    # FIXME #156: type as a ``CweId`` primitive in ``models.primitives``
-    # so unknown ids reject at args_schema validation time rather than
-    # at catalogue-lookup time.
-    cwe_id: int = Field(
-        description=(
-            "Numeric CWE identifier matching the entry from ``Lookup"
-            " CWE``. The validator verifies the id resolves to a real"
-            " CWE entry; an unknown id refuses upstream of the H1"
-            " submission."
+            "Your authored report content: title / summary / description"
+            " / steps_to_reproduce / evidence / impact / remediation /"
+            " cvss_vector / cwe_id. Run ``Sanitise Evidence`` over your"
+            " evidence section first - the disclosure is private but"
+            " the report is permanent."
         ),
     )
     verified_path: str = Field(
@@ -323,21 +235,9 @@ class _DraftReportArgs(BaseModel):
 
 
 @cyber_tool("Draft Vulnerability Report", args_schema=_DraftReportArgs)
-# Every authored field is exposed as a top-level parameter so the LLM can
-# fill them by name; collapsing into a single payload dict would force the
-# agent to guess valid keys.
-# pylint: disable=R0913,R0917
 def draft_report_tool(
     finding_index: int,
-    title: str,
-    summary: str,
-    description: str,
-    steps_to_reproduce: list[str],
-    evidence: str,
-    impact: str,
-    remediation: str,
-    cvss_vector: str,
-    cwe_id: int,
+    authored: AuthoredDraft,
     verified_path: str = "verified.json",
 ) -> ReportDraftResult:
     """
@@ -346,17 +246,10 @@ def draft_report_tool(
     are pulled from verified.json at ``finding_index`` so you cannot
     accidentally contradict the Vulnerability Researcher.
 
-    Inputs are the prose the triager will read:
-      - title: `[Type] in [Component/Endpoint] allows [Outcome]`
-      - summary: 2-3 sentences (root cause + location + concrete impact)
-      - description: developer-focused explanation of WHY the code is vulnerable
-      - steps_to_reproduce: numbered list, each step at least 10 chars
-      - evidence: PRE-SANITISED tool output / HTTP excerpt; run Sanitise
-        Evidence first to strip credentials and cookies
-      - impact: specific, named data/system and worst realistic outcome
-      - remediation: actionable fix with an OWASP or CWE URL citation
-      - cvss_vector + cwe_id: must match the computed CVSS score and an entry
-        in the CWE catalogue
+    ``authored`` is the typed ``AuthoredDraft`` content: see the
+    model's per-field descriptions for the contract on each section
+    (title, summary, description, steps_to_reproduce, evidence,
+    impact, remediation, cvss_vector, cwe_id).
 
     Returns a ReportDraftResult with the relative draft path and a
     ValidationReport. When validation.ok is false, re-run with the issues
@@ -370,22 +263,24 @@ def draft_report_tool(
             f"(verified.json has {len(verified)} findings)"
         )
     finding = verified[finding_index]
+    # Both-shapes adapter: dict from CrewAI, model instance from tests.
+    authored = AuthoredDraft.model_validate(authored)
 
     draft = ReportDraft(
         finding_index=finding_index,
         target=finding.target,
         vuln_class=finding.vuln_class,
         severity=finding.severity,
-        cvss_vector=cvss_vector,
-        cvss_score=calculate_cvss_score(cvss_vector),
-        cwe_id=cwe_id,
-        title=title.strip(),
-        summary=summary.strip(),
-        description=description.strip(),
-        steps_to_reproduce=[s.strip() for s in steps_to_reproduce],
-        evidence=evidence,
-        impact=impact.strip(),
-        remediation=remediation.strip(),
+        cvss_vector=authored.cvss_vector,
+        cvss_score=calculate_cvss_score(authored.cvss_vector),
+        cwe_id=authored.cwe_id,
+        title=authored.title.strip(),
+        summary=authored.summary.strip(),
+        description=authored.description.strip(),
+        steps_to_reproduce=[s.strip() for s in authored.steps_to_reproduce],
+        evidence=authored.evidence,
+        impact=authored.impact.strip(),
+        remediation=authored.remediation.strip(),
     )
     path = save_draft(draft)
     return ReportDraftResult(

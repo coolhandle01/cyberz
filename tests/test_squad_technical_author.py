@@ -27,8 +27,16 @@ class TestTechnicalAuthorTools:
 
     @staticmethod
     def _good_authoring(**overrides):
-        base = {
-            "finding_index": 0,
+        """Build the kwargs for ``draft_report_tool.func(...)``.
+
+        The wrapper now takes a typed ``AuthoredDraft`` (post-#150
+        review feedback driving the typed-model layer home), so the
+        authored fields are nested under ``authored`` while
+        ``finding_index`` / ``verified_path`` stay top-level.
+        ``overrides`` mutate authored fields when the key matches one,
+        top-level otherwise.
+        """
+        authored: dict[str, object] = {
             "title": "SQL Injection in /search?q allows full database extraction",
             "summary": (
                 "The /search endpoint concatenates user input into a SELECT statement. "
@@ -56,7 +64,15 @@ class TestTechnicalAuthorTools:
             "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
             "cwe_id": 89,
         }
-        base.update(overrides)
+        base: dict[str, object] = {
+            "finding_index": 0,
+            "authored": authored,
+        }
+        for key, value in overrides.items():
+            if key in authored:
+                authored[key] = value
+            else:
+                base[key] = value
         return base
 
     def test_draft_report_tool_writes_draft_and_returns_validation(

@@ -68,15 +68,15 @@ def _tools_by_name() -> dict[str, SquadTool]:
     return {t.name: t for t in MEMBER.tools}
 
 
-def _good_draft_kwargs() -> dict[str, object]:
-    """Minimal valid kwargs for ``_DraftReportArgs``.
+def _good_authored_draft() -> dict[str, object]:
+    """Minimal valid kwargs for ``AuthoredDraft``.
 
-    Centralised so the per-field rejection tests below mutate one field
-    at a time. Mirrors the ``_good_authoring`` helper in
-    ``test_squad_technical_author``.
+    Returned as a dict so the args_schema accept / reject tests can
+    mutate one authored field at a time without restating the full
+    shape, and so the wrapper-side wraps it under ``authored`` via
+    ``_good_draft_kwargs`` below.
     """
     return {
-        "finding_index": 0,
         "title": "SQL Injection in /search?q allows full database extraction",
         "summary": (
             "The /search endpoint concatenates user input into a SELECT "
@@ -102,6 +102,18 @@ def _good_draft_kwargs() -> dict[str, object]:
         ),
         "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
         "cwe_id": 89,
+    }
+
+
+def _good_draft_kwargs() -> dict[str, object]:
+    """Minimal valid kwargs for ``_DraftReportArgs``.
+
+    Wraps the authored shape (``_good_authored_draft``) in the
+    ``authored`` field the post-#150 args_schema expects.
+    """
+    return {
+        "finding_index": 0,
+        "authored": _good_authored_draft(),
     }
 
 
@@ -164,8 +176,9 @@ class TestTaArgsSchemaContracts:
         )
 
     def test_draft_report_evidence_description_names_sanitisation(self) -> None:
-        """The ``evidence`` field on ``Draft Vulnerability Report`` must
-        carry the upstream-sanitisation warning.
+        """The ``evidence`` field on ``AuthoredDraft`` (referenced by
+        ``Draft Vulnerability Report``'s args_schema) must carry the
+        upstream-sanitisation warning.
 
         The Disclosure Coordinator submits whatever the TA drafts to a
         public-by-default H1 report. ``Sanitise Evidence`` exists for
@@ -174,11 +187,13 @@ class TestTaArgsSchemaContracts:
         wording rather than just the presence of *any* description; a
         sibling test enforces the latter.
         """
-        desc = _DraftReportArgs.model_fields["evidence"].description or ""
+        from models import AuthoredDraft
+
+        desc = AuthoredDraft.model_fields["evidence"].description or ""
         lower = desc.lower()
         assert "sanitis" in lower, (
-            f"Draft Vulnerability Report evidence description must call out"
-            f" Sanitise Evidence as the upstream step: got {desc!r}"
+            f"AuthoredDraft.evidence description must call out Sanitise"
+            f" Evidence as the upstream step: got {desc!r}"
         )
 
 
@@ -218,10 +233,16 @@ class TestSchemaAcceptReject:
         assert instance.page_size == 25  # default
 
     def test_draft_report_accepts_full_authored_shape(self) -> None:
-        """``Draft Vulnerability Report`` accepts the canonical authored payload."""
+        """``Draft Vulnerability Report`` accepts the canonical authored payload.
+
+        Post-#150 the authored content is the typed ``AuthoredDraft``
+        (in ``models.report``) nested under the args_schema's
+        ``authored`` field; the wrapper-side plumbing (finding_index,
+        verified_path) stays top-level.
+        """
         instance = _DraftReportArgs.model_validate(_good_draft_kwargs())
         assert instance.finding_index == 0
-        assert instance.cwe_id == 89
+        assert instance.authored.cwe_id == 89
         assert instance.verified_path == "verified.json"  # default
 
     def test_finalise_reports_accepts_handle_and_summary(self, programme) -> None:
@@ -264,23 +285,26 @@ class TestSchemaAcceptReject:
         with pytest.raises(ValidationError):
             _FinaliseReportsArgs.model_validate({"summary": "Session summary."})
 
-    def test_draft_report_rejects_partial_payload(self) -> None:
-        """Spot-check the four most-frequently-missed fields rather than
-        parametrize over the full ten - every required field on
-        ``Draft Vulnerability Report`` is structurally identical."""
-        base = _good_draft_kwargs()
+    def test_draft_report_rejects_partial_authored_payload(self) -> None:
+        """Each field on ``AuthoredDraft`` is required - dropping any one
+        rejects upstream of the wrapper body. Spot-check the four
+        most-frequently-missed fields rather than parametrize over the
+        full nine: every required field is structurally identical."""
+        full_authored = _good_authored_draft()
         for missing in ("title", "evidence", "cvss_vector", "cwe_id"):
-            kwargs = {k: v for k, v in base.items() if k != missing}
+            partial_authored = {k: v for k, v in full_authored.items() if k != missing}
+            kwargs = {"finding_index": 0, "authored": partial_authored}
             with pytest.raises(ValidationError):
                 _DraftReportArgs.model_validate(kwargs)
 
     def test_draft_report_rejects_non_numeric_cwe_id(self) -> None:
-        """``cwe_id`` is typed ``int`` - a non-numeric string rejects.
+        """``AuthoredDraft.cwe_id`` is typed ``int`` - a non-numeric
+        string rejects.
 
         Pydantic v2's lax mode coerces numeric strings ("89") to int, so
         this test only pins the case the validator actually catches: a
         non-numeric string for ``cwe_id``.
         """
-        kwargs = {**_good_draft_kwargs(), "cwe_id": "not-a-number"}
+        authored = {**_good_authored_draft(), "cwe_id": "not-a-number"}
         with pytest.raises(ValidationError):
-            _DraftReportArgs.model_validate(kwargs)
+            _DraftReportArgs.model_validate({"finding_index": 0, "authored": authored})

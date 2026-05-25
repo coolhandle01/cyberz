@@ -22,6 +22,8 @@ across every consumer.
 | ``models.metrics`` | ``RunMetrics`` |
 | ``models.h1`` | HackerOne shapes incl. ``ProgrammeReportSummary`` |
 | ``models.attack`` | ``AttackPlan``, ``AttackPlanItem`` |
+| ``models.triage`` | ``AuthoredAssessment``, ``SeverityDecision`` |
+| ``models.report`` | ``AuthoredDraft`` |
 
 The per-domain modules import only from layers below them in the
 dependency graph: primitives -> finding -> h1 -> asset. No module imports
@@ -55,9 +57,13 @@ from models.insight import (
 from models.metrics import RunMetrics
 from models.owasp import OWASPEntry
 from models.primitives import Hostname, HttpUrl, Severity
+from models.report import AuthoredDraft
+from models.triage import AuthoredAssessment, SeverityDecision
 from models.workspace import RunFile, RunFileContent
 
 __all__ = [
+    "AuthoredAssessment",
+    "AuthoredDraft",
     "CWEEntry",
     "CveEntry",
     "Endpoint",
@@ -82,6 +88,7 @@ __all__ = [
     "RunFileContent",
     "RunMetrics",
     "Severity",
+    "SeverityDecision",
     "TakeoverCandidate",
     "VerifiedVulnerability",
 ]
