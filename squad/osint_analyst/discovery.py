@@ -21,8 +21,8 @@ from models import (
 )
 from models.h1 import Programme
 from squad import cyber_tool
+from squad.workspace_tools import current_programme
 from tools import http
-from tools.h1_api import h1
 from tools.recon import (
     cert_transparency,
     detect_llm_endpoints,
@@ -36,24 +36,21 @@ from tools.recon.scope import filter_in_scope as filter_in_scope_impl
 
 
 class _RunInitialSweepArgs(BaseModel):
-    """Explicit args_schema for the Run Initial Sweep tool."""
+    """Explicit args_schema for the Run Initial Sweep tool.
 
-    programme_handle: str = Field(
-        description=(
-            "Exact HackerOne programme handle as it appears in the URL"
-            " (lowercase, no slashes, no spaces). The sweep runs subfinder,"
-            " httpx, nmap, ffuf, and passive TLS / DNS checks against the"
-            " programme's structured scope - the handle is the authoritative"
-            " key the H1 API uses to look the scope up."
-        ),
-    )
+    Takes no parameters - the programme is sourced from the workspace
+    (``<run_dir>/programme.json``, written by the Programme Manager's
+    ``Save Selected Programme`` at run start). The empty schema is
+    still declared so the closed-world contract test in the OSINT
+    Analyst's ``test_args_schemas.py`` accounts for the tool.
+    """
 
 
 @cyber_tool("Run Initial Sweep", args_schema=_RunInitialSweepArgs)
-def run_initial_sweep_tool(programme_handle: str) -> str:
+def run_initial_sweep_tool() -> str:
     """
-    Run the initial OSINT sweep against the in-scope assets of the given
-    programme: subfinder for subdomain enumeration, httpx for live HTTP/S
+    Run the initial OSINT sweep against the selected programme's in-scope
+    assets: subfinder for subdomain enumeration, httpx for live HTTP/S
     probing and tech detection, nmap for port scanning, ffuf for content
     discovery, plus passive TLS and DNS email-security checks. Writes the
     serialised inventory to ``sweep.json`` (the OA's internal draft) in the
@@ -63,10 +60,8 @@ def run_initial_sweep_tool(programme_handle: str) -> str:
     Annotate Host and call Finalise Recon to produce the canonical
     ``recon.json`` that downstream agents consume.
     """
-    http.set_programme(programme_handle)
-    policy = h1.get_programme_policy(programme_handle)
-    scope = h1.get_structured_scope(programme_handle)
-    programme = h1.parse_programme(policy["data"], scope)
+    http.set_programme(runtime.programme_handle)
+    programme = current_programme()
     result = run_recon(programme)
     out_path = runtime.run_dir() / "sweep.json"
     out_path.parent.mkdir(parents=True, exist_ok=True)

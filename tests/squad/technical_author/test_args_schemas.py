@@ -222,12 +222,10 @@ class TestSchemaAcceptReject:
         instance = schema_cls.model_validate(kwargs)
         assert isinstance(instance, schema_cls)
 
-    def test_list_programme_reports_accepts_programme_handle(self, programme) -> None:
-        """``List Programme Reports`` takes the selected programme's handle."""
-        instance = _TaListProgrammeReportsArgs.model_validate(
-            {"programme_handle": programme.handle}
-        )
-        assert instance.programme_handle == programme.handle
+    def test_list_programme_reports_accepts_empty_payload(self) -> None:
+        """``List Programme Reports`` takes no required parameters - the
+        programme is sourced from the workspace at runtime."""
+        instance = _TaListProgrammeReportsArgs.model_validate({})
         assert instance.page_size == 25  # default
 
     def test_draft_report_accepts_full_authored_shape(self) -> None:
@@ -243,19 +241,18 @@ class TestSchemaAcceptReject:
         assert instance.authored.cwe_id == 89
         assert instance.verified_path == "verified.json"  # default
 
-    def test_finalise_reports_accepts_handle_and_summary(self, programme) -> None:
-        """``Finalise Reports`` takes the programme handle and an executive
-        summary that gets attached to every consolidated report."""
+    def test_finalise_reports_accepts_summary(self) -> None:
+        """``Finalise Reports`` takes an executive summary attached to
+        every consolidated report. The programme is sourced from the
+        workspace at runtime."""
         instance = _FinaliseReportsArgs.model_validate(
             {
-                "programme_handle": programme.handle,
                 "summary": (
                     "Tested the API surface and found one Critical SQLi at "
                     "/search. No other findings cleared the floor."
                 ),
             }
         )
-        assert instance.programme_handle == programme.handle
         assert "SQLi" in instance.summary
 
     @pytest.mark.parametrize(
@@ -265,9 +262,8 @@ class TestSchemaAcceptReject:
             _TaLookupCweArgs,  # query required
             _TaLookupOwaspArgs,  # query required
             _TaCalculateCvssArgs,  # vector required
-            _TaListProgrammeReportsArgs,  # programme_handle required
             _DraftReportArgs,  # every authored field required
-            _FinaliseReportsArgs,  # programme_handle + summary required
+            _FinaliseReportsArgs,  # summary required
             _ReadRunFileArgs,  # relative_path required
         ],
     )
@@ -275,13 +271,6 @@ class TestSchemaAcceptReject:
         """At least one required field is missing: model_validate must fail."""
         with pytest.raises(ValidationError):
             schema_cls.model_validate({})
-
-    def test_finalise_reports_requires_both_handle_and_summary(self, programme) -> None:
-        """Both ``programme_handle`` and ``summary`` are required - one alone fails."""
-        with pytest.raises(ValidationError):
-            _FinaliseReportsArgs.model_validate({"programme_handle": programme.handle})
-        with pytest.raises(ValidationError):
-            _FinaliseReportsArgs.model_validate({"summary": "Session summary."})
 
     def test_draft_report_rejects_partial_authored_payload(self) -> None:
         """Each field on ``AuthoredDraft`` is required - dropping any one

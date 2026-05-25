@@ -136,12 +136,6 @@ class _AnnotateHostArgs(BaseModel):
         default="sweep.json",
         description="Relative path to the OA's sweep file. Defaults to ``sweep.json``.",
     )
-    programme_handle: str = Field(
-        description=(
-            "Exact HackerOne programme handle. The scope guard in"
-            " ``validate_insight`` needs a real Programme to check against."
-        ),
-    )
 
 
 @cyber_tool("Annotate Host", args_schema=_AnnotateHostArgs)
@@ -152,7 +146,6 @@ def annotate_host_tool(
     notes: str,
     detected_tech: list[str] | None = None,
     sweep_path: str = "sweep.json",
-    programme_handle: str | None = None,
 ) -> HostAnnotation:
     """
     Author one HostInsight for a single hostname and run the quality gate.
@@ -175,10 +168,6 @@ def annotate_host_tool(
     validation.ok is false.
     """
     sweep = load_sweep_impl(sweep_path)
-    # FIXME(#156): drop ``programme_handle`` from schema+signature - it
-    # duplicates ``runtime.programme_handle`` and is unused here now that
-    # the Programme is sourced from the workspace.
-    _ = programme_handle
     programme = current_programme()
 
     insight = HostInsight(
@@ -225,14 +214,6 @@ def uncovered_hosts_tool(sweep_path: str = "sweep.json") -> list[str]:
 class _FinaliseReconArgs(BaseModel):
     """Explicit args_schema for the Finalise Recon tool."""
 
-    programme_handle: str = Field(
-        description=(
-            "Exact HackerOne programme handle. The scope guard re-validates"
-            " every insight against the programme's structured scope before"
-            " writing recon.json - a mismatch raises and the workspace"
-            " handle is not produced."
-        ),
-    )
     sweep_path: str = Field(
         default="sweep.json",
         description="Relative path to the OA's sweep file. Defaults to ``sweep.json``.",
@@ -241,7 +222,6 @@ class _FinaliseReconArgs(BaseModel):
 
 @cyber_tool("Finalise Recon", args_schema=_FinaliseReconArgs)
 def finalise_recon_tool(
-    programme_handle: str,
     sweep_path: str = "sweep.json",
 ) -> str:
     """
@@ -251,10 +231,6 @@ def finalise_recon_tool(
     errors, or if the surface is non-empty but no host has been marked
     HIGH priority. Returns the bare filename ``recon.json`` on success.
     """
-    # FIXME(#156): drop ``programme_handle`` from schema+signature - it
-    # duplicates ``runtime.programme_handle`` and is unused here now that
-    # the Programme is sourced from the workspace.
-    _ = programme_handle
     programme = current_programme()
     try:
         path = finalise_recon(programme, sweep_filename=sweep_path)

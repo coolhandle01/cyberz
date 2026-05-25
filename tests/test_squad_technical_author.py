@@ -122,11 +122,12 @@ class TestTechnicalAuthorTools:
 
         self._write_verified(tmp_path, verified_vuln)
         with (
+            patch("runtime.programme_handle", "acme"),
             patch("tools.workspace.runtime.run_dir", return_value=tmp_path),
             patch("tools.report_tools.runtime.run_dir", return_value=tmp_path),
         ):
             draft_report_tool.func(**self._good_authoring())
-            result = finalise_reports_tool.func("acme", "Session summary line.")
+            result = finalise_reports_tool.func("Session summary line.")
 
         assert result == "reports.json"
         assert (tmp_path / "reports.json").exists()
@@ -138,12 +139,13 @@ class TestTechnicalAuthorTools:
 
         self._write_verified(tmp_path, verified_vuln)
         with (
+            patch("runtime.programme_handle", "acme"),
             patch("tools.workspace.runtime.run_dir", return_value=tmp_path),
             patch("tools.report_tools.runtime.run_dir", return_value=tmp_path),
         ):
             draft_report_tool.func(**self._good_authoring(title="bad title"))
             with pytest.raises(ValueError, match="unresolved errors"):
-                finalise_reports_tool.func("acme", "Summary.")
+                finalise_reports_tool.func("Summary.")
 
     def test_sanitise_evidence_tool_returns_redactions(self) -> None:
         from squad.technical_author import sanitise_evidence_tool
@@ -207,10 +209,11 @@ class TestTechnicalAuthorTools:
             }
         ]
         with (
+            patch("runtime.programme_handle", "acme"),
             patch("squad.technical_author.http.set_programme") as mhttp,
             patch("squad.technical_author.h1.list_reports", return_value=h1_reports) as mlist,
         ):
-            result = list_programme_reports_tool.func("acme", page_size=10)
+            result = list_programme_reports_tool.func(page_size=10)
 
         assert result == [
             ProgrammeReportSummary(

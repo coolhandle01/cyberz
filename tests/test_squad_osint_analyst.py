@@ -23,15 +23,14 @@ class TestOsintAnalystTools:
         with (
             patch("squad.osint_analyst.discovery.http.set_programme") as mhttp,
             patch(
-                "squad.osint_analyst.discovery.h1.get_programme_policy",
-                return_value={"data": {}},
+                "squad.osint_analyst.discovery.current_programme",
+                return_value=programme,
             ),
-            patch("squad.osint_analyst.discovery.h1.get_structured_scope", return_value={}),
-            patch("squad.osint_analyst.discovery.h1.parse_programme", return_value=programme),
             patch("squad.osint_analyst.discovery.run_recon", return_value=recon_result) as mrun,
             patch("runtime.run_dir", return_value=tmp_path),
+            patch("runtime.programme_handle", "acme"),
         ):
-            result = run_initial_sweep_tool.func("acme")
+            result = run_initial_sweep_tool.func()
 
         assert result == "sweep.json"
         assert (tmp_path / "sweep.json").exists()
@@ -45,12 +44,13 @@ class TestOsintAnalystTools:
         The wrapper-level ``scope_filter`` looks up
         ``squad.workspace_tools.current_programme`` at call time (lazy
         import in the decorator closure), so patching that name covers
-        the active-probe tools. The curation tools do a module-load
-        ``from squad.workspace_tools import current_programme``, so
-        their local alias has to be patched directly.
+        the active-probe tools. ``discovery`` and ``curation`` both do
+        module-load ``from squad.workspace_tools import current_programme``,
+        so their local aliases have to be patched directly.
         """
         return [
             patch("squad.workspace_tools.current_programme", return_value=programme),
+            patch("squad.osint_analyst.discovery.current_programme", return_value=programme),
             patch("squad.osint_analyst.curation.current_programme", return_value=programme),
         ]
 
@@ -76,7 +76,6 @@ class TestOsintAnalystTools:
                     "primary attack surface for the programme."
                 ),
                 detected_tech=["Nginx", "React"],
-                programme_handle="test-programme",
             )
         finally:
             for p in reversed(patches):
@@ -107,7 +106,6 @@ class TestOsintAnalystTools:
                 priority="high",
                 notes="too short",  # < 30 chars, also < 60 high-priority floor
                 detected_tech=["Nginx"],
-                programme_handle="test-programme",
             )
         finally:
             for p in reversed(patches):
@@ -151,9 +149,8 @@ class TestOsintAnalystTools:
                     "primary attack surface for the programme."
                 ),
                 detected_tech=["Nginx", "React"],
-                programme_handle="test-programme",
             )
-            result = finalise_recon_tool.func("test-programme")
+            result = finalise_recon_tool.func()
         finally:
             for p in reversed(patches):
                 p.stop()
@@ -175,7 +172,7 @@ class TestOsintAnalystTools:
             p.start()
         try:
             with pytest.raises(ValueError, match="no host_insights"):
-                finalise_recon_tool.func("test-programme")
+                finalise_recon_tool.func()
         finally:
             for p in reversed(patches):
                 p.stop()

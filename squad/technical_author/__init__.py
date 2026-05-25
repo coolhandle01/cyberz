@@ -4,6 +4,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
+import runtime
 from models import AuthoredDraft, CWEEntry, OWASPEntry, ProgrammeReportSummary
 from squad import SquadMember, cyber_tool, read_run_file_tool, read_run_filelist_tool
 from tools import http
@@ -152,16 +153,6 @@ def calculate_cvss_tool(vector: str) -> float:
 class _TaListProgrammeReportsArgs(BaseModel):
     """Explicit args_schema for the TA's List Programme Reports tool."""
 
-    programme_handle: str = Field(
-        description=(
-            "Exact HackerOne programme handle (lowercase, no slashes, no"
-            " spaces) the report list is filtered by - the H1 API uses"
-            " the handle as the authoritative key. A mis-cased or wrong"
-            " handle returns 404 / an empty list and the TA drafts a"
-            " title against an empty prior-art surface rather than the"
-            " real one."
-        ),
-    )
     page_size: int = Field(
         default=25,
         description=(
@@ -174,9 +165,7 @@ class _TaListProgrammeReportsArgs(BaseModel):
 
 
 @cyber_tool("List Programme Reports", args_schema=_TaListProgrammeReportsArgs)
-def list_programme_reports_tool(
-    programme_handle: str, page_size: int = 25
-) -> list[ProgrammeReportSummary]:
+def list_programme_reports_tool(page_size: int = 25) -> list[ProgrammeReportSummary]:
     """
     List recent public reports on this programme so you can write a title that
     is distinct from existing submissions. Returns each report's id, title,
@@ -184,8 +173,9 @@ def list_programme_reports_tool(
     the Disclosure Coordinator will reject duplicates at submission time and a
     well-differentiated title speeds up triage.
     """
-    http.set_programme(programme_handle)
-    reports = h1.list_reports(programme_handle, page_size=page_size)
+    handle = runtime.programme_handle
+    http.set_programme(handle)
+    reports = h1.list_reports(handle, page_size=page_size)
     return [
         ProgrammeReportSummary(
             report_id=r.get("id"),
@@ -292,16 +282,6 @@ def draft_report_tool(
 class _FinaliseReportsArgs(BaseModel):
     """Explicit args_schema for the TA's Finalise Reports tool."""
 
-    programme_handle: str = Field(
-        description=(
-            "Exact HackerOne programme handle stamped onto every"
-            " consolidated report. Must match the handle the VR's"
-            " ``verified.json`` was produced under; a mismatch would"
-            " ship reports labelled against the wrong programme and"
-            " the DC would file them against whichever handle the body"
-            " carries."
-        ),
-    )
     summary: str = Field(
         description=(
             "2-3 sentence executive summary covering the overall"
@@ -323,7 +303,6 @@ class _FinaliseReportsArgs(BaseModel):
 
 @cyber_tool("Finalise Reports", args_schema=_FinaliseReportsArgs)
 def finalise_reports_tool(
-    programme_handle: str,
     summary: str,
     verified_path: str = "verified.json",
 ) -> str:
@@ -339,7 +318,7 @@ def finalise_reports_tool(
     """
     verified = load_verified(resolve_run_path(verified_path))
     try:
-        path = finalise_drafts(programme_handle, summary, expected_count=len(verified))
+        path = finalise_drafts(runtime.programme_handle, summary, expected_count=len(verified))
     except FinalisationError as exc:
         raise ValueError(str(exc)) from exc
     return path.name

@@ -93,7 +93,6 @@ def _annotate_host_base(hostname: str) -> dict[str, object]:
         "role": "api",
         "priority": "high",
         "notes": "Production REST API surface; warrants careful probing.",
-        "programme_handle": "example",
     }
 
 
@@ -156,7 +155,7 @@ class TestSchemaAcceptReject:
     @pytest.mark.parametrize(
         ("schema_cls", "kwargs"),
         [
-            (_RunInitialSweepArgs, {"programme_handle": "example"}),
+            (_RunInitialSweepArgs, {}),
             (_ReconSubdomainsArgs, {}),
             (_ReconSubdomainsArgs, {"sweep_path": "sweep.json", "host_filter": "api"}),
             (_ReconEndpointsArgs, {}),
@@ -168,7 +167,7 @@ class TestSchemaAcceptReject:
             (_OsintLookupCweArgs, {"query": "xss"}),
             (_OsintLookupOwaspArgs, {"query": "csrf"}),
             (_UncoveredHostsArgs, {}),
-            (_FinaliseReconArgs, {"programme_handle": "example"}),
+            (_FinaliseReconArgs, {}),
             # Shared workspace acceptance cases. List Run Files takes
             # no parameters; Read Run File needs a relative path.
             (_ListRunFilesArgs, {}),
@@ -252,7 +251,6 @@ class TestSchemaAcceptReject:
     @pytest.mark.parametrize(
         "schema_cls",
         [
-            _RunInitialSweepArgs,  # programme_handle required
             _CertTransparencyArgs,  # domain required
             _HistoricalUrlsArgs,  # domain required
             _LlmDetectionArgs,  # endpoints required
@@ -260,8 +258,7 @@ class TestSchemaAcceptReject:
             _DetectTakeoverCandidatesArgs,  # hostnames required (scope_filter sources Programme)
             _OsintLookupCweArgs,  # query required
             _OsintLookupOwaspArgs,  # query required
-            _AnnotateHostArgs,  # hostname / role / priority / notes / programme_handle required
-            _FinaliseReconArgs,  # programme_handle required
+            _AnnotateHostArgs,  # hostname / role / priority / notes required
         ],
     )
     def test_missing_required_field_rejected(self, schema_cls: type[BaseModel]) -> None:
@@ -270,9 +267,9 @@ class TestSchemaAcceptReject:
             schema_cls.model_validate({})
 
     def test_annotate_host_requires_core_fields(self, victim_url: str) -> None:
-        """hostname / role / priority / notes / programme_handle are all required."""
+        """hostname / role / priority / notes are all required."""
         base = _annotate_host_base(urlparse(victim_url).hostname or "")
-        for missing in ("hostname", "role", "priority", "notes", "programme_handle"):
+        for missing in ("hostname", "role", "priority", "notes"):
             kwargs = {k: v for k, v in base.items() if k != missing}
             with pytest.raises(ValidationError):
                 _AnnotateHostArgs.model_validate(kwargs)
