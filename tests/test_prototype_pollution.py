@@ -192,10 +192,10 @@ class TestCheckPrototypePollution:
         assert _CANARY in serialised
 
     def test_payload_filter_restricts_to_json_vector_only(
-        self, make_response: Callable[..., MagicMock]
+        self, make_response: Callable[..., MagicMock], target_apex
     ) -> None:
         # Selecting only json-* names should skip the URL GET loop entirely.
-        ep = Endpoint(url="https://api.example.com/users", status_code=200)
+        ep = Endpoint(url=f"https://api.{target_apex}/users", status_code=200)
 
         get_calls: list[str] = []
         post_calls: list[dict] = []
@@ -227,9 +227,9 @@ class TestCheckPrototypePollution:
         assert len(post_calls) == 2
 
     def test_payload_filter_url_only_skips_json(
-        self, make_response: Callable[..., MagicMock]
+        self, make_response: Callable[..., MagicMock], target_apex
     ) -> None:
-        ep = Endpoint(url="https://api.example.com/users", status_code=200)
+        ep = Endpoint(url=f"https://api.{target_apex}/users", status_code=200)
 
         get_calls: list[str] = []
         post_calls: list[dict] = []
@@ -256,9 +256,9 @@ class TestCheckPrototypePollution:
         assert post_calls == []
 
     def test_payload_filter_finding_evidence_names_the_variant(
-        self, make_response: Callable[..., MagicMock]
+        self, make_response: Callable[..., MagicMock], target_apex
     ) -> None:
-        ep = Endpoint(url="https://api.example.com/users", status_code=200)
+        ep = Endpoint(url=f"https://api.{target_apex}/users", status_code=200)
 
         with (
             patch("requests.get", return_value=make_response(body=f"reflected {_CANARY}")),
@@ -273,9 +273,9 @@ class TestCheckPrototypePollution:
         assert "proto-dot" in results[0].evidence
 
     def test_payload_filter_empty_list_is_a_noop(
-        self, make_response: Callable[..., MagicMock]
+        self, make_response: Callable[..., MagicMock], target_apex
     ) -> None:
-        ep = Endpoint(url="https://api.example.com/users", status_code=200)
+        ep = Endpoint(url=f"https://api.{target_apex}/users", status_code=200)
 
         with (
             patch("requests.get", return_value=make_response(body="baseline")) as mock_get,

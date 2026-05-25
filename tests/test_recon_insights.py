@@ -34,28 +34,28 @@ pytestmark = pytest.mark.unit
 
 
 @pytest.fixture
-def sweep(programme) -> ReconResult:
+def sweep(programme, target_apex) -> ReconResult:
     return ReconResult(
         programme=programme,
         subdomains=["api.example.com", "admin.example.com", "cdn.example.com"],
         endpoints=[
             Endpoint(
-                url="https://api.example.com",
+                url=f"https://api.{target_apex}",
                 status_code=200,
                 technologies=["Nginx", "Spring Boot 2.6"],
             ),
             Endpoint(
-                url="https://admin.example.com",
+                url=f"https://admin.{target_apex}",
                 status_code=401,
                 technologies=["WordPress 5.8"],
             ),
             Endpoint(
-                url="https://cdn.example.com",
+                url=f"https://cdn.{target_apex}",
                 status_code=200,
                 technologies=["CloudFront"],
             ),
             Endpoint(
-                url="https://dead.example.com",
+                url=f"https://dead.{target_apex}",
                 status_code=500,
                 technologies=[],
             ),

@@ -23,67 +23,79 @@ pytestmark = pytest.mark.unit
 
 
 class TestDetectLlmEndpoints:
-    def test_detects_by_url_path_token(self, make_response: Callable[..., MagicMock]) -> None:
-        ep = Endpoint(url="https://example.com/chat", status_code=200)
+    def test_detects_by_url_path_token(
+        self, make_response: Callable[..., MagicMock], target_apex
+    ) -> None:
+        ep = Endpoint(url=f"https://{target_apex}/chat", status_code=200)
         with patch("requests.get", return_value=make_response(status=200)):
             results = detect_llm_endpoints([ep])
         assert len(results) == 1
         assert "LLM" in results[0].technologies
 
-    def test_detects_by_openai_header(self, make_response: Callable[..., MagicMock]) -> None:
-        ep = Endpoint(url="https://example.com/api/v1", status_code=200)
+    def test_detects_by_openai_header(
+        self, make_response: Callable[..., MagicMock], target_apex
+    ) -> None:
+        ep = Endpoint(url=f"https://{target_apex}/api/v1", status_code=200)
         headers = {"x-openai-organization": "org-abc123"}
         with patch("requests.get", return_value=make_response(status=200, headers=headers)):
             results = detect_llm_endpoints([ep])
         assert len(results) == 1
 
-    def test_detects_by_sse_content_type(self, make_response: Callable[..., MagicMock]) -> None:
-        ep = Endpoint(url="https://example.com/stream", status_code=200)
+    def test_detects_by_sse_content_type(
+        self, make_response: Callable[..., MagicMock], target_apex
+    ) -> None:
+        ep = Endpoint(url=f"https://{target_apex}/stream", status_code=200)
         headers = {"content-type": "text/event-stream"}
         with patch("requests.get", return_value=make_response(status=200, headers=headers)):
             results = detect_llm_endpoints([ep])
         assert len(results) == 1
 
-    def test_detects_by_openai_response_json(self, make_response: Callable[..., MagicMock]) -> None:
-        ep = Endpoint(url="https://example.com/api", status_code=200)
+    def test_detects_by_openai_response_json(
+        self, make_response: Callable[..., MagicMock], target_apex
+    ) -> None:
+        ep = Endpoint(url=f"https://{target_apex}/api", status_code=200)
         body = '{"choices": [{"message": {"content": "hello"}}], "model": "gpt-4"}'
         with patch("requests.get", return_value=make_response(status=200, body=body)):
             results = detect_llm_endpoints([ep])
         assert len(results) == 1
 
-    def test_detects_by_body_phrase(self, make_response: Callable[..., MagicMock]) -> None:
-        ep = Endpoint(url="https://example.com/support", status_code=200)
+    def test_detects_by_body_phrase(
+        self, make_response: Callable[..., MagicMock], target_apex
+    ) -> None:
+        ep = Endpoint(url=f"https://{target_apex}/support", status_code=200)
         body = "I'm an AI assistant and I can help you with that."
         with patch("requests.get", return_value=make_response(status=200, body=body)):
             results = detect_llm_endpoints([ep])
         assert len(results) == 1
 
-    def test_skips_server_error_endpoints(self):
-        ep = Endpoint(url="https://example.com/chat", status_code=500)
+    def test_skips_server_error_endpoints(self, target_apex):
+        ep = Endpoint(url=f"https://{target_apex}/chat", status_code=500)
         with patch("requests.get") as mock_get:
             results = detect_llm_endpoints([ep])
         mock_get.assert_not_called()
         assert results == []
 
     def test_clean_endpoint_produces_no_result(
-        self, make_response: Callable[..., MagicMock]
+        self, make_response: Callable[..., MagicMock], target_apex
     ) -> None:
-        ep = Endpoint(url="https://example.com/products", status_code=200)
+        ep = Endpoint(url=f"https://{target_apex}/products", status_code=200)
         body = "<html><body>Product listing</body></html>"
         with patch("requests.get", return_value=make_response(status=200, body=body)):
             results = detect_llm_endpoints([ep])
         assert results == []
 
-    def test_preserves_existing_technologies(self, make_response: Callable[..., MagicMock]) -> None:
-        ep = Endpoint(url="https://example.com/chat", status_code=200, technologies=["React"])
+    def test_preserves_existing_technologies(
+        self, make_response: Callable[..., MagicMock], target_apex
+    ) -> None:
+        ep = Endpoint(url=f"https://{target_apex}/chat", status_code=200, technologies=["React"])
         with patch("requests.get", return_value=make_response(status=200)):
             results = detect_llm_endpoints([ep])
         assert "React" in results[0].technologies
         assert "LLM" in results[0].technologies
 
-    def test_request_exception_does_not_raise(self):
+    def test_request_exception_does_not_raise(self, target_apex):
         # URL has no LLM path token so detection relies solely on the HTTP probe.
-        ep = Endpoint(url="https://example.com/support/widget", status_code=200)
+        ep = Endpoint(url=f"https://{target_apex}/support/widget", status_code=200)
         with patch("requests.get", side_effect=Exception("timeout")):
             results = detect_llm_endpoints([ep])
         assert results == []
@@ -93,8 +105,10 @@ class TestDetectLlmEndpoints:
 
 
 class TestCheckPromptInjection:
-    def test_detects_canary_reflection(self, make_response: Callable[..., MagicMock]) -> None:
-        ep = Endpoint(url="https://example.com/chat", status_code=200)
+    def test_detects_canary_reflection(
+        self, make_response: Callable[..., MagicMock], target_apex
+    ) -> None:
+        ep = Endpoint(url=f"https://{target_apex}/chat", status_code=200)
         with patch(
             "requests.post", return_value=make_response(status=200, body="CYBERSQUADCANARY")
         ):
@@ -103,8 +117,10 @@ class TestCheckPromptInjection:
         assert results[0].vuln_class == "PromptInjection"
         assert results[0].severity_hint == Severity.CRITICAL
 
-    def test_detects_system_prompt_leakage(self, make_response: Callable[..., MagicMock]) -> None:
-        ep = Endpoint(url="https://example.com/chat", status_code=200)
+    def test_detects_system_prompt_leakage(
+        self, make_response: Callable[..., MagicMock], target_apex
+    ) -> None:
+        ep = Endpoint(url=f"https://{target_apex}/chat", status_code=200)
         body = "You are a helpful customer service assistant. Your role is to help users."
         with patch("requests.post", return_value=make_response(status=200, body=body)):
             results = check_prompt_injection([ep])
@@ -112,29 +128,31 @@ class TestCheckPromptInjection:
         assert results[0].severity_hint == Severity.HIGH
 
     def test_safe_response_produces_no_finding(
-        self, make_response: Callable[..., MagicMock]
+        self, make_response: Callable[..., MagicMock], target_apex
     ) -> None:
-        ep = Endpoint(url="https://example.com/chat", status_code=200)
+        ep = Endpoint(url=f"https://{target_apex}/chat", status_code=200)
         body = "I can help you with that! What would you like to know?"
         with patch("requests.post", return_value=make_response(status=200, body=body)):
             results = check_prompt_injection([ep])
         assert results == []
 
-    def test_skips_server_error_endpoints(self):
-        ep = Endpoint(url="https://example.com/chat", status_code=500)
+    def test_skips_server_error_endpoints(self, target_apex):
+        ep = Endpoint(url=f"https://{target_apex}/chat", status_code=500)
         with patch("requests.post") as mock_post:
             results = check_prompt_injection([ep])
         mock_post.assert_not_called()
         assert results == []
 
-    def test_request_exception_is_swallowed(self):
-        ep = Endpoint(url="https://example.com/chat", status_code=200)
+    def test_request_exception_is_swallowed(self, target_apex):
+        ep = Endpoint(url=f"https://{target_apex}/chat", status_code=200)
         with patch("requests.post", side_effect=Exception("timeout")):
             results = check_prompt_injection([ep])
         assert results == []
 
-    def test_deduplicates_per_endpoint(self, make_response: Callable[..., MagicMock]) -> None:
-        ep = Endpoint(url="https://example.com/chat", status_code=200)
+    def test_deduplicates_per_endpoint(
+        self, make_response: Callable[..., MagicMock], target_apex
+    ) -> None:
+        ep = Endpoint(url=f"https://{target_apex}/chat", status_code=200)
         with patch(
             "requests.post", return_value=make_response(status=200, body="CYBERSQUADCANARY")
         ):
@@ -142,11 +160,11 @@ class TestCheckPromptInjection:
         assert len(results) == 1
 
     def test_payload_filter_restricts_to_named_variants(
-        self, make_response: Callable[..., MagicMock]
+        self, make_response: Callable[..., MagicMock], target_apex
     ) -> None:
         # Selecting only "override" should fire one payload across all four
         # body formats, not three payloads x four formats.
-        ep = Endpoint(url="https://example.com/chat", status_code=200)
+        ep = Endpoint(url=f"https://{target_apex}/chat", status_code=200)
 
         seen_bodies: list[str] = []
 
@@ -165,9 +183,9 @@ class TestCheckPromptInjection:
             assert "Ignore all previous instructions" in body
 
     def test_payload_filter_finding_evidence_names_the_variant(
-        self, make_response: Callable[..., MagicMock]
+        self, make_response: Callable[..., MagicMock], target_apex
     ) -> None:
-        ep = Endpoint(url="https://example.com/chat", status_code=200)
+        ep = Endpoint(url=f"https://{target_apex}/chat", status_code=200)
 
         with patch(
             "requests.post", return_value=make_response(status=200, body="CYBERSQUADCANARY")
@@ -179,9 +197,9 @@ class TestCheckPromptInjection:
         assert "<|im_end|>" in results[0].evidence
 
     def test_payload_filter_none_runs_all_variants(
-        self, make_response: Callable[..., MagicMock]
+        self, make_response: Callable[..., MagicMock], target_apex
     ) -> None:
-        ep = Endpoint(url="https://example.com/chat", status_code=200)
+        ep = Endpoint(url=f"https://{target_apex}/chat", status_code=200)
 
         seen_payloads: set[str] = set()
 
@@ -198,8 +216,8 @@ class TestCheckPromptInjection:
         # All three payload variants fired.
         assert seen_payloads == set(_INJECTION_PAYLOADS.keys())
 
-    def test_payload_filter_empty_list_is_a_noop(self):
-        ep = Endpoint(url="https://example.com/chat", status_code=200)
+    def test_payload_filter_empty_list_is_a_noop(self, target_apex):
+        ep = Endpoint(url=f"https://{target_apex}/chat", status_code=200)
 
         with patch("requests.post") as mock_post:
             results = check_prompt_injection([ep], payload_names=[])

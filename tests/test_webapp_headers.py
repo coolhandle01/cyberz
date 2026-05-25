@@ -128,8 +128,8 @@ class TestCheckHostHeadersPathOverride:
 # check_header_injection (CRLF) - these mirror the original tests but now
 # import from the correct module
 class TestCheckHeaderInjectionCrlf:
-    def test_detects_reflected_canary_in_response_headers(self):
-        endpoint = Endpoint(url="https://api.example.com/", status_code=200)
+    def test_detects_reflected_canary_in_response_headers(self, target_apex):
+        endpoint = Endpoint(url=f"https://api.{target_apex}/", status_code=200)
         mock_resp = MagicMock()
         mock_resp.headers = {"CybersquadCanary": "yes"}
         mock_resp.text = ""
@@ -140,8 +140,8 @@ class TestCheckHeaderInjectionCrlf:
         assert len(results) == 1
         assert results[0].vuln_class == "HeaderInjection"
 
-    def test_clean_response_produces_no_finding(self):
-        endpoint = Endpoint(url="https://api.example.com/", status_code=200)
+    def test_clean_response_produces_no_finding(self, target_apex):
+        endpoint = Endpoint(url=f"https://api.{target_apex}/", status_code=200)
         mock_resp = MagicMock()
         mock_resp.headers = {"Content-Type": "text/html"}
         mock_resp.text = "<html>Normal</html>"

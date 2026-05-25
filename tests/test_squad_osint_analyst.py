@@ -239,10 +239,10 @@ class TestOsintAnalystTools:
         assert result == sentinel
         m.assert_called_once_with("example.com")
 
-    def test_historical_urls_tool(self) -> None:
+    def test_historical_urls_tool(self, target_apex) -> None:
         from squad.osint_analyst import historical_urls_tool
 
-        sentinel = ["https://example.com/old"]
+        sentinel = [f"https://{target_apex}/old"]
         with patch(
             "squad.osint_analyst.discovery.historical_urls",
             return_value=sentinel,

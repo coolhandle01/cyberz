@@ -47,17 +47,17 @@ class TestScopeItem:
     def test_valid_wildcard_scope_item(self, scope_item_wildcard):
         assert scope_item_wildcard.asset_type == ScopeType.WILDCARD
 
-    def test_instruction_defaults_to_none(self):
+    def test_instruction_defaults_to_none(self, target_apex):
         item = ScopeItem(
-            asset_identifier="https://example.com",
+            asset_identifier=f"https://{target_apex}",
             asset_type=ScopeType.URL,
         )
         assert item.instruction is None
 
-    def test_invalid_asset_type_raises(self):
+    def test_invalid_asset_type_raises(self, target_apex):
         with pytest.raises(ValidationError):
             ScopeItem(
-                asset_identifier="https://example.com",
+                asset_identifier=f"https://{target_apex}",
                 asset_type="not_a_real_type",
             )
 
@@ -85,8 +85,8 @@ class TestEndpoint:
         assert endpoint.status_code == 200
         assert "nginx" in endpoint.technologies
 
-    def test_optional_fields_default(self):
-        ep = Endpoint(url="https://example.com")
+    def test_optional_fields_default(self, target_apex):
+        ep = Endpoint(url=f"https://{target_apex}")
         assert ep.status_code is None
         assert ep.technologies == []
         assert ep.parameters == []
@@ -288,11 +288,11 @@ class TestRawFinding:
         assert raw_finding_high.vuln_class == "SQLi"
         assert raw_finding_high.severity_hint == Severity.HIGH
 
-    def test_severity_defaults_to_medium(self):
+    def test_severity_defaults_to_medium(self, target_apex):
         finding = RawFinding(
             title="Test",
             vuln_class="XSS",
-            target="https://example.com",
+            target=f"https://{target_apex}",
             evidence="payload reflected",
             tool="nuclei",
         )

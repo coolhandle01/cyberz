@@ -248,8 +248,12 @@ class TestSchemaAcceptReject:
                 _JwtCheckArgs,
                 {
                     "token": "eyJ.x.y",
-                    # endpoint is typed Endpoint; minimum shape is the URL
-                    "endpoint": {"url": "https://victim.example.com/api/me"},
+                    # endpoint is typed Endpoint; minimum shape is the URL.
+                    # Literal here, not f-string with target_apex: this is class-level
+                    # @pytest.mark.parametrize data, evaluated at collection time when
+                    # fixtures are not yet resolved. The URL value is incidental shape
+                    # data - the args_schema validation under test is URL-format-only.
+                    "endpoint": {"url": "https://example.invalid/api/me"},
                     "attacks": ["alg-none"],
                 },
             ),
@@ -341,7 +345,7 @@ class TestSchemaAcceptReject:
         ],
     )
     def test_unknown_strenum_value_rejected(
-        self, schema_cls: type[BaseModel], field_name: str
+        self, schema_cls: type[BaseModel], field_name: str, target_apex: str
     ) -> None:
         """An unknown StrEnum member must fail validation, not silently coerce."""
         base: dict[str, object] = {field_name: ["this-is-not-a-real-variant"]}
@@ -353,7 +357,7 @@ class TestSchemaAcceptReject:
             # _JwtCheckArgs takes the typed ``Endpoint`` shape (not a bare
             # URL string); pass the minimum dict that validates so the test
             # stays focused on the unknown-StrEnum reject.
-            base["endpoint"] = {"url": "https://victim.example.com/api/me"}
+            base["endpoint"] = {"url": f"https://victim.{target_apex}/api/me"}
         with pytest.raises(ValidationError):
             schema_cls.model_validate(base)
 
@@ -422,13 +426,13 @@ class TestSchemaAcceptReject:
         with pytest.raises(ValidationError):
             _JwtCheckArgs.model_validate({"endpoint": endpoint.model_dump(mode="json")})
 
-    def test_jwt_rejects_malformed_endpoint(self, endpoint) -> None:
+    def test_jwt_rejects_malformed_endpoint(self, endpoint, target_apex) -> None:
         """The typed ``Endpoint`` validates URL well-formedness upstream of
         the JWT replay - a string where an Endpoint dict is required
         rejects, as does an Endpoint dict whose URL is malformed."""
         with pytest.raises(ValidationError):
             _JwtCheckArgs.model_validate(
-                {"token": "eyJ.x.y", "endpoint": "https://victim.example.com/api"}
+                {"token": "eyJ.x.y", "endpoint": f"https://victim.{target_apex}/api"}
             )
         with pytest.raises(ValidationError):
             _JwtCheckArgs.model_validate({"token": "eyJ.x.y", "endpoint": {"url": "not-a-url"}})

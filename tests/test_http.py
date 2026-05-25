@@ -76,46 +76,46 @@ class TestInjectHeaders:
 
 
 class TestVerbWrappers:
-    def test_get_calls_requests_get_with_ua(self):
+    def test_get_calls_requests_get_with_ua(self, target_apex):
         with patch("requests.get", return_value=MagicMock()) as mock_get:
-            http.get("https://x.example.com/")
+            http.get(f"https://x.{target_apex}/")
         kwargs = mock_get.call_args.kwargs
         assert kwargs["headers"]["User-Agent"] == http.user_agent()
 
-    def test_default_timeout_applied_when_omitted(self):
+    def test_default_timeout_applied_when_omitted(self, target_apex):
         with patch("requests.get", return_value=MagicMock()) as mock_get:
-            http.get("https://x.example.com/")
+            http.get(f"https://x.{target_apex}/")
         assert mock_get.call_args.kwargs["timeout"] == config.recon.http_timeout
 
-    def test_explicit_timeout_not_overridden(self):
+    def test_explicit_timeout_not_overridden(self, target_apex):
         with patch("requests.get", return_value=MagicMock()) as mock_get:
-            http.get("https://x.example.com/", timeout=999)
+            http.get(f"https://x.{target_apex}/", timeout=999)
         assert mock_get.call_args.kwargs["timeout"] == 999
 
-    def test_post_calls_requests_post_with_ua(self):
+    def test_post_calls_requests_post_with_ua(self, target_apex):
         with patch("requests.post", return_value=MagicMock()) as mock_post:
-            http.post("https://x.example.com/", json={"a": 1})
+            http.post(f"https://x.{target_apex}/", json={"a": 1})
         kwargs = mock_post.call_args.kwargs
         assert kwargs["headers"]["User-Agent"] == http.user_agent()
         assert kwargs["json"] == {"a": 1}
 
     @pytest.mark.parametrize("verb", ["put", "delete", "head", "patch", "options"])
-    def test_other_verbs_inject_ua(self, verb):
+    def test_other_verbs_inject_ua(self, verb, target_apex):
         with patch(f"requests.{verb}", return_value=MagicMock()) as mock_call:
-            getattr(http, verb)("https://x.example.com/")
+            getattr(http, verb)(f"https://x.{target_apex}/")
         assert mock_call.call_args.kwargs["headers"]["User-Agent"] == http.user_agent()
 
-    def test_request_passes_method(self):
+    def test_request_passes_method(self, target_apex):
         with patch("requests.request", return_value=MagicMock()) as mock_req:
-            http.request("PATCH", "https://x.example.com/")
+            http.request("PATCH", f"https://x.{target_apex}/")
         args, kwargs = mock_req.call_args
         assert args[0] == "PATCH"
         assert kwargs["headers"]["User-Agent"] == http.user_agent()
 
-    def test_programme_appears_in_outbound_ua(self):
+    def test_programme_appears_in_outbound_ua(self, target_apex):
         """A programme set on ``runtime`` rides every outbound request."""
         runtime.programme_handle = "acme-corp"
         with patch("requests.get", return_value=MagicMock()) as mock_get:
-            http.get("https://x.example.com/")
+            http.get(f"https://x.{target_apex}/")
         ua = mock_get.call_args.kwargs["headers"]["User-Agent"]
         assert "programme: acme-corp" in ua

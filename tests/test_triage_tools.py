@@ -81,7 +81,7 @@ class TestInScope:
 # Fixtures
 
 
-def _good_assessment(raw: RawFinding, **overrides) -> TriageAssessment:
+def _good_assessment(raw: RawFinding, target_apex: str, **overrides) -> TriageAssessment:
     base: dict = {
         "finding_index": 0,
         "target": raw.target,
@@ -102,7 +102,7 @@ def _good_assessment(raw: RawFinding, **overrides) -> TriageAssessment:
             "UNION-based injection to extract arbitrary rows from the users table."
         ),
         "steps_to_reproduce": [
-            "GET https://api.example.com/search?q=test' UNION SELECT 1,2,3-- ",
+            f"GET https://api.{target_apex}/search?q=test' UNION SELECT 1,2,3-- ",
             "Observe the response body returns the union'd rows alongside legitimate hits.",
         ],
         "impact": (
@@ -124,11 +124,11 @@ def _good_assessment(raw: RawFinding, **overrides) -> TriageAssessment:
 
 
 @pytest.fixture
-def in_scope_raw() -> RawFinding:
+def in_scope_raw(target_apex) -> RawFinding:
     return RawFinding(
-        title="SQL Injection - https://api.example.com/search",
+        title=f"SQL Injection - https://api.{target_apex}/search",
         vuln_class="SQLi",
-        target="https://api.example.com/search",
+        target=f"https://api.{target_apex}/search",
         evidence="sqlmap detected injection at parameter q",
         tool="sqlmap",
         severity_hint=Severity.HIGH,
@@ -151,36 +151,39 @@ def oos_raw(bystander_url) -> RawFinding:
 
 
 class TestValidateAssessment:
-    def test_clean_assessment_passes(self, in_scope_raw, programme):
-        a = _good_assessment(in_scope_raw)
+    def test_clean_assessment_passes(self, in_scope_raw, programme, target_apex):
+        a = _good_assessment(in_scope_raw, target_apex)
         report = validate_assessment(a, in_scope_raw, programme)
         assert report.ok is True
         assert all(i.severity != "error" for i in report.issues)
 
-    def test_rejects_target_rewrite(self, in_scope_raw, programme):
-        a = _good_assessment(in_scope_raw, target="https://api.example.com/different")
+    def test_rejects_target_rewrite(self, in_scope_raw, programme, target_apex):
+        a = _good_assessment(
+            in_scope_raw, target_apex, target=f"https://api.{target_apex}/different"
+        )
         report = validate_assessment(a, in_scope_raw, programme)
         assert report.ok is False
         assert any(i.section == "target" and "do not rewrite" in i.message for i in report.issues)
 
-    def test_rejects_vuln_class_rewrite(self, in_scope_raw, programme):
-        a = _good_assessment(in_scope_raw, vuln_class="SomethingElse")
+    def test_rejects_vuln_class_rewrite(self, in_scope_raw, programme, target_apex):
+        a = _good_assessment(in_scope_raw, target_apex, vuln_class="SomethingElse")
         report = validate_assessment(a, in_scope_raw, programme)
         assert report.ok is False
         assert any(i.section == "vuln_class" for i in report.issues)
 
-    def test_rejects_out_of_scope_target(self, oos_raw, programme):
-        a = _good_assessment(oos_raw)
+    def test_rejects_out_of_scope_target(self, oos_raw, programme, target_apex):
+        a = _good_assessment(oos_raw, target_apex)
         report = validate_assessment(a, oos_raw, programme)
         assert report.ok is False
         assert any(
             i.section == "target" and "out of programme scope" in i.message for i in report.issues
         )
 
-    def test_rejects_below_floor(self, in_scope_raw, programme, monkeypatch):
+    def test_rejects_below_floor(self, in_scope_raw, programme, monkeypatch, target_apex):
         # Below-LOW: with default floor (low), informational is below.
         a = _good_assessment(
             in_scope_raw,
+            target_apex,
             severity=Severity.INFORMATIONAL,
             severity_hint=Severity.INFORMATIONAL,
             severity_decision=SeverityDecision.KEEP,
@@ -190,49 +193,53 @@ class TestValidateAssessment:
         report = validate_assessment(a, raw, programme)
         assert any(i.section == "severity" for i in report.issues)
 
-    def test_rejects_keep_with_mismatched_severity(self, in_scope_raw, programme):
+    def test_rejects_keep_with_mismatched_severity(self, in_scope_raw, programme, target_apex):
         a = _good_assessment(
             in_scope_raw,
+            target_apex,
             severity=Severity.CRITICAL,
             severity_decision=SeverityDecision.KEEP,
         )
         report = validate_assessment(a, in_scope_raw, programme)
         assert any(i.section == "severity_decision" for i in report.issues)
 
-    def test_rejects_raise_with_same_severity(self, in_scope_raw, programme):
-        a = _good_assessment(in_scope_raw, severity_decision=SeverityDecision.RAISE)
+    def test_rejects_raise_with_same_severity(self, in_scope_raw, programme, target_apex):
+        a = _good_assessment(in_scope_raw, target_apex, severity_decision=SeverityDecision.RAISE)
         report = validate_assessment(a, in_scope_raw, programme)
         assert any(i.section == "severity_decision" for i in report.issues)
 
-    def test_rejects_thin_severity_rationale(self, in_scope_raw, programme):
-        a = _good_assessment(in_scope_raw, severity_rationale="too short")
+    def test_rejects_thin_severity_rationale(self, in_scope_raw, programme, target_apex):
+        a = _good_assessment(in_scope_raw, target_apex, severity_rationale="too short")
         report = validate_assessment(a, in_scope_raw, programme)
         assert any(i.section == "severity_rationale" for i in report.issues)
 
-    def test_rejects_stale_description(self, in_scope_raw, programme):
+    def test_rejects_stale_description(self, in_scope_raw, programme, target_apex):
         a = _good_assessment(
             in_scope_raw,
-            description="Automated detection of SQLi at https://api.example.com/search.",
+            target_apex,
+            description=f"Automated detection of SQLi at https://api.{target_apex}/search.",
         )
         report = validate_assessment(a, in_scope_raw, programme)
         assert any(i.section == "description" and "boilerplate" in i.message for i in report.issues)
 
-    def test_rejects_thin_description(self, in_scope_raw, programme):
-        a = _good_assessment(in_scope_raw, description="Too short.")
+    def test_rejects_thin_description(self, in_scope_raw, programme, target_apex):
+        a = _good_assessment(in_scope_raw, target_apex, description="Too short.")
         report = validate_assessment(a, in_scope_raw, programme)
         assert any(i.section == "description" for i in report.issues)
 
-    def test_rejects_hand_wavy_impact(self, in_scope_raw, programme):
+    def test_rejects_hand_wavy_impact(self, in_scope_raw, programme, target_apex):
         a = _good_assessment(
             in_scope_raw,
+            target_apex,
             impact="An attacker could compromise user data of various kinds in this app.",
         )
         report = validate_assessment(a, in_scope_raw, programme)
         assert any(i.section == "impact" and "hand-wavy" in i.message for i in report.issues)
 
-    def test_rejects_stale_impact_placeholder(self, in_scope_raw, programme):
+    def test_rejects_stale_impact_placeholder(self, in_scope_raw, programme, target_apex):
         a = _good_assessment(
             in_scope_raw,
+            target_apex,
             impact="Potential SQLi impact - pending manual review by the team here.",
         )
         report = validate_assessment(a, in_scope_raw, programme)
@@ -240,18 +247,21 @@ class TestValidateAssessment:
             i.section == "impact" and "pending manual review" in i.message for i in report.issues
         )
 
-    def test_rejects_remediation_without_url(self, in_scope_raw, programme):
+    def test_rejects_remediation_without_url(self, in_scope_raw, programme, target_apex):
         a = _good_assessment(
-            in_scope_raw, remediation="Use parameterised queries throughout the codebase."
+            in_scope_raw,
+            target_apex,
+            remediation="Use parameterised queries throughout the codebase.",
         )
         report = validate_assessment(a, in_scope_raw, programme)
         assert any(i.section == "remediation" for i in report.issues)
 
-    def test_rejects_stale_step_placeholder(self, in_scope_raw, programme):
+    def test_rejects_stale_step_placeholder(self, in_scope_raw, programme, target_apex):
         a = _good_assessment(
             in_scope_raw,
+            target_apex,
             steps_to_reproduce=[
-                "GET https://api.example.com/search?q=test' UNION SELECT 1,2,3-- ",
+                f"GET https://api.{target_apex}/search?q=test' UNION SELECT 1,2,3-- ",
                 "Observe the following evidence:",
             ],
         )
@@ -260,14 +270,16 @@ class TestValidateAssessment:
             i.section == "steps_to_reproduce" and "placeholder" in i.message for i in report.issues
         )
 
-    def test_rejects_cvss_mismatch(self, in_scope_raw, programme):
-        a = _good_assessment(in_scope_raw, cvss_score=5.0)
+    def test_rejects_cvss_mismatch(self, in_scope_raw, programme, target_apex):
+        a = _good_assessment(in_scope_raw, target_apex, cvss_score=5.0)
         report = validate_assessment(a, in_scope_raw, programme)
         assert any(i.section == "cvss" and i.severity == "error" for i in report.issues)
 
-    def test_warns_when_cvss_band_disagrees_with_severity(self, in_scope_raw, programme):
+    def test_warns_when_cvss_band_disagrees_with_severity(
+        self, in_scope_raw, programme, target_apex
+    ):
         # Vector computes to 9.8 (critical) but severity says HIGH (keep matches hint)
-        a = _good_assessment(in_scope_raw)
+        a = _good_assessment(in_scope_raw, target_apex)
         report = validate_assessment(a, in_scope_raw, programme)
         assert any(
             i.section == "cvss" and i.severity == "warning" and "implies severity" in i.message
@@ -279,8 +291,8 @@ class TestValidateAssessment:
 
 
 class TestPersistence:
-    def test_save_assessment_writes_indexed_file(self, in_scope_raw, run_dir):
-        path = save_assessment(_good_assessment(in_scope_raw, finding_index=4))
+    def test_save_assessment_writes_indexed_file(self, in_scope_raw, run_dir, target_apex):
+        path = save_assessment(_good_assessment(in_scope_raw, target_apex, finding_index=4))
         assert path == run_dir / "assessments" / "004.json"
         assert path.exists()
 
@@ -296,7 +308,7 @@ class TestPersistence:
         path = save_discard(d)
         assert path == run_dir / "discards" / "002.json"
 
-    def test_assessment_evicts_discard(self, in_scope_raw, run_dir):
+    def test_assessment_evicts_discard(self, in_scope_raw, run_dir, target_apex):
         # First discard, then change mind and assess
         d = DiscardEntry(
             finding_index=1,
@@ -307,12 +319,12 @@ class TestPersistence:
             rationale="Initial review thought this was noise.",
         )
         save_discard(d)
-        save_assessment(_good_assessment(in_scope_raw, finding_index=1))
+        save_assessment(_good_assessment(in_scope_raw, target_apex, finding_index=1))
         assert not (run_dir / "discards" / "001.json").exists()
         assert (run_dir / "assessments" / "001.json").exists()
 
-    def test_discard_evicts_assessment(self, in_scope_raw, run_dir):
-        save_assessment(_good_assessment(in_scope_raw, finding_index=1))
+    def test_discard_evicts_assessment(self, in_scope_raw, run_dir, target_apex):
+        save_assessment(_good_assessment(in_scope_raw, target_apex, finding_index=1))
         d = DiscardEntry(
             finding_index=1,
             target=in_scope_raw.target,
@@ -330,21 +342,25 @@ class TestPersistence:
 
 
 class TestFinaliseTriage:
-    def test_writes_verified_json_for_clean_assessments(self, in_scope_raw, run_dir, programme):
-        save_assessment(_good_assessment(in_scope_raw, finding_index=0))
+    def test_writes_verified_json_for_clean_assessments(
+        self, in_scope_raw, run_dir, programme, target_apex
+    ):
+        save_assessment(_good_assessment(in_scope_raw, target_apex, finding_index=0))
         path = finalise_triage(programme, [in_scope_raw])
         assert path == run_dir / "verified.json"
         verified = json.loads(path.read_text())
         assert len(verified) == 1
         assert verified[0]["target"] == in_scope_raw.target
 
-    def test_refuses_unprocessed_findings(self, in_scope_raw, run_dir, programme):
-        save_assessment(_good_assessment(in_scope_raw, finding_index=0))
+    def test_refuses_unprocessed_findings(self, in_scope_raw, run_dir, programme, target_apex):
+        save_assessment(_good_assessment(in_scope_raw, target_apex, finding_index=0))
         with pytest.raises(TriageFinalisationError, match=r"\[1\] have no assessment"):
             finalise_triage(programme, [in_scope_raw, in_scope_raw])
 
-    def test_refuses_on_validation_errors(self, in_scope_raw, run_dir, programme):
-        save_assessment(_good_assessment(in_scope_raw, finding_index=0, description="Too short."))
+    def test_refuses_on_validation_errors(self, in_scope_raw, run_dir, programme, target_apex):
+        save_assessment(
+            _good_assessment(in_scope_raw, target_apex, finding_index=0, description="Too short.")
+        )
         with pytest.raises(TriageFinalisationError, match="unresolved errors"):
             finalise_triage(programme, [in_scope_raw])
 
@@ -363,17 +379,19 @@ class TestFinaliseTriage:
         verified = json.loads(path.read_text())
         assert verified == []
 
-    def test_builds_verified_vulnerability(self, in_scope_raw, run_dir, programme):
-        save_assessment(_good_assessment(in_scope_raw, finding_index=0))
+    def test_builds_verified_vulnerability(self, in_scope_raw, run_dir, programme, target_apex):
+        save_assessment(_good_assessment(in_scope_raw, target_apex, finding_index=0))
         finalise_triage(programme, [in_scope_raw])
         verified = load_assessments()
         assert verified[0].finding_index == 0
 
-    def test_carries_raw_evidence_into_verified(self, in_scope_raw, run_dir, programme):
+    def test_carries_raw_evidence_into_verified(
+        self, in_scope_raw, run_dir, programme, target_apex
+    ):
         # The VR's authored fields go into description/impact/remediation; the
         # evidence belongs to the PT and is carried through untouched (the TA
         # sanitises it later).
-        save_assessment(_good_assessment(in_scope_raw, finding_index=0))
+        save_assessment(_good_assessment(in_scope_raw, target_apex, finding_index=0))
         path = finalise_triage(programme, [in_scope_raw])
         loaded = [VerifiedVulnerability.model_validate(v) for v in json.loads(path.read_text())]
         assert loaded[0].evidence == in_scope_raw.evidence
