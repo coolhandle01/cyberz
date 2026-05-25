@@ -31,6 +31,8 @@ Counter-example: a one-off internal field used only inside one model does not ne
 
 ## Prompt-injection awareness
 
+Canonical reference: **OWASP Top 10 for LLM Applications - LLM01:2025 Prompt Injection** at <https://genai.owasp.org/llmrisk/llm01-prompt-injection/>. The direct-vs-indirect split below mirrors the OWASP framing; the "external content interpreted by the model alters its behaviour" case is the **indirect** subtype, which is the dominant risk surface for a tool-using agent that reads HTTP responses and command output back into context.
+
 Free-text fields fed back into the LLM's context are the highest-risk surface in the codebase. The threat model: an external source (HTTP response, recon command output, H1 ticket comment) carries an embedded instruction that biases a downstream agent's reasoning.
 
 Fields that carry **agent-produced** text (`description`, `summary`, `rationale`, `notes`, `severity_rationale`) are lower risk - the agent authored them. Validate length, validate non-empty if required, but no injection guard needed.

@@ -32,7 +32,15 @@ _PLATFORM = "hackerone"
 
 
 def user_agent() -> str:
-    """Build the current User-Agent string from operator + workspace context."""
+    """Build the current User-Agent string from operator + workspace context.
+
+    User-Agent header semantics are defined in RFC 9110 section 10.1.5
+    (https://www.rfc-editor.org/rfc/rfc9110.html#section-10.1.5). The
+    structured "<product>; <key>: <value>; ..." shape below is a deliberate
+    departure from the typical product-token convention: every field a SOC
+    operator needs to identify the request, the programme, and the operator
+    is parseable from the value without correlating to external metadata.
+    """
     parts = [f"platform: {_PLATFORM}"]
     handle = runtime.programme_handle
     if handle:

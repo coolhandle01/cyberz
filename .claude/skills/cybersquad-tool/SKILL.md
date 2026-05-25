@@ -34,6 +34,8 @@ def s3_check_tool(recon_path: str) -> list[RawFinding]:
 
 Why this matters: every tool's contract is what the LLM reads when picking the tool, including per-field guidance. The inferred path cannot attach per-field `Field(description=...)`; the explicit path can, and writing those descriptions is where the LLM gets the targeting signal that keeps probes on-scope. Per-field descriptions also reject unknown StrEnum variants upstream of any HTTP request - the validation fires before a mis-call costs a request.
 
+The "validate at the boundary, trust within" stance has a name and a canonical reference: Alexis King's [Parse, don't validate](https://lexi-lambda.github.io/blog/2019/11/05/parse-don-t-validate/) (2019). Pydantic v2 is the runtime that lets us do this in Python; the `BaseModel` validation contract is documented at <https://docs.pydantic.dev/2.12/concepts/models/> (we pin `pydantic>=2.7` and currently resolve to 2.12). An args_schema is the LLM's input parsed into typed values at the boundary; the wrapper body trusts the parsed result and does not re-check shape. The CrewAI side - how `args_schema` and tool `description` are surfaced to the agent - is documented at <https://docs.crewai.com/en/learn/create-custom-tools>.
+
 Rules:
 
 - Class name is underscore-prefixed `_<ToolName>Args`. Each agent has a contract test under `tests/squad/<agent>/test_args_schemas.py` that walks `MEMBER.tools`, asserts every typed-tool schema is the expected explicit class, and enforces a closed-world `_<AGENT>_SCHEMAS` mapping. New typed tools are discovered via the private-prefix class name; a missing mapping entry fires the test before reviewers see the PR.

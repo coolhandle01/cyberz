@@ -9,6 +9,8 @@ description: Communication conventions for tool wrappers in cybersquad. The args
 
 ## The two LLM-visible surfaces
 
+CrewAI's own custom-tools guide at <https://docs.crewai.com/en/learn/create-custom-tools> documents both surfaces (the `description` class attribute and the `args_schema: Type[BaseModel]` attribute on `BaseTool`) and explicitly recommends explicit Pydantic schemas: *"Defining a Pydantic model as your args_schema provides automatic input validation and clear error messages. Explicit schemas are recommended... they produce better agent behavior and clearer documentation."* Our `@cyber_tool` wrapper makes the explicit `args_schema` keyword-required so the recommendation is enforced, not aspirational.
+
 CrewAI surfaces two distinct strings to the agent at different moments:
 
 1. **Tool description** - the wrapper's function docstring. Read by the LLM when *choosing which tool to call*. Should answer "what does this do, what does it return, when does it refuse, what vocabulary does it draw from".

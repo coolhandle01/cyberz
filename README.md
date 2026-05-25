@@ -256,6 +256,34 @@ Edit the Agent prose (`role.md` / `goal.md` / `backstory.md` at the member root)
 
 ---
 
+## Background reading
+
+Load-bearing structural decisions in cybersquad cite a canonical external spec at the assertion site. The index below is the same set, grouped by concern, for a contributor wanting one map.
+
+**Vulnerability scoring and classification**
+
+- [FIRST CVSS v3.1 Specification Document](https://www.first.org/cvss/v3.1/specification-document) - the vector grammar, metric short codes, and base-score formula implemented by `Calculate CVSS Score` in `tools/report_tools.py` and surfaced by `squad/vulnerability_researcher/triage.py`.
+- [FIRST CVSS v3.1 Calculator](https://www.first.org/cvss/calculator/3-1) - hand-verification entry point for a vector / score pair.
+- [OWASP Top 10:2021](https://owasp.org/Top10/2021/) - the A01..A10 codes encoded by `OWASPCategory` in `tools/pentest/owasp.py` and stamped onto every `check_X` via `@owasp(...)`.
+- [OWASP Cheat Sheet Series](https://cheatsheetseries.owasp.org/) - canonical remediation guidance keyed by topic slug, looked up by `tools/owasp_data.py` and cited in every disclosure's Remediation section.
+
+**LLM safety**
+
+- [OWASP Top 10 for LLM Applications - LLM01:2025 Prompt Injection](https://genai.owasp.org/llmrisk/llm01-prompt-injection/) - the threat model the prompt-injection-aware fields in `models/` defend against (direct vs indirect; tool-captured free text vs agent-produced free text).
+
+**Framework and data-shape primitives**
+
+- [CrewAI - LLMs concept](https://docs.crewai.com/en/concepts/llms) and [Agents concept](https://docs.crewai.com/en/concepts/agents) - the `LLM(...)` / `Agent(llm=...)` contract that `crew.py` relies on; the "bare model string silently ignores temperature and max_tokens" footgun is documented here.
+- [CrewAI - Create Custom Tools](https://docs.crewai.com/en/learn/create-custom-tools) - the `BaseTool.description` and `args_schema: Type[BaseModel]` surfaces our `@cyber_tool` wrapper makes mandatory.
+- [Alexis King, "Parse, don't validate" (2019)](https://lexi-lambda.github.io/blog/2019/11/05/parse-don-t-validate/) - the canonical reference for our boundary-typed-validation discipline. Pydantic v2 is the runtime: [docs.pydantic.dev/2.12/concepts/models/](https://docs.pydantic.dev/2.12/concepts/models/).
+
+**Transport and tokenisation**
+
+- [RFC 9110 section 10.1.5 - User-Agent](https://www.rfc-editor.org/rfc/rfc9110.html#section-10.1.5) - the header semantics underlying `tools/http.py`'s structured UA.
+- [Sennrich et al., Neural Machine Translation of Rare Words with Subword Units (ACL 2016, arXiv:1508.07909)](https://arxiv.org/abs/1508.07909) - the canonical BPE reference. The mechanism (frequency-trained subword vocabulary) is why the ASCII-only rule in `CONTRIBUTING.md` has measurable downstream cost, not just stylistic motivation.
+
+---
+
 ## Licence
 
 MIT - see `LICENSE`.

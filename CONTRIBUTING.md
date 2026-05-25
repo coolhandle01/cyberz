@@ -56,6 +56,8 @@ These apply to every edit, no exceptions.
 
 All source files, comments, docstrings, and `.md` prose must be plain ASCII. No em dashes, en dashes, curly quotes, box-drawing characters, arrows, bullets, or emoji. Use `-` not em-dash, `->` not the Unicode arrow, `|` not the Unicode pipe. Unicode in source inflates token counts for every AI tool that reads this codebase.
 
+The mechanism, briefly: modern LLM tokenisers are byte-pair-encoding variants trained on corpus frequency (Sennrich et al., [Neural Machine Translation of Rare Words with Subword Units](https://arxiv.org/abs/1508.07909), ACL 2016). The vocabulary is biased toward common-corpus sequences, so high-frequency ASCII (`-`, `->`, `|`, `'`, `"`) is typically one token, while uncommon Unicode punctuation (em-dash, smart quotes, non-breaking space, box-drawing characters, emoji) routinely fragments into multiple bytes / tokens under byte-level BPE. The exact ratio is tokeniser-dependent - this is an emergent property of frequency-trained vocabularies, not a per-character constant - but the direction is consistent and the cost compounds across every agent context window the codebase ever lands in.
+
 ### Minimal diff
 
 One PR does one thing. Before any commit, run `git diff origin/main --stat` and ask: does every changed file relate to the stated task? If not, revert the unrelated change or move it to its own branch. Leave whitespace, formatting, and import order alone unless the linter required the change. Do not rewrite working code to a "cleaner" form unless cleanliness was the task.
