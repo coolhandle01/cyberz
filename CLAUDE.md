@@ -12,10 +12,6 @@ Then ask: what canonical knowledge will this issue produce that does not yet liv
 
 Never include session URLs (`https://claude.ai/code/session_...`) in commit messages or PR bodies. They reference private conversations.
 
-## Pull requests
-
-After creating a PR via `mcp__github__create_pull_request`, subscribe to it with `mcp__github__subscribe_pr_activity` so review comments and CI events route into the conversation as `<github-webhook-activity>` messages. Default to subscribing; skip only when the user says the PR will not be reviewed in this session.
-
 ## Skills
 
 Two skill systems run in this repo. They do not interact - one targets the

@@ -149,6 +149,10 @@ These exist for reasons that are not obvious from the code alone. Touching any o
 - **No module-level side effects in `crew.py`**. The old `crew = build_crew()` at module level was deliberately removed.
 - **`default_factory=lambda` in `config.py`** preserves `monkeypatch.setenv` semantics in tests. Do not "simplify" to direct env reads at class-definition time.
 
+## Pull requests
+
+If you create a PR, please ensure you are subscribed to it so review comments and CI events reach you. GitHub auto-subscribes humans by default; AI contributors using the GitHub MCP need to call `mcp__github__subscribe_pr_activity` explicitly after `mcp__github__create_pull_request`. Either way the rule is the same: the PR you opened should reach you when something changes on it.
+
 ## Where to find more
 
 - `docs/architecture.md` - what the project does, key files
