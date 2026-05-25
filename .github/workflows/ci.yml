@@ -31,6 +31,9 @@ jobs:
       - name: mypy - type check
         run: mypy . --ignore-missing-imports
 
+      - name: pylint - design rules
+        run: pylint .
+
   test:
     name: Unit tests
     runs-on: ubuntu-latest

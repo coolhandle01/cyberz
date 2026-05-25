@@ -146,6 +146,12 @@ disallow_untyped_defs = false
 recursive = true
 ignore = [".venv"]
 ignore-paths = ["tests/.*"]
+# Locks the current design-rule health (full-repo score ~9.90; the
+# agent-orchestration layer alone scores ~9.97) with a small epsilon
+# for typo-grade noise. A new C0302 file-too-big suppression or a
+# handful of new R0913 / R0914 functions slipping in fails CI - either
+# fix the underlying smell or raise this knob deliberately.
+fail-under = 9.85
 
 [tool.pylint."messages control"]
 disable = ["all"]
