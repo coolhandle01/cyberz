@@ -17,8 +17,6 @@ agent-scoped.
 
 from __future__ import annotations
 
-from unittest.mock import patch
-
 import pytest
 from pydantic import BaseModel, ValidationError
 
@@ -26,52 +24,47 @@ pytestmark = pytest.mark.unit
 
 
 class TestSharedWorkspaceTools:
-    def test_read_run_filelist_tool(self, tmp_path) -> None:
+    def test_read_run_filelist_tool(self, run_dir) -> None:
         from models import RunFile
         from squad import read_run_filelist_tool
 
-        (tmp_path / "recon.json").write_text("{}", encoding="utf-8")
-        with patch("tools.workspace.runtime.run_dir", return_value=tmp_path):
-            result = read_run_filelist_tool.func()
+        (run_dir / "recon.json").write_text("{}", encoding="utf-8")
+        result = read_run_filelist_tool.func()
         assert result == [RunFile(name="recon.json", size_bytes=2)]
 
-    def test_read_run_file_tool(self, tmp_path) -> None:
+    def test_read_run_file_tool(self, run_dir) -> None:
         from models import RunFileContent
         from squad import read_run_file_tool
 
-        (tmp_path / "recon.json").write_text("hello", encoding="utf-8")
-        with patch("tools.workspace.runtime.run_dir", return_value=tmp_path):
-            result = read_run_file_tool.func("recon.json")
+        (run_dir / "recon.json").write_text("hello", encoding="utf-8")
+        result = read_run_file_tool.func("recon.json")
         assert isinstance(result, RunFileContent)
         assert result.content == "hello"
         assert result.size_bytes == 5
 
-    def test_read_run_file_tool_refuses_escape(self, tmp_path) -> None:
+    def test_read_run_file_tool_refuses_escape(self, run_dir) -> None:
         from squad import read_run_file_tool
 
-        with patch("tools.workspace.runtime.run_dir", return_value=tmp_path):
-            with pytest.raises(ValueError, match="must not contain '..'"):
-                read_run_file_tool.func("../etc/passwd")
+        with pytest.raises(ValueError, match="must not contain '..'"):
+            read_run_file_tool.func("../etc/passwd")
 
-    def test_read_attack_plan_tool_returns_typed_plan(self, attack_plan, tmp_path) -> None:
+    def test_read_attack_plan_tool_returns_typed_plan(self, attack_plan, run_dir) -> None:
         from models.attack import AttackPlan
         from squad import read_attack_plan_tool
 
-        (tmp_path / "attack_plan.json").write_text(attack_plan.model_dump_json(), encoding="utf-8")
-        with patch("tools.research_tools.runtime.run_dir", return_value=tmp_path):
-            result = read_attack_plan_tool.func()
+        (run_dir / "attack_plan.json").write_text(attack_plan.model_dump_json(), encoding="utf-8")
+        result = read_attack_plan_tool.func()
         assert isinstance(result, AttackPlan)
         assert result.programme_handle == attack_plan.programme_handle
         assert len(result.items) == len(attack_plan.items)
         assert result.items[0].probe == attack_plan.items[0].probe
         assert result.items[0].expected_ceiling == attack_plan.items[0].expected_ceiling
 
-    def test_read_attack_plan_tool_raises_when_missing(self, tmp_path) -> None:
+    def test_read_attack_plan_tool_raises_when_missing(self, run_dir) -> None:
         from squad import read_attack_plan_tool
 
-        with patch("tools.research_tools.runtime.run_dir", return_value=tmp_path):
-            with pytest.raises(FileNotFoundError, match="attack plan not found"):
-                read_attack_plan_tool.func()
+        with pytest.raises(FileNotFoundError, match="attack plan not found"):
+            read_attack_plan_tool.func()
 
 
 class TestCurrentProgramme:
@@ -83,21 +76,19 @@ class TestCurrentProgramme:
     through ``current_programme()``; no second H1 API call.
     """
 
-    def test_returns_programme_from_run_dir(self, programme, tmp_path) -> None:
+    def test_returns_programme_from_run_dir(self, programme, run_dir) -> None:
         from squad.workspace_tools import current_programme
 
-        (tmp_path / "programme.json").write_text(programme.model_dump_json(), encoding="utf-8")
-        with patch("runtime.run_dir", return_value=tmp_path):
-            result = current_programme()
+        (run_dir / "programme.json").write_text(programme.model_dump_json(), encoding="utf-8")
+        result = current_programme()
         assert result.handle == programme.handle
         assert result.in_scope == programme.in_scope
 
-    def test_raises_when_programme_json_missing(self, tmp_path) -> None:
+    def test_raises_when_programme_json_missing(self, run_dir) -> None:
         from squad.workspace_tools import current_programme
 
-        with patch("runtime.run_dir", return_value=tmp_path):
-            with pytest.raises(FileNotFoundError):
-                current_programme()
+        with pytest.raises(FileNotFoundError):
+            current_programme()
 
 
 class TestCyberToolScopeFilter:
@@ -111,7 +102,7 @@ class TestCyberToolScopeFilter:
     in ``tests/test_squad_osint_analyst.py``.
     """
 
-    def test_filter_runs_before_body(self, programme, tmp_path) -> None:
+    def test_filter_runs_before_body(self, programme_in_workspace) -> None:
         """``filter_fn(values, current_programme())`` rewrites the field's
         value before the body sees it."""
         from pydantic import BaseModel, Field
@@ -125,7 +116,7 @@ class TestCyberToolScopeFilter:
             targets: list[str] = Field(description="Targets the wrapper filters.")
 
         def _keep_in_scope(values: list[str], prog: Programme) -> list[str]:
-            assert prog.handle == programme.handle
+            assert prog.handle == programme_in_workspace.handle
             return [v for v in values if v.endswith(".example.com")]
 
         @cyber_tool(
@@ -138,9 +129,7 @@ class TestCyberToolScopeFilter:
             seen_values.append(targets)
             return targets
 
-        (tmp_path / "programme.json").write_text(programme.model_dump_json(), encoding="utf-8")
-        with patch("runtime.run_dir", return_value=tmp_path):
-            result = stub_tool.func(targets=["api.example.com", "bystander.example.org"])
+        result = stub_tool.func(targets=["api.example.com", "bystander.example.org"])
 
         assert result == ["api.example.com"]
         assert seen_values == [["api.example.com"]]

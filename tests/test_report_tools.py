@@ -271,23 +271,20 @@ class TestRenderDraftMarkdown:
 
 
 class TestSaveAndLoadDraft:
-    def test_save_writes_indexed_file(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("tools.report_tools.runtime.run_dir", lambda: tmp_path)
+    def test_save_writes_indexed_file(self, run_dir):
         path = save_draft(_good_draft(finding_index=2))
-        assert path == tmp_path / "drafts" / "002.json"
+        assert path == run_dir / "drafts" / "002.json"
         assert path.exists()
         data = json.loads(path.read_text())
         assert data["finding_index"] == 2
 
-    def test_load_drafts_orders_by_index(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("tools.report_tools.runtime.run_dir", lambda: tmp_path)
+    def test_load_drafts_orders_by_index(self, run_dir):
         save_draft(_good_draft(finding_index=1))
         save_draft(_good_draft(finding_index=0))
         drafts = load_drafts()
         assert [d.finding_index for d in drafts] == [0, 1]
 
-    def test_load_drafts_empty_when_no_dir(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("tools.report_tools.runtime.run_dir", lambda: tmp_path)
+    def test_load_drafts_empty_when_no_dir(self, run_dir):
         assert load_drafts() == []
 
 
@@ -295,23 +292,20 @@ class TestSaveAndLoadDraft:
 
 
 class TestFinaliseDrafts:
-    def test_writes_reports_json_for_clean_drafts(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("tools.report_tools.runtime.run_dir", lambda: tmp_path)
+    def test_writes_reports_json_for_clean_drafts(self, run_dir):
         save_draft(_good_draft(finding_index=0))
         path = finalise_drafts("test-programme", "Summary line.", expected_count=1)
-        assert path == tmp_path / "reports.json"
+        assert path == run_dir / "reports.json"
         contents = json.loads(path.read_text())
         assert len(contents) == 1
         assert contents[0]["programme_handle"] == "test-programme"
 
-    def test_refuses_when_drafts_missing(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("tools.report_tools.runtime.run_dir", lambda: tmp_path)
+    def test_refuses_when_drafts_missing(self, run_dir):
         save_draft(_good_draft(finding_index=0))
         with pytest.raises(FinalisationError, match="expected 2 drafts, found 1"):
             finalise_drafts("test-programme", "Summary.", expected_count=2)
 
-    def test_refuses_on_validation_errors(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("tools.report_tools.runtime.run_dir", lambda: tmp_path)
+    def test_refuses_on_validation_errors(self, run_dir):
         save_draft(_good_draft(finding_index=0, title="bad title"))
         with pytest.raises(FinalisationError, match="unresolved errors"):
             finalise_drafts("test-programme", "Summary.", expected_count=1)

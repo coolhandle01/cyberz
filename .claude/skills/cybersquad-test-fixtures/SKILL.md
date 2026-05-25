@@ -17,10 +17,11 @@ description: Use the shared pytest fixtures in tests/conftest.py instead of rede
 | `victim_apex` | Apex domain parsed out of `victim_url` (e.g. `example.com`). The derivation point every in-scope fixture builds against - use it when authoring a new in-scope fixture rather than embedding a literal. |
 | `bystander_url` | `https://bystander.example.org` - out-of-scope; use whenever a test exercises the scope guard. |
 | `callback_url` | `https://callback.cybersquad.com` - OOB receiver placeholder. |
+| `run_dir` | Points `runtime.run_dir()` at the test's `tmp_path` and returns the `Path`. Take this instead of patching `runtime.run_dir` at every consumer's import alias (`tools.workspace.runtime.run_dir` / `tools.triage_tools.runtime.run_dir` / etc) - every consumer `import runtime` so the single setattr propagates everywhere. Tests that need a *non-existent* rundir (to exercise `mkdir` behaviour or the missing-dir branch) stay on an explicit `monkeypatch.setattr("runtime.run_dir", ...)` since the fixture always returns an existing path. |
 | `programme` | A `Programme` model. In-scope: `https://<victim_apex>` and `*.<victim_apex>`. |
-| `programme_in_workspace` | `programme` staged into the test's `tmp_path` as `<run_dir>/programme.json`, with `runtime.run_dir` + `runtime.programme_handle` monkeypatched. Tests that need `current_programme()` to work end-to-end take this fixture instead of patching the loader at every import site. |
+| `programme_in_workspace` | `programme` staged into the test's rundir as `<run_dir>/programme.json`, with `runtime.programme_handle` monkeypatched. Composes on top of `run_dir`. Tests that need `current_programme()` to work end-to-end take this fixture instead of patching the loader at every import site. |
 | `dvwa_programme` | A `Programme` shaped like Damn Vulnerable Web Application on `http://localhost` / `http://127.0.0.1`. Use for BDD scenarios and integration work that point at a real runnable target (the usual deployment is a local Docker container). |
-| `dvwa_in_workspace` | DVWA staged into the rundir - same shape as `programme_in_workspace` but the in-flight programme is DVWA. |
+| `dvwa_in_workspace` | DVWA staged into the rundir - same shape as `programme_in_workspace` but the in-flight programme is DVWA. Composes on top of `run_dir`. |
 | `endpoint` | An `Endpoint` model at `https://api.<victim_apex>`. |
 | `recon_result` | A `ReconResult` combining `programme` and `endpoint`. |
 | `raw_finding_high` / `raw_finding_low` / `raw_finding_oos` | `RawFinding` instances at each severity / scope tier. |

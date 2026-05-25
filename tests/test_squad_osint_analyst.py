@@ -73,23 +73,22 @@ class TestOsintAnalystTools:
         sections = {i.section for i in result.validation.issues}
         assert "notes" in sections
 
-    def test_uncovered_hosts_tool_returns_missing(self, programme, recon_result, tmp_path) -> None:
+    def test_uncovered_hosts_tool_returns_missing(self, programme, recon_result, run_dir) -> None:
         from squad.osint_analyst import uncovered_hosts_tool
 
-        (tmp_path / "sweep.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
-        with patch("tools.recon_insights.runtime.run_dir", return_value=tmp_path):
-            result = uncovered_hosts_tool.func()
+        (run_dir / "sweep.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
+        result = uncovered_hosts_tool.func()
 
         assert isinstance(result, list)
         # recon_result fixture has https://api.example.com with status 200 -> interesting
         assert "api.example.com" in result
 
     def test_finalise_recon_tool_writes_recon_json(
-        self, programme_in_workspace, recon_result, tmp_path
+        self, programme_in_workspace, recon_result, run_dir
     ) -> None:
         from squad.osint_analyst import annotate_host_tool, finalise_recon_tool
 
-        (tmp_path / "sweep.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
+        (run_dir / "sweep.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
 
         annotate_host_tool.func(
             hostname="api.example.com",
@@ -104,14 +103,14 @@ class TestOsintAnalystTools:
         result = finalise_recon_tool.func()
 
         assert result == "recon.json"
-        assert (tmp_path / "recon.json").exists()
+        assert (run_dir / "recon.json").exists()
 
     def test_finalise_recon_tool_raises_without_insights(
-        self, programme_in_workspace, recon_result, tmp_path
+        self, programme_in_workspace, recon_result, run_dir
     ) -> None:
         from squad.osint_analyst import finalise_recon_tool
 
-        (tmp_path / "sweep.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
+        (run_dir / "sweep.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
 
         with pytest.raises(ValueError, match="no host_insights"):
             finalise_recon_tool.func()

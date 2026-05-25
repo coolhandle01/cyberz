@@ -83,6 +83,25 @@ def make_html_page(victim_url: str):
     return _make
 
 
+@pytest.fixture()
+def run_dir(tmp_path, monkeypatch):
+    """Point ``runtime.run_dir()`` at this test's ``tmp_path``.
+
+    Every tool that reads / writes workspace artefacts resolves the
+    rundir through ``runtime.run_dir()``. Tests that exercise those
+    tools take this fixture to get a per-test rundir without patching
+    the function at every consumer's import alias
+    (``tools.workspace.runtime.run_dir`` / ``tools.triage_tools.runtime.run_dir``
+    / etc) - every consumer ``import runtime`` so a single setattr on
+    ``runtime.run_dir`` propagates to all of them.
+
+    Returns the ``Path`` so tests can read / write fixture files
+    against it directly.
+    """
+    monkeypatch.setattr("runtime.run_dir", lambda: tmp_path)
+    return tmp_path
+
+
 # Programme fixtures
 @pytest.fixture()
 def victim_apex(victim_url: str) -> str:
@@ -137,7 +156,7 @@ def programme(scope_item_url, scope_item_wildcard) -> Programme:
 
 
 @pytest.fixture()
-def programme_in_workspace(programme: Programme, tmp_path, monkeypatch) -> Programme:
+def programme_in_workspace(programme: Programme, run_dir, monkeypatch) -> Programme:
     """Stage ``programme.json`` into the run directory and point runtime at it.
 
     Reproduces what the PM's ``Save Selected Programme`` does at run
@@ -150,8 +169,7 @@ def programme_in_workspace(programme: Programme, tmp_path, monkeypatch) -> Progr
     The artefact *is* the fixture: tests assert against the same shape
     the next agent would actually consume.
     """
-    (tmp_path / "programme.json").write_text(programme.model_dump_json(), encoding="utf-8")
-    monkeypatch.setattr("runtime.run_dir", lambda: tmp_path)
+    (run_dir / "programme.json").write_text(programme.model_dump_json(), encoding="utf-8")
     monkeypatch.setattr("runtime.programme_handle", programme.handle)
     return programme
 
@@ -200,12 +218,11 @@ def dvwa_programme() -> Programme:
 
 
 @pytest.fixture()
-def dvwa_in_workspace(dvwa_programme: Programme, tmp_path, monkeypatch) -> Programme:
+def dvwa_in_workspace(dvwa_programme: Programme, run_dir, monkeypatch) -> Programme:
     """DVWA staged into the run dir - same shape as ``programme_in_workspace``
     but the in-flight programme is DVWA, so BDD scenarios that point the
     squad at DVWA exercise the artefact the runtime actually consumes."""
-    (tmp_path / "programme.json").write_text(dvwa_programme.model_dump_json(), encoding="utf-8")
-    monkeypatch.setattr("runtime.run_dir", lambda: tmp_path)
+    (run_dir / "programme.json").write_text(dvwa_programme.model_dump_json(), encoding="utf-8")
     monkeypatch.setattr("runtime.programme_handle", dvwa_programme.handle)
     return dvwa_programme
 

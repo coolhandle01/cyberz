@@ -7,9 +7,7 @@ without loading the full ReconResult into context.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from pathlib import Path
-from unittest.mock import patch
 from urllib.parse import urlparse
 
 import pytest
@@ -21,9 +19,9 @@ pytestmark = pytest.mark.unit
 
 
 @pytest.fixture()
-def recon_file(tmp_path: Path, recon_result, victim_url: str) -> Iterator[str]:
-    """Write a populated recon.json into tmp_path and patch runtime.run_dir
-    so query._load resolves "recon.json" under tmp_path.
+def recon_file(run_dir: Path, recon_result, victim_url: str) -> str:
+    """Write a populated recon.json under the shared ``run_dir`` fixture
+    so ``query._load`` resolves "recon.json" against it.
 
     Returns the relative filename - tests pass this through, matching the
     inter-agent contract (relative paths only)."""
@@ -48,10 +46,8 @@ def recon_file(tmp_path: Path, recon_result, victim_url: str) -> Iterator[str]:
             },
         }
     )
-    recon_path = tmp_path / "recon.json"
-    recon_path.write_text(recon.model_dump_json(), encoding="utf-8")
-    with patch("tools.workspace.runtime.run_dir", return_value=tmp_path):
-        yield "recon.json"
+    (run_dir / "recon.json").write_text(recon.model_dump_json(), encoding="utf-8")
+    return "recon.json"
 
 
 class TestReconSubdomains:

@@ -279,14 +279,12 @@ class TestValidateAssessment:
 
 
 class TestPersistence:
-    def test_save_assessment_writes_indexed_file(self, in_scope_raw, tmp_path, monkeypatch):
-        monkeypatch.setattr("tools.triage_tools.runtime.run_dir", lambda: tmp_path)
+    def test_save_assessment_writes_indexed_file(self, in_scope_raw, run_dir):
         path = save_assessment(_good_assessment(in_scope_raw, finding_index=4))
-        assert path == tmp_path / "assessments" / "004.json"
+        assert path == run_dir / "assessments" / "004.json"
         assert path.exists()
 
-    def test_save_discard_writes_indexed_file(self, in_scope_raw, tmp_path, monkeypatch):
-        monkeypatch.setattr("tools.triage_tools.runtime.run_dir", lambda: tmp_path)
+    def test_save_discard_writes_indexed_file(self, in_scope_raw, run_dir):
         d = DiscardEntry(
             finding_index=2,
             target=in_scope_raw.target,
@@ -296,10 +294,9 @@ class TestPersistence:
             rationale="Tool fired but evidence does not demonstrate exploitability.",
         )
         path = save_discard(d)
-        assert path == tmp_path / "discards" / "002.json"
+        assert path == run_dir / "discards" / "002.json"
 
-    def test_assessment_evicts_discard(self, in_scope_raw, tmp_path, monkeypatch):
-        monkeypatch.setattr("tools.triage_tools.runtime.run_dir", lambda: tmp_path)
+    def test_assessment_evicts_discard(self, in_scope_raw, run_dir):
         # First discard, then change mind and assess
         d = DiscardEntry(
             finding_index=1,
@@ -311,11 +308,10 @@ class TestPersistence:
         )
         save_discard(d)
         save_assessment(_good_assessment(in_scope_raw, finding_index=1))
-        assert not (tmp_path / "discards" / "001.json").exists()
-        assert (tmp_path / "assessments" / "001.json").exists()
+        assert not (run_dir / "discards" / "001.json").exists()
+        assert (run_dir / "assessments" / "001.json").exists()
 
-    def test_discard_evicts_assessment(self, in_scope_raw, tmp_path, monkeypatch):
-        monkeypatch.setattr("tools.triage_tools.runtime.run_dir", lambda: tmp_path)
+    def test_discard_evicts_assessment(self, in_scope_raw, run_dir):
         save_assessment(_good_assessment(in_scope_raw, finding_index=1))
         d = DiscardEntry(
             finding_index=1,
@@ -326,41 +322,33 @@ class TestPersistence:
             rationale="On second look, requires admin auth that no user holds.",
         )
         save_discard(d)
-        assert (tmp_path / "discards" / "001.json").exists()
-        assert not (tmp_path / "assessments" / "001.json").exists()
+        assert (run_dir / "discards" / "001.json").exists()
+        assert not (run_dir / "assessments" / "001.json").exists()
 
 
 # Finalisation
 
 
 class TestFinaliseTriage:
-    def test_writes_verified_json_for_clean_assessments(
-        self, in_scope_raw, tmp_path, monkeypatch, programme
-    ):
-        monkeypatch.setattr("tools.triage_tools.runtime.run_dir", lambda: tmp_path)
+    def test_writes_verified_json_for_clean_assessments(self, in_scope_raw, run_dir, programme):
         save_assessment(_good_assessment(in_scope_raw, finding_index=0))
         path = finalise_triage(programme, [in_scope_raw])
-        assert path == tmp_path / "verified.json"
+        assert path == run_dir / "verified.json"
         verified = json.loads(path.read_text())
         assert len(verified) == 1
         assert verified[0]["target"] == in_scope_raw.target
 
-    def test_refuses_unprocessed_findings(self, in_scope_raw, tmp_path, monkeypatch, programme):
-        monkeypatch.setattr("tools.triage_tools.runtime.run_dir", lambda: tmp_path)
+    def test_refuses_unprocessed_findings(self, in_scope_raw, run_dir, programme):
         save_assessment(_good_assessment(in_scope_raw, finding_index=0))
         with pytest.raises(TriageFinalisationError, match=r"\[1\] have no assessment"):
             finalise_triage(programme, [in_scope_raw, in_scope_raw])
 
-    def test_refuses_on_validation_errors(self, in_scope_raw, tmp_path, monkeypatch, programme):
-        monkeypatch.setattr("tools.triage_tools.runtime.run_dir", lambda: tmp_path)
+    def test_refuses_on_validation_errors(self, in_scope_raw, run_dir, programme):
         save_assessment(_good_assessment(in_scope_raw, finding_index=0, description="Too short."))
         with pytest.raises(TriageFinalisationError, match="unresolved errors"):
             finalise_triage(programme, [in_scope_raw])
 
-    def test_discards_only_yields_empty_verified(
-        self, in_scope_raw, tmp_path, monkeypatch, programme
-    ):
-        monkeypatch.setattr("tools.triage_tools.runtime.run_dir", lambda: tmp_path)
+    def test_discards_only_yields_empty_verified(self, in_scope_raw, run_dir, programme):
         save_discard(
             DiscardEntry(
                 finding_index=0,
@@ -375,20 +363,16 @@ class TestFinaliseTriage:
         verified = json.loads(path.read_text())
         assert verified == []
 
-    def test_builds_verified_vulnerability(self, in_scope_raw, tmp_path, monkeypatch, programme):
-        monkeypatch.setattr("tools.triage_tools.runtime.run_dir", lambda: tmp_path)
+    def test_builds_verified_vulnerability(self, in_scope_raw, run_dir, programme):
         save_assessment(_good_assessment(in_scope_raw, finding_index=0))
         finalise_triage(programme, [in_scope_raw])
         verified = load_assessments()
         assert verified[0].finding_index == 0
 
-    def test_carries_raw_evidence_into_verified(
-        self, in_scope_raw, tmp_path, monkeypatch, programme
-    ):
+    def test_carries_raw_evidence_into_verified(self, in_scope_raw, run_dir, programme):
         # The VR's authored fields go into description/impact/remediation; the
         # evidence belongs to the PT and is carried through untouched (the TA
         # sanitises it later).
-        monkeypatch.setattr("tools.triage_tools.runtime.run_dir", lambda: tmp_path)
         save_assessment(_good_assessment(in_scope_raw, finding_index=0))
         path = finalise_triage(programme, [in_scope_raw])
         loaded = [VerifiedVulnerability.model_validate(v) for v in json.loads(path.read_text())]
@@ -416,8 +400,7 @@ class TestDiscardEntry:
 
 
 class TestLoadDiscards:
-    def test_returns_empty_when_no_dir(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("tools.triage_tools.runtime.run_dir", lambda: tmp_path)
+    def test_returns_empty_when_no_dir(self, run_dir):
         assert load_discards() == []
 
 
