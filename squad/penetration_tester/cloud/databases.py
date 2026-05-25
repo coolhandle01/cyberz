@@ -5,11 +5,8 @@ PostgreSQL, MySQL / MariaDB. Each check derives candidate
 host:port pairs from recon's open-port map and probes for the
 service's signature unauthenticated endpoint.
 
-FIXME: same caveat as cloud storage - DB endpoints should only be
-probed when explicitly in scope or when the programme is the DB
-provider itself. Guessing DB exposure from open-port heuristics
-risks probing tenants that share infrastructure with the in-scope
-programme. Track in a follow-up.
+See the package-level scope-of-target FIXME in ``cloud/__init__.py``
+(tracked in #156).
 """
 
 from pydantic import BaseModel, Field

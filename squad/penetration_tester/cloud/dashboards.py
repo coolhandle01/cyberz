@@ -5,9 +5,8 @@ looks for the dashboard's signature unauthenticated landing page;
 default-credential / anonymous-access flavours are reported with the
 specific exposure mode.
 
-FIXME: dashboard probes have the same scope caveat as the rest of
-this package - only fire when the host running the dashboard is
-explicitly in scope. Track in a follow-up.
+See the package-level scope-of-target FIXME in ``cloud/__init__.py``
+(tracked in #156).
 """
 
 from pydantic import BaseModel, Field

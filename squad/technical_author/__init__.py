@@ -260,12 +260,10 @@ class _DraftReportArgs(BaseModel):
             " stubs."
         ),
     )
-    # FIXME: the supporting-evidence / replay-log handoff this step list
-    # references is sketched in the per-step "attached evidence" pointer
-    # above but not yet a workspace-typed artefact. Triagers verify the
-    # claims by re-running discovery against the live target until that
-    # lands - track in a follow-up issue rather than expanding the scope
-    # of #150.
+    # FIXME #156: the supporting-evidence / replay-log handoff this step
+    # list references is sketched in the per-step "attached evidence"
+    # pointer above but is not yet a workspace-typed artefact; triagers
+    # verify claims against the live target until it lands.
     evidence: str = Field(
         description=(
             "PRE-SANITISED tool output / HTTP excerpt. Run ``Sanitise"
@@ -291,11 +289,9 @@ class _DraftReportArgs(BaseModel):
             " Guidance`` to find the matching URL."
         ),
     )
-    # FIXME: there is no typed primitive for a CVSS 3.1 vector string yet
-    # (the validator format-checks downstream); a ``CvssVector`` primitive
-    # alongside ``Hostname`` / ``HttpUrl`` in ``models.primitives`` would
-    # reject malformed vectors at args_schema validation time rather than
-    # at score-compute time. Out of scope for #150 - file as a follow-up.
+    # FIXME #156: type as a ``CvssVector`` primitive in
+    # ``models.primitives`` so malformed vectors reject at args_schema
+    # validation time rather than at score-compute time.
     cvss_vector: str = Field(
         description=(
             "Full CVSS 3.1 vector. The wrapper recomputes ``cvss_score``"
@@ -304,10 +300,9 @@ class _DraftReportArgs(BaseModel):
             " upstream to double-check."
         ),
     )
-    # FIXME: ``cwe_id`` is a bare ``int``; ``CWEEntry`` (in ``tools/cwe_data``)
-    # is the typed row but there is no ``CweId`` primitive that constrains
-    # to the catalogue. Follow-up: add the typed primitive so an unknown id
-    # rejects at args_schema validation time.
+    # FIXME #156: type as a ``CweId`` primitive in ``models.primitives``
+    # so unknown ids reject at args_schema validation time rather than
+    # at catalogue-lookup time.
     cwe_id: int = Field(
         description=(
             "Numeric CWE identifier matching the entry from ``Lookup"

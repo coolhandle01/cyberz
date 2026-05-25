@@ -2,15 +2,8 @@
 Cloud-storage exposure probes - S3 and Azure Blob buckets the
 programme uses (or once used) that should not be world-readable.
 
-FIXME: these checks derive bucket / container names from the
-programme handle and any storage-shaped subdomains the OSINT Analyst
-surfaced. They should only fire when a cloud resource URL is
-definitely explicitly in scope (the programme's structured scope
-names a bucket / container), or when the squad is working on a
-programme run by that cloud provider itself - guessing storage URLs
-from the programme handle risks probing third-party tenants that
-happen to share a name. Track in a follow-up; for #150 the wrappers
-keep the recon-derived shape they had pre-split.
+See the package-level scope-of-target FIXME in ``cloud/__init__.py``
+(tracked in #156).
 """
 
 from pydantic import BaseModel, Field

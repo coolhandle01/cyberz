@@ -5,11 +5,8 @@ recon and checks for the panel's signature login page; a confirmed
 exposed admin panel is a credentialled-attack target rather than a
 direct vulnerability.
 
-FIXME: control-panel checks assume the host is in scope for the
-selected programme. They should only fire when the programme's
-structured scope explicitly covers infrastructure (most public
-bounty programmes do not include hosting infra in scope). Track in
-a follow-up.
+See the package-level scope-of-target FIXME in ``cloud/__init__.py``
+(tracked in #156).
 """
 
 from pydantic import BaseModel, Field

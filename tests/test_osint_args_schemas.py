@@ -29,6 +29,7 @@ from urllib.parse import urlparse
 import pytest
 from pydantic import BaseModel, ValidationError
 
+from squad import SquadTool
 from squad.osint_analyst import (
     MEMBER,
     _AnnotateHostArgs,
@@ -79,7 +80,7 @@ _OSINT_SCHEMAS: dict[str, type[BaseModel]] = {
 }
 
 
-def _tools_by_name() -> dict[str, object]:
+def _tools_by_name() -> dict[str, SquadTool]:
     """Look up MEMBER.tools by display name once, share across tests."""
     return {t.name: t for t in MEMBER.tools}
 
@@ -104,8 +105,8 @@ class TestOsintArgsSchemaContracts:
         """Every OSINT typed tool registers the explicit schema class on its Tool."""
         tool_obj = _tools_by_name()[tool_name]
         expected = _OSINT_SCHEMAS[tool_name]
-        assert tool_obj.args_schema is expected, (  # type: ignore[attr-defined]
-            f"{tool_name} args_schema is {tool_obj.args_schema!r}; expected {expected!r}"  # type: ignore[attr-defined]
+        assert tool_obj.args_schema is expected, (
+            f"{tool_name} args_schema is {tool_obj.args_schema!r}; expected {expected!r}"
         )
 
     @pytest.mark.parametrize(

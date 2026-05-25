@@ -3,9 +3,8 @@ Service-discovery exposure probes - HashiCorp Consul and Vault
 unauthenticated UIs. Looks for the signature consul-ui / vault-ui
 endpoint at predictable ports against the recon-discovered hosts.
 
-FIXME: same caveat as the rest of the cloud / infra package - only
-fire against hosts explicitly in scope for the selected programme.
-Track in a follow-up.
+See the package-level scope-of-target FIXME in ``cloud/__init__.py``
+(tracked in #156).
 """
 
 from pydantic import BaseModel, Field

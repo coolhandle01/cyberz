@@ -18,13 +18,12 @@ agent ``squad.penetration_tester.__init__`` keeps a single import site
 (``from squad.penetration_tester.cloud import ...``) and the public
 surface of the agent module does not change.
 
-FIXME: the scope-of-target caveat called out in each sub-module's
-docstring is universal across this package - every check here derives
-its target from recon and should only fire when the resource URL /
-host is definitely explicitly in scope, or when the squad is working
-on the cloud provider's own programme (such a programme exists and was
-chosen by the PM). Track the structural fix - probably a Programme-
-aware pre-flight gate on every cloud wrapper - in a follow-up.
+FIXME #156: every check here derives its target (bucket / container
+name, host:port pair) from recon rather than from the agent's explicit
+pick, so a check can probe a third-party tenant that happens to share
+a name with the in-scope programme. The structural fix is a
+Programme-aware pre-flight gate on every cloud wrapper; tracked in
+#156 alongside the related ``recon_path`` -> typed-target direction.
 """
 
 from squad.penetration_tester.cloud.dashboards import (

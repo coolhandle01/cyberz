@@ -54,16 +54,21 @@ class SquadTool(Protocol):
 
     The decorators in use - the bare ``@tool``, ``@cyber_tool``,
     ``@pentest_tool``, ``@research_brief_tool`` - all produce CrewAI
-    ``Tool`` instances that carry ``name``, ``description``, and ``func``.
-    ``func`` is declared via ``@property`` (rather than as a plain class
-    attribute) so the Protocol is satisfied by CrewAI's ``Tool`` model -
-    its ``func`` field is typed ``Callable[P, R | Awaitable[R]]`` for the
-    concrete wrapped function and would otherwise fail Protocol variance
-    against ``Callable[..., object]``.
+    ``Tool`` instances that carry ``name``, ``description``, ``func``,
+    and ``args_schema``. ``args_schema`` is part of the Protocol because
+    every cybersquad wrapper carries an explicit Pydantic schema post-
+    #150 (the universal sweep) - the contract tests in
+    ``tests/squad/<agent>/test_args_schemas.py`` walk it on every
+    registered tool. ``func`` is declared via ``@property`` (rather than
+    as a plain class attribute) so the Protocol is satisfied by CrewAI's
+    ``Tool`` model - its ``func`` field is typed ``Callable[P, R |
+    Awaitable[R]]`` for the concrete wrapped function and would
+    otherwise fail Protocol variance against ``Callable[..., object]``.
     """
 
     name: str
     description: str
+    args_schema: type[BaseModel]
 
     @property
     def func(self) -> Callable[..., object]: ...
