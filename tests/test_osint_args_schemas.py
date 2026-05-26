@@ -14,9 +14,12 @@ sibling programme's endpoints into the run and silently corrupt every
 downstream stage. Filter-parameter discipline is the bulk of what the
 per-field descriptions are doing.
 
-The two shared workspace readers re-exported into the OSINT Analyst's
-registry (``List Run Files``, ``Read Run File``) are part of the
-closed-world check below.
+The generic contract loop (tool wires the explicit schema, every field
+has a description, closed-world mapping) lives in
+``tests/squad/_contract_assertions.py`` and is exercised below by
+parametrising over ``MEMBER.schemas``. Agent-specific cases (the
+hostname-rejection sweep, the URL / apex / takeover acceptance cases,
+required-field rejections) stay in this file.
 """
 
 from __future__ import annotations
@@ -26,7 +29,6 @@ from urllib.parse import urlparse
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from squad import SquadTool
 from squad.osint_analyst import (
     MEMBER,
     _AnnotateHostArgs,
@@ -48,6 +50,11 @@ from squad.workspace_tools import (
     _ListRunFilesArgs,
     _ReadRunFileArgs,
 )
+from tests.squad._contract_assertions import (
+    assert_closed_world_mapping,
+    assert_field_descriptions_present,
+    assert_tool_wires_explicit_schema,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -62,36 +69,6 @@ pytestmark = pytest.mark.unit
 @pytest.fixture(autouse=True)
 def _seed_programme(programme_in_workspace):
     return programme_in_workspace
-
-
-# Tool-name -> explicit schema class. Covers every OSINT @cyber_tool
-# wrapper plus the two shared workspace readers re-exported via
-# ``squad.workspace_tools``. The shared ``Lookup CWE`` / ``Lookup OWASP
-# Guidance`` / ``Calculate CVSS Score`` wrappers are declared per-agent
-_OSINT_SCHEMAS: dict[str, type[BaseModel]] = {
-    "Run Initial Sweep": _RunInitialSweepArgs,
-    "Recon Subdomains": _ReconSubdomainsArgs,
-    "Recon Endpoints": _ReconEndpointsArgs,
-    "Recon Open Ports": _ReconOpenPortsArgs,
-    "Certificate Transparency Lookup": _CertTransparencyArgs,
-    "Historical URL Discovery": _HistoricalUrlsArgs,
-    "LLM Endpoint Detection": _LlmDetectionArgs,
-    "Probe Hostnames": _ProbeHostnamesArgs,
-    "Detect Takeover Candidates": _DetectTakeoverCandidatesArgs,
-    "Lookup CWE": _OsintLookupCweArgs,
-    "Lookup OWASP Guidance": _OsintLookupOwaspArgs,
-    "Annotate Host": _AnnotateHostArgs,
-    "Uncovered Hosts": _UncoveredHostsArgs,
-    "Finalise Recon": _FinaliseReconArgs,
-    # Shared workspace wrappers (re-exported via squad.workspace_tools)
-    "List Run Files": _ListRunFilesArgs,
-    "Read Run File": _ReadRunFileArgs,
-}
-
-
-def _tools_by_name() -> dict[str, SquadTool]:
-    """Look up MEMBER.tools by display name once, share across tests."""
-    return {t.name: t for t in MEMBER.tools}
 
 
 def _annotate_host_base(hostname: str) -> dict[str, object]:
@@ -109,49 +86,20 @@ def _annotate_host_base(hostname: str) -> dict[str, object]:
 
 
 class TestOsintArgsSchemaContracts:
-    @pytest.mark.parametrize("tool_name", sorted(_OSINT_SCHEMAS))
+    @pytest.mark.parametrize("tool_name", sorted(MEMBER.schemas))
     def test_tool_wires_explicit_schema(self, tool_name: str) -> None:
-        """Every OSINT typed tool registers the explicit schema class on its Tool."""
-        tool_obj = _tools_by_name()[tool_name]
-        expected = _OSINT_SCHEMAS[tool_name]
-        assert tool_obj.args_schema is expected, (
-            f"{tool_name} args_schema is {tool_obj.args_schema!r}; expected {expected!r}"
-        )
+        assert_tool_wires_explicit_schema(MEMBER, tool_name)
 
     @pytest.mark.parametrize(
         ("tool_name", "schema_cls"),
-        sorted(_OSINT_SCHEMAS.items()),
-        ids=sorted(_OSINT_SCHEMAS),
+        sorted(MEMBER.schemas.items()),
+        ids=sorted(MEMBER.schemas),
     )
     def test_every_field_has_description(self, tool_name: str, schema_cls: type[BaseModel]) -> None:
-        """Every field on every OSINT typed-tool schema carries a non-empty description."""
-        for field_name, field_info in schema_cls.model_fields.items():
-            desc = field_info.description
-            assert desc, f"{tool_name}::{field_name} missing Field(description=...)"
-            assert isinstance(desc, str) and desc.strip(), (
-                f"{tool_name}::{field_name} description is blank"
-            )
+        assert_field_descriptions_present(tool_name, schema_cls)
 
-    def test_every_osint_cyber_tool_has_schema_mapping(self) -> None:
-        """The mapping above must cover every OSINT ``@cyber_tool`` wrapper.
-
-        Closed-world structural check: every OSINT tool whose Tool exposes
-        a private (``_*``) args_schema class name is in ``_OSINT_SCHEMAS``;
-        every entry in ``_OSINT_SCHEMAS`` resolves to a registered tool.
-        A new typed tool added without a mapping entry fires this test
-        before reviewers see the PR.
-        """
-        tools = _tools_by_name()
-        private_schema_tools = {
-            name
-            for name, t in tools.items()
-            if getattr(getattr(t, "args_schema", None), "__name__", "").startswith("_")
-        }
-        assert private_schema_tools == set(_OSINT_SCHEMAS), (
-            "Mismatch between OSINT typed-tool wrappers and _OSINT_SCHEMAS: "
-            f"in registry but not mapping = {private_schema_tools - set(_OSINT_SCHEMAS)}; "
-            f"in mapping but not registry = {set(_OSINT_SCHEMAS) - private_schema_tools}"
-        )
+    def test_closed_world_mapping(self) -> None:
+        assert_closed_world_mapping(MEMBER)
 
 
 class TestSchemaAcceptReject:

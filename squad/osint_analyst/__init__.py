@@ -57,6 +57,7 @@ from squad.osint_analyst.discovery import (
     recon_subdomains_tool,
     run_initial_sweep_tool,
 )
+from squad.workspace_tools import _ListRunFilesArgs, _ReadRunFileArgs
 
 MEMBER = SquadMember(
     dir=Path(__file__).parent,
@@ -79,6 +80,25 @@ MEMBER = SquadMember(
         read_run_filelist_tool,
         read_run_file_tool,
     ],
+    schemas={
+        "Run Initial Sweep": _RunInitialSweepArgs,
+        "Recon Subdomains": _ReconSubdomainsArgs,
+        "Recon Endpoints": _ReconEndpointsArgs,
+        "Recon Open Ports": _ReconOpenPortsArgs,
+        "Certificate Transparency Lookup": _CertTransparencyArgs,
+        "Historical URL Discovery": _HistoricalUrlsArgs,
+        "LLM Endpoint Detection": _LlmDetectionArgs,
+        "Probe Hostnames": _ProbeHostnamesArgs,
+        "Detect Takeover Candidates": _DetectTakeoverCandidatesArgs,
+        "Lookup CWE": _OsintLookupCweArgs,
+        "Lookup OWASP Guidance": _OsintLookupOwaspArgs,
+        "Annotate Host": _AnnotateHostArgs,
+        "Uncovered Hosts": _UncoveredHostsArgs,
+        "Finalise Recon": _FinaliseReconArgs,
+        # Shared workspace wrappers (re-exported via squad.workspace_tools)
+        "List Run Files": _ListRunFilesArgs,
+        "Read Run File": _ReadRunFileArgs,
+    },
 )
 
 __all__ = [  # noqa: RUF022 - grouped by purpose, not alphabetised

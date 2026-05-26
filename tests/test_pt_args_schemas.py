@@ -4,19 +4,15 @@ tests/test_pt_args_schemas.py - contract tests for the explicit Pydantic
 
 The PT agent's tools hit live programmes; a mis-call costs money and
 noise. The ``args_schema`` is the per-tool contract the LLM is shown
-when picking the tool, so the rules below enforce three things in CI:
+when picking the tool.
 
-  1. Every PT tool with a hand-written schema is in ``_PT_SCHEMAS``,
-     and every entry in ``_PT_SCHEMAS`` resolves to a registered tool
-     with the expected schema. Closed-world check: a new PT typed
-     tool added without a mapping entry fires this test before review.
-  2. Every field on every schema carries a non-empty ``description`` -
-     the explicit path can address fields individually and the
-     inferred path cannot, so we make sure the new capability is
-     actually used.
-  3. Schemas with StrEnum filter parameters reject unknown values;
-     required-field schemas reject missing fields. The contract is
-     enforced upstream of any HTTP request.
+The generic contract loop (tool wires the explicit schema, every field
+has a description, closed-world mapping) lives in
+``tests/squad/_contract_assertions.py`` and is exercised below by
+parametrising over ``MEMBER.schemas`` - the per-agent schema registry
+moved onto the squad member alongside ``tools``. Agent-specific cases
+(StrEnum payload reject tables, JWT-specific shapes, recon-path
+required-field rejection) stay in this file.
 
 The behavioural tests (``test_ssrf.py``, ``test_idor.py`` etc.) cover
 probe behaviour separately.
@@ -27,7 +23,6 @@ from __future__ import annotations
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from squad import SquadTool
 from squad.penetration_tester import (
     MEMBER,
     _AdminPanelsArgs,
@@ -88,6 +83,11 @@ from squad.workspace_tools import (
     _ReadAttackPlanArgs,
     _ReadRunFileArgs,
 )
+from tests.squad._contract_assertions import (
+    assert_closed_world_mapping,
+    assert_field_descriptions_present,
+    assert_tool_wires_explicit_schema,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -104,71 +104,6 @@ pytestmark = pytest.mark.unit
 def _seed_programme(programme_in_workspace):
     return programme_in_workspace
 
-
-# Tool-name -> explicit schema class. Covers every PT @cyber_tool /
-# @pentest_tool wrapper, including the four recon / save tools and the
-# three shared workspace readers.
-_PT_SCHEMAS: dict[str, type[BaseModel]] = {
-    # @pentest_tool probes
-    "Nuclei Scan": _NucleiScanArgs,
-    "SQLMap Injection Scan": _SqlmapArgs,
-    "Cookie Security Check": _CookieCheckArgs,
-    "CORS Misconfiguration Check": _CorsCheckArgs,
-    "CSRF Detection": _CsrfCheckArgs,
-    "SSRF Probe": _SsrfArgs,
-    "Header Injection Check": _HeaderInjectionArgs,
-    "Host Header Attack Check": _HostHeaderArgs,
-    "Header XSS Probe": _HeaderXssArgs,
-    "JS Source Map Scan": _SourceMapsArgs,
-    "Path Traversal Probe": _PathTraversalArgs,
-    "HTTP Parameter Pollution Probe": _HppArgs,
-    "Server-Side Template Injection Probe": _SstiArgs,
-    "Open Redirect Probe": _OpenRedirectArgs,
-    "Reflected XSS Probe": _XssArgs,
-    "Subresource Integrity Check": _SriCheckArgs,
-    "Error and Stack Trace Disclosure Check": _ErrorDisclosureArgs,
-    "NoSQL Injection Scan": _NosqliArgs,
-    "Prompt Injection Probe": _PromptInjectionArgs,
-    "LDAP Injection Probe": _LdapInjectionArgs,
-    "Command Injection Probe": _CmdInjectionArgs,
-    "XXE Probe": _XxeArgs,
-    "Prototype Pollution Check": _PrototypePollutionArgs,
-    "IDOR Probe": _IdorArgs,
-    "JWT Vulnerability Check": _JwtCheckArgs,
-    # @cyber_tool cloud / infra wrappers
-    "S3 Bucket Check": _S3CheckArgs,
-    "Azure Blob Container Check": _AzureBlobContainerArgs,
-    "Azure SAS Token Check": _AzureSasTokenArgs,
-    "Unauthenticated Elasticsearch Check": _ElasticsearchCheckArgs,
-    "Unauthenticated CouchDB Check": _CouchdbCheckArgs,
-    "Unauthenticated Redis Check": _RedisCheckArgs,
-    "Unauthenticated MongoDB Check": _MongodbCheckArgs,
-    "Exposed PostgreSQL Check": _PostgresqlCheckArgs,
-    "Exposed MySQL/MariaDB Check": _MysqlCheckArgs,
-    "Sensitive Files Check": _SensitiveFilesArgs,
-    "Admin Panels Check": _AdminPanelsArgs,
-    "cPanel/WHM Check": _CpanelArgs,
-    "Plesk Check": _PleskArgs,
-    "DirectAdmin Check": _DirectadminArgs,
-    "Webmin Check": _WebminArgs,
-    "Grafana Port Check": _GrafanaPortArgs,
-    "Grafana Path Check": _GrafanaPathArgs,
-    "Kibana Port Check": _KibanaPortArgs,
-    "Kibana Path Check": _KibanaPathArgs,
-    "Portainer Port Check": _PortainerPortArgs,
-    "Portainer Path Check": _PortainerPathArgs,
-    "Consul/Vault Port Check": _ConsulVaultPortArgs,
-    "Consul/Vault Path Check": _ConsulVaultPathArgs,
-    # PT recon / save wrappers
-    "Recon Subdomains": _PtReconSubdomainsArgs,
-    "Recon Endpoints": _PtReconEndpointsArgs,
-    "Recon Open Ports": _PtReconOpenPortsArgs,
-    "Save Findings": _SaveFindingsArgs,
-    # Shared workspace wrappers (re-exported via squad.workspace_tools)
-    "List Run Files": _ListRunFilesArgs,
-    "Read Run File": _ReadRunFileArgs,
-    "Read Attack Plan": _ReadAttackPlanArgs,
-}
 
 # Cloud wrappers that take ``hostnames: list[Hostname]`` and scope-filter
 # via ``filter_in_scope``. Used by the missing-required-hostnames
@@ -209,55 +144,21 @@ _ENDPOINTS_CLOUD_SCHEMAS: list[type[BaseModel]] = [
 ]
 
 
-def _tools_by_name() -> dict[str, SquadTool]:
-    """Look up MEMBER.tools by display name once, share across tests."""
-    return {t.name: t for t in MEMBER.tools}
-
-
 class TestPtArgsSchemaContracts:
-    @pytest.mark.parametrize("tool_name", sorted(_PT_SCHEMAS))
+    @pytest.mark.parametrize("tool_name", sorted(MEMBER.schemas))
     def test_tool_wires_explicit_schema(self, tool_name: str) -> None:
-        """Every PT typed tool registers the explicit schema class on its Tool."""
-        tool_obj = _tools_by_name()[tool_name]
-        expected = _PT_SCHEMAS[tool_name]
-        assert tool_obj.args_schema is expected, (
-            f"{tool_name} args_schema is {tool_obj.args_schema!r}; expected {expected!r}"
-        )
+        assert_tool_wires_explicit_schema(MEMBER, tool_name)
 
     @pytest.mark.parametrize(
         ("tool_name", "schema_cls"),
-        sorted(_PT_SCHEMAS.items()),
-        ids=sorted(_PT_SCHEMAS),
+        sorted(MEMBER.schemas.items()),
+        ids=sorted(MEMBER.schemas),
     )
     def test_every_field_has_description(self, tool_name: str, schema_cls: type[BaseModel]) -> None:
-        """Every field on every PT typed-tool schema carries a non-empty description."""
-        for field_name, field_info in schema_cls.model_fields.items():
-            desc = field_info.description
-            assert desc, f"{tool_name}::{field_name} missing Field(description=...)"
-            assert isinstance(desc, str) and desc.strip(), (
-                f"{tool_name}::{field_name} description is blank"
-            )
+        assert_field_descriptions_present(tool_name, schema_cls)
 
-    def test_every_pt_cyber_tool_has_schema_mapping(self) -> None:
-        """The mapping above must cover every PT ``@cyber_tool`` / ``@pentest_tool``.
-
-        Closed-world structural check: every PT tool whose Tool exposes a
-        private (``_*``) args_schema class name is in ``_PT_SCHEMAS``;
-        every entry in ``_PT_SCHEMAS`` resolves to a registered tool.
-        A new typed tool added without a mapping entry fires this test
-        before reviewers see the PR.
-        """
-        tools = _tools_by_name()
-        private_schema_tools = {
-            name
-            for name, t in tools.items()
-            if getattr(getattr(t, "args_schema", None), "__name__", "").startswith("_")
-        }
-        assert private_schema_tools == set(_PT_SCHEMAS), (
-            "Mismatch between PT typed-tool wrappers and _PT_SCHEMAS: "
-            f"in registry but not mapping = {private_schema_tools - set(_PT_SCHEMAS)}; "
-            f"in mapping but not registry = {set(_PT_SCHEMAS) - private_schema_tools}"
-        )
+    def test_closed_world_mapping(self) -> None:
+        assert_closed_world_mapping(MEMBER)
 
 
 class TestSchemaAcceptReject:

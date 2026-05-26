@@ -40,7 +40,7 @@ The "validate at the boundary, trust within" stance has a name and a canonical r
 
 Rules:
 
-- Class name is underscore-prefixed `_<ToolName>Args`. Each agent has a contract test under `tests/squad/<agent>/test_args_schemas.py` that walks `MEMBER.tools`, asserts every typed-tool schema is the expected explicit class, and enforces a closed-world `_<AGENT>_SCHEMAS` mapping. New typed tools are discovered via the private-prefix class name; a missing mapping entry fires the test before reviewers see the PR.
+- Class name is underscore-prefixed `_<ToolName>Args`. Every typed tool is registered in `MEMBER.schemas` (a `dict[str, type[BaseModel]]` on the `SquadMember` constant in each agent's `__init__.py`, alongside `tools`). The per-agent contract test under `tests/squad/<agent>/test_args_schemas.py` parametrises over `MEMBER.schemas` and calls the shared assertions in `tests/squad/_contract_assertions.py` - tool wires the explicit schema, every field has a description, closed-world mapping. New typed tools are discovered via the private-prefix class name; a missing `MEMBER.schemas` entry fires the test before reviewers see the PR.
 - Every field carries a `Field(description=...)` phrased as agent-facing targeting guidance ("fire when open_ports shows X", "prioritise endpoints where Y"), not type information the schema already encodes.
 - Field types mirror the wrapper signature exactly. StrEnum filters stay typed (`list[<StrEnum>] | None`), never `list[str]`. Hostname-shaped fields use the `Hostname` typed-string from `models.primitives`, never bare `str` (see "Typed string primitives" below).
 - Schema lives inline in the same module as the wrapper, directly above the decorator. Do not import from a separate file.
