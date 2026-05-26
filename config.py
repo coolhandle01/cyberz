@@ -112,6 +112,12 @@ class MCPConfig:
     time_timezone: str = field(
         default_factory=lambda: os.getenv("CYBERSQUAD_MCP_TIME_TIMEZONE", "UTC")
     )
+    # Per-adapter connect timeout (seconds). Stdio servers should come up
+    # fast; we tighten CrewAI's default of 30 to 10 so a hung subprocess
+    # does not stall the pipeline. Override via CYBERSQUAD_MCP_CONNECT_TIMEOUT.
+    connect_timeout_s: int = field(
+        default_factory=lambda: int(os.getenv("CYBERSQUAD_MCP_CONNECT_TIMEOUT", "10"))
+    )
 
 
 @dataclass

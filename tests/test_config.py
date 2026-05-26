@@ -140,6 +140,21 @@ class TestMCPConfig:
         c = MCPConfig()
         assert c.time_timezone == "Europe/London"
 
+    def test_connect_timeout_default_is_tighter_than_crewai(self, monkeypatch):
+        """Default 10s vs CrewAI's 30s - stdio should come up fast."""
+        monkeypatch.delenv("CYBERSQUAD_MCP_CONNECT_TIMEOUT", raising=False)
+        from config import MCPConfig
+
+        c = MCPConfig()
+        assert c.connect_timeout_s == 10
+
+    def test_connect_timeout_overridable(self, monkeypatch):
+        monkeypatch.setenv("CYBERSQUAD_MCP_CONNECT_TIMEOUT", "45")
+        from config import MCPConfig
+
+        c = MCPConfig()
+        assert c.connect_timeout_s == 45
+
 
 class TestScanConfig:
     def test_defaults(self, monkeypatch):

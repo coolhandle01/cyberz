@@ -24,8 +24,23 @@ dependencies = [
 # `mcp_servers.py`. Each server is gated by its own `CYBERSQUAD_MCP_*_ENABLED`
 # env var defaulting `false`, so installing the extra is a separate decision
 # from turning the server on.
+#
+# Versions are pinned EXACTLY (==) deliberately. The MCP spec treats every
+# tool's name, description, and inputSchema as untrusted input to the agent
+# (modelcontextprotocol/spec 2025-06-18, basic/index "Security and Trust &
+# Safety"). A vendor minor / patch bump can re-word those fields. Bumping a
+# pin here is therefore a review event - the cybersquad-mcp skill spells
+# out the upgrade ritual (re-vet tool prose; refresh allowlist if the
+# vendor added a tool).
 mcp = [
-    "mcp-server-time>=0.6.2",
+    # crewai-tools' MCPServerAdapter depends on `mcpadapt`, shipped under the
+    # `[mcp]` extra. Without it, `MCPServerAdapter.__init__` aborts with an
+    # interactive `click.confirm` install prompt the moment any provisioned
+    # MCP is constructed - a non-TTY environment (CI, web session, daemon)
+    # then crashes the host. Pull the extra explicitly so the dependency is
+    # declared, not inferred from "we installed crewai-tools and hoped".
+    "crewai-tools[mcp]>=1.14.5",
+    "mcp-server-time==2026.1.26",
 ]
 dev = [
     # Testing
