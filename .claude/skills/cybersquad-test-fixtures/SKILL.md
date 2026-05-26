@@ -1,11 +1,26 @@
 ---
 name: cybersquad-test-fixtures
-description: Use the shared pytest fixtures in tests/conftest.py instead of redefining local equivalents when writing or editing cybersquad tests. Covers make_response, the canonical model fixtures, clean_response_body, and the domain URL fixtures. Load before editing any file under tests/.
+description: Use the shared pytest fixtures in tests/fixtures/ instead of redefining local equivalents when writing or editing cybersquad tests. Covers make_response, the canonical model fixtures, clean_response_body, and the domain URL fixtures. Load before editing any file under tests/.
 ---
 
 # cybersquad test fixtures
 
-`tests/conftest.py` is the source of truth. Use these fixtures rather than redefining local equivalents - duplicates drift, hide accidental marker collisions, and make canonical-model refactors painful.
+`tests/fixtures/` is the source of truth, grouped by concern. The top-level `tests/conftest.py` does the env seeding and pulls the fixture modules in via `pytest_plugins` (see [pytest docs](https://docs.pytest.org/en/stable/how-to/fixtures.html#use-fixtures-from-other-projects)); no other indirection is needed at the test-author side - fixtures resolve by name across the whole suite.
+
+Use these fixtures rather than redefining local equivalents - duplicates drift, hide accidental marker collisions, and make canonical-model refactors painful.
+
+## Layout
+
+| Module | Holds |
+|---|---|
+| `tests/fixtures/domains.py` | `target_url`, `bystander_url`, `callback_url`, `target_apex`, `target_sld`, `make_html_page` |
+| `tests/fixtures/programme.py` | `scope_item_*`, `programme`, `programme_in_workspace`, `dvwa_programme`, `dvwa_in_workspace`, `run_dir` |
+| `tests/fixtures/recon.py` | `endpoint`, `recon_result`, `make_s3_hostname` / `s3_hostname`, `make_azure_blob_hostname` / `azure_blob_hostname`, `azure_sas_endpoint` |
+| `tests/fixtures/findings.py` | `raw_finding_high` / `raw_finding_low` / `raw_finding_oos`, `verified_vuln`, `disclosure_report`, `attack_plan_item`, `attack_plan` |
+| `tests/fixtures/responses.py` | `make_response`, `clean_response_body` |
+| `tests/fixtures/tools.py` | `invoke_tool`, `reload_module` |
+
+When adding a new fixture, put it in the matching module rather than re-opening `conftest.py` - that's the single rule that keeps the catalogue navigable.
 
 ## Catalogue
 
@@ -31,7 +46,9 @@ description: Use the shared pytest fixtures in tests/conftest.py instead of rede
 | `raw_finding_high` / `raw_finding_low` / `raw_finding_oos` | `RawFinding` instances at each severity / scope tier. |
 | `verified_vuln` | A `VerifiedVulnerability` model. |
 | `disclosure_report` | A `DisclosureReport` derived from `verified_vuln`. |
+| `attack_plan_item` / `attack_plan` | The VR's research artefact the PT consumes. |
 | `clean_response_body` | An HTML body verified at setup time to contain no pentest probe marker - use for "no finding" cases. |
+| `invoke_tool` | Invoke a `@cyber_tool` wrapper through its args_schema (CrewAI's production path). Tests that exercise the `Target*` scope guard take this instead of `.func(...)` so the `AfterValidator` actually fires. |
 | `reload_module` | Wraps `importlib.reload` so tests can pick up env-var changes on module-level singletons. |
 
 ## Authoring a new in-scope fixture
