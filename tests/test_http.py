@@ -59,8 +59,11 @@ class TestInjectHeaders:
     def test_preserves_existing_user_agent_case_insensitive(self):
         kwargs = {"headers": {"user-agent": "custom-ua"}}
         out = http._inject_headers(kwargs)
-        # No new User-Agent injected because lowercase one already there
-        assert "User-Agent" not in out["headers"]
+        # The merged headers are a ``CaseInsensitiveDict``; the caller's
+        # lower-cased ``user-agent`` and our canonical ``User-Agent`` are
+        # the same key, so the caller's value wins and no duplicate is
+        # shipped. Both lookups return the same caller-supplied value.
+        assert out["headers"]["User-Agent"] == "custom-ua"
         assert out["headers"]["user-agent"] == "custom-ua"
 
     def test_merges_with_other_headers(self):
@@ -73,6 +76,21 @@ class TestInjectHeaders:
         kwargs: dict = {}
         out = http._inject_headers(kwargs)
         assert "User-Agent" in out["headers"]
+
+    def test_duplicate_case_variants_dedupe(self):
+        """Caller passes both ``User-Agent`` and ``user-agent``;
+        the ``CaseInsensitiveDict`` merge dedupes by lower-cased key
+        so only one survives. RFC 9110 section 5.1 makes header field
+        names case-insensitive; the safe default never accidentally
+        ships duplicates. Header-mutation probes that NEED literal
+        duplicates work around this default deliberately."""
+        kwargs = {"headers": {"User-Agent": "first", "user-agent": "second"}}
+        out = http._inject_headers(kwargs)
+        # Dict construction overwrites in source order, so the second
+        # write wins regardless of case; the value that ships is
+        # well-defined (not order-dependent on the underlying transport).
+        assert len(out["headers"]) == 1
+        assert out["headers"]["User-Agent"] == "second"
 
 
 class TestVerbWrappers:
