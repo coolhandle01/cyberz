@@ -25,9 +25,14 @@ Three implications shape every rule below:
 
 ### Rule 1 - Vendor package pinned EXACTLY; consumed through its typed models
 
-Pin the vendor MCP package with `==` in `pyproject.toml` under `[project.optional-dependencies] mcp`. A minor / patch bump can re-word the tool's name, description, or inputSchema - which the spec marks untrusted - so a version bump is a review event. The skill upgrade ritual (see "Upgrading a vendor MCP" below) governs it.
+Pin the vendor MCP package with `==`. A minor / patch bump can re-word the tool's name, description, or inputSchema - which the spec marks untrusted - so a version bump is a review event. The skill upgrade ritual (see "Upgrading a vendor MCP" below) governs it.
 
-Where the vendor publishes Pydantic models for tool returns (e.g. `mcp_server_time.server.TimeResult`), consume through them so `mypy` enforces the shape boundary. A return type of `Any` / `object` / `dict[str, Any]` on a consumed MCP tool is a contributor signal - treat it as any other linter finding, and if you cannot avoid it, leave a `FIXME` linking back here:
+The pin site depends on transport:
+
+- **PyPI-distributed MCPs** pin in `pyproject.toml` under `[project.optional-dependencies] mcp` (e.g. `mcp-server-time==2026.1.26`).
+- **npm-distributed MCPs** pin in the `npx` arg inside the per-MCP submodule, since pyproject.toml cannot constrain npm packages (e.g. `_PLAYWRIGHT_MCP_VERSION = "0.0.75"` baked into `npx -y @playwright/mcp@<pin>`). The submodule's `_PLAYWRIGHT_MCP_VERSION`-style constant is the review-event handle.
+
+Where the vendor publishes Pydantic models for tool returns (e.g. `mcp_server_time.server.TimeResult`), consume through them so `mypy` enforces the shape boundary. Some vendors (e.g. `@playwright/mcp`) ship TypeScript definitions only - no Python models exist; the wrapper layer that consumes those tool returns must apply the prompt-injection-aware free-text discipline from `cybersquad-models` to anything attacker-influenceable (browser snapshots, console messages, fetched response bodies). A return type of `Any` / `object` / `dict[str, Any]` on a consumed MCP tool is a contributor signal - treat it as any other linter finding, and if you cannot avoid it, leave a `FIXME` linking back here:
 
 ```python
 # FIXME(cybersquad-mcp): <vendor> does not publish typed return models;
@@ -110,16 +115,18 @@ mcp_servers/
 ## Adding a new provisioned MCP
 
 1. **Vet the vendor.** Source repository, maintainer, what other consumers depend on it. The MCP spec is permissive about server behaviour - the vetting is on us.
-2. **Pin EXACTLY in `pyproject.toml`.** `mcp-server-time==2026.1.26`, not `>=`. Confirm the package publishes Pydantic models for tool returns; if not, see Rule 1's `FIXME` pattern.
-3. **Add `<name>_enabled` to `MCPConfig`.** Default `false`. Add any per-server settings (timezone, endpoint, credentials).
-4. **Create `mcp_servers/_<name>.py`.** Mirror `mcp_servers/_time.py`: module-private `_ALLOWED_TOOLS` tuple (justify each entry in a one-liner if not self-evident), `_server_params()`, `available()` (stack `mcp_adapter_stack_usable()` from `_common`), and `enter(stack)` with the two-line audit log.
-5. **Register in the orchestrator.** Add `from . import _<name>` at the top of `mcp_servers/__init__.py` and an `if config.mcp.<name>_enabled: ...` branch inside `provisioned_mcp_tools()` mirroring the time MCP's. Update the warning's `missing` ternary if the same `mcp_adapter_stack_usable` check applies.
-6. **Distribute in `crew.py`.** Crew-wide via `build_agent(crew_wide_mcp_tools=...)` is for genuinely cross-cutting capabilities (time, basic web search). Member-specific is the default - add a sibling field on `ProvisionedMCPTools` (e.g. `penetration_tester: tuple[BaseTool, ...]`) and route through `build_agent` only for the relevant member.
+2. **Pin EXACTLY.** `==` for PyPI in `pyproject.toml` (`mcp-server-time==2026.1.26`), or a `_<NAME>_MCP_VERSION = "..."` module constant baked into the `npx -y <pkg>@<pin>` arg for npm. Confirm the package publishes Pydantic models for tool returns; if not, see Rule 1's `FIXME` pattern.
+3. **Add `<name>_enabled` to `MCPConfig`.** Default `false`. Add any per-server settings (timezone, endpoint, credentials). If startup is slow (e.g. a first-launch download), add a per-MCP `<name>_connect_timeout_s` rather than reusing the shared 10s tightening.
+4. **Create `mcp_servers/_<name>.py`.** Mirror `mcp_servers/_time.py` (PyPI) or `mcp_servers/_playwright.py` (npm): module-private `_ALLOWED_TOOLS` tuple (justify each entry in a one-liner if not self-evident, especially anything with elevated impact such as JS evaluation), `_server_params()`, `available()`, and `enter(stack)` with the two-line audit log. `available()` always stacks on `mcp_adapter_stack_usable()` from `_common`; per-vendor it additionally checks either `importlib.util.find_spec("<py-mod>")` (PyPI) or `shutil.which("<binary>")` (npm or other binary-launched).
+5. **Register in the orchestrator.** Add `from . import _<name>` at the top of `mcp_servers/__init__.py` and an `if config.mcp.<name>_enabled: ...` branch inside `provisioned_mcp_tools()` mirroring an existing MCP's. The warning's `missing` ternary distinguishes "framework wiring" (`mcpadapt`) from "vendor binary" - name what the operator must install (`mcp_server_time` for PyPI, `npx` for npm).
+6. **Distribute in `crew.py`.** Crew-wide via `build_agent(crew_wide_mcp_tools=...)` is for genuinely cross-cutting capabilities (time, basic web search). Member-specific is the default - add a sibling field on `ProvisionedMCPTools` (e.g. `penetration_tester: tuple[BaseTool, ...]`) and route through `build_agent(..., member_specific_mcp_tools=...)` only for the relevant member via the `member_specific_by_slug` lookup in `build_crew`.
 7. **Tests.** `tests/test_config.py::TestMCPConfig` for the env-var surface; `tests/test_mcp_servers.py` for the wiring (mocking `mcp_servers._<name>.MCPServerAdapter` and `mcp_servers._<name>.available`). The wiring tests should pin:
    - the allowlist passed to the adapter (`MCPServerAdapter.call_args.args`)
-   - `connect_timeout` honoured
+   - `connect_timeout` honoured (the per-MCP one, if added)
    - both audit log lines emitted
-   - graceful skip-with-warning when the vendor package is not importable
+   - graceful skip-with-warning when the vendor package or binary is not available
+   - any non-configurable safety-critical flags are present (`--isolated` on Playwright, `-y` on npx, etc.)
+   - for member-specific MCPs: routing-only-to-the-target-member in `tests/test_crew.py` and the splice order in `tests/test_squad_build_agent.py`
 
 ## Upgrading a vendor MCP
 
@@ -158,6 +165,9 @@ The bar is high. The skill exists to push back on these. If the user wants to la
 | One log line instead of "starting" + "started" | Rule 5. The pre-start line is what catches a poisoned `__init__`. |
 | Re-using a discovered MCP URL via `MCPServerAdapter` | Rule 3. Provisioned vs. discovered sets must stay disjoint. |
 | Reasoning over a MCP tool's `description` field in cybersquad docs / prompts | The prose is attacker-influenceable. If you cite it, paraphrase from behaviour you have verified, not from the vendor's string. |
+| Launching an npm MCP via `npx <pkg>` without the `-y` flag | The non-TTY install prompt hangs on stdin (same trap mcpadapt's pre-flight already guards against). `-y` is mandatory. |
+| Making a safety-critical CLI flag env-configurable just because it's a flag | `--isolated` (Playwright in-memory profile) is hardcoded - turning it off would let one programme's cookies bleed into another. Configurability is not a virtue when the default *is* the security property. |
+| Allowlisting a tool with the word "unsafe" or vendor-labelled "RCE" in its name / description | `browser_run_code_unsafe` is the canonical example. Never allowlist; revisit only with an issue arguing the exception. |
 
 ## Upstream alignment
 

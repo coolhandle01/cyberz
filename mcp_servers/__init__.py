@@ -58,7 +58,7 @@ from crewai.tools import BaseTool
 
 from config import config
 
-from . import _time
+from . import _playwright, _time
 from ._common import mcp_adapter_stack_usable
 
 logger = logging.getLogger(__name__)
@@ -70,14 +70,16 @@ class ProvisionedMCPTools:
 
     ``crew_wide`` is the list distributed to every agent via
     ``build_agent(crew_wide_mcp_tools=...)``. Member-specific MCP tool
-    lists would live as sibling fields here (e.g. ``penetration_tester``)
-    when the first non-cross-cutting MCP arrives.
+    lists live as sibling fields - ``penetration_tester`` is the first
+    such field, for the Playwright MCP (#23) whose 200MB Chromium
+    dependency only earns its keep on the PT's surface.
 
     The class is frozen so a consumer cannot mutate the list in place;
     a `tuple` (not list) is the canonical immutable carrier.
     """
 
     crew_wide: tuple[BaseTool, ...] = field(default_factory=tuple)
+    penetration_tester: tuple[BaseTool, ...] = field(default_factory=tuple)
 
 
 @contextmanager
@@ -95,6 +97,7 @@ def provisioned_mcp_tools() -> Iterator[ProvisionedMCPTools]:
     start during the loop still triggers cleanup for the ones that did.
     """
     crew_wide: list[BaseTool] = []
+    penetration_tester: list[BaseTool] = []
     with ExitStack() as stack:
         if config.mcp.time_enabled:
             if _time.available():
@@ -108,7 +111,25 @@ def provisioned_mcp_tools() -> Iterator[ProvisionedMCPTools]:
                     "CYBERSQUAD_MCP_TIME_ENABLED=false.",
                     missing,
                 )
-        yield ProvisionedMCPTools(crew_wide=tuple(crew_wide))
+        if config.mcp.playwright_enabled:
+            if _playwright.available():
+                penetration_tester.extend(_playwright.enter(stack))
+            else:
+                # The npm-launched MCP has a different missing-dep set than
+                # the PyPI-launched time MCP: ``mcpadapt`` from the same
+                # ``[mcp]`` extra, but ``npx`` from Node.js 18+ on PATH.
+                missing = "mcpadapt" if not mcp_adapter_stack_usable() else "npx"
+                logger.warning(
+                    "CYBERSQUAD_MCP_PLAYWRIGHT_ENABLED=true but %s is not available; "
+                    "skipping. Install npx via Node.js 18+ (and mcpadapt via "
+                    "`pip install -e .[mcp]`) or set "
+                    "CYBERSQUAD_MCP_PLAYWRIGHT_ENABLED=false.",
+                    missing,
+                )
+        yield ProvisionedMCPTools(
+            crew_wide=tuple(crew_wide),
+            penetration_tester=tuple(penetration_tester),
+        )
 
 
 __all__ = ["ProvisionedMCPTools", "provisioned_mcp_tools"]

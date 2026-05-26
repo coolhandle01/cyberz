@@ -11,6 +11,7 @@ from pathlib import Path
 from crewai import LLM, Agent, Crew, Process, Task
 from crewai.agents.agent_builder.base_agent import BaseAgent
 from crewai.memory import Memory
+from crewai.tools import BaseTool
 
 from config import config
 from mcp_servers import ProvisionedMCPTools
@@ -84,14 +85,32 @@ def build_crew(
                  that do not exercise MCP wiring). Per the
                  ``cybersquad-mcp`` skill, this is the only injection
                  point for MCP-sourced tools - agents cannot attach an
-                 ``MCPServerAdapter`` at runtime.
+                 ``MCPServerAdapter`` at runtime. ``crew_wide`` reaches
+                 every agent; ``penetration_tester`` reaches only the PT
+                 (e.g. Playwright, #23).
     """
     be_verbose = verbose if verbose is not None else config.verbose
     crew_wide_mcp_tools = mcp_tools.crew_wide if mcp_tools is not None else ()
+    # Per-member MCP routing: only the explicitly-listed role receives
+    # the role-specific MCP bucket; every other agent's
+    # ``member_specific_mcp_tools`` resolves to ``()`` via the lookup
+    # below. Adding a new role-scoped MCP is: extend
+    # ``ProvisionedMCPTools`` with a sibling field, add a line here, and
+    # the rest of the squad stays unchanged.
+    pt_mcp_tools = mcp_tools.penetration_tester if mcp_tools is not None else ()
+    member_specific_by_slug: dict[str, tuple[BaseTool, ...]] = {
+        PENETRATION_TESTER.slug: tuple(pt_mcp_tools),
+    }
 
     llm: LLM = _build_llm()
     agents_by_slug: dict[str, Agent] = {
-        m.slug: build_agent(m, llm, be_verbose, crew_wide_mcp_tools=crew_wide_mcp_tools)
+        m.slug: build_agent(
+            m,
+            llm,
+            be_verbose,
+            crew_wide_mcp_tools=crew_wide_mcp_tools,
+            member_specific_mcp_tools=member_specific_by_slug.get(m.slug, ()),
+        )
         for m in _SQUAD
     }
     # Crew(agents=...) wants list[BaseAgent]; list[Agent] is invariant
