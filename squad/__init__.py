@@ -130,6 +130,7 @@ class SquadMember:
 
     dir: Path
     tools: list[SquadTool] = field(default_factory=list)
+    task: str = ""
 
     @property
     def slug(self) -> str:

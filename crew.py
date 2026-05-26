@@ -8,9 +8,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from crewai import LLM, Agent, Crew, Process, Task
+from crewai import LLM, Agent, Crew, Memory, Process, Task
 from crewai.agents.agent_builder.base_agent import BaseAgent
-from crewai.memory.memory import Memory
 
 from config import config
 from squad import SQUAD_SKILLS_DIR, SquadMember, build_agent
@@ -65,6 +64,17 @@ def _build_long_term_memory() -> Memory | None:
     storage_path = Path(config.memory.storage_path)
     storage_path.parent.mkdir(parents=True, exist_ok=True)
     return Memory(storage="lancedb", root_scope="/long_term")
+
+
+def crew_tasks() -> dict[str, str]:
+    """Return a role -> task mapping built from the squad member metadata.
+
+    Powers the TUI's per-agent task labelling so a running pipeline
+    surfaces "<role>: <task>" rows rather than role-only ones. Members
+    without a ``task`` set are omitted; the mapping is naturally sparse
+    when only some agents carry one.
+    """
+    return {m.read("role"): m.task for m in _SQUAD if m.task}
 
 
 def build_crew(verbose: bool | None = None) -> Crew:
