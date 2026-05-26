@@ -148,6 +148,7 @@ from squad.penetration_tester.recon import (
 
 MEMBER = SquadMember(
     dir=Path(__file__).parent,
+    task="Penetration Testing",
     tools=[
         # @pentest_tool probes
         nuclei_scan_tool,

@@ -79,6 +79,7 @@ MEMBER = SquadMember(
         read_run_filelist_tool,
         read_run_file_tool,
     ],
+    task="Reconnaissance",
 )
 
 __all__ = [  # noqa: RUF022 - grouped by purpose, not alphabetised
