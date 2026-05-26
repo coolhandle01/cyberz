@@ -45,7 +45,7 @@ from models.insight import (
     InsightValidationReport,
     ReconFinalisationError,
 )
-from tools.recon.scope import extract_domain, filter_in_scope
+from tools.recon.scope import filter_in_scope
 
 _INSIGHTS_SUBDIR = "host_insights"
 _SWEEP_FILENAME = "sweep.json"
@@ -356,7 +356,6 @@ __all__ = [
     "InsightValidationIssue",
     "InsightValidationReport",
     "ReconFinalisationError",
-    "extract_domain",
     "finalise_recon",
     "insight_path",
     "load_insights",

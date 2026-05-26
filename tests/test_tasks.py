@@ -8,15 +8,15 @@ import pytest
 
 pytest.importorskip("crewai")
 
-import squad  # noqa: E402
-from squad import SquadMember  # noqa: E402
-from squad.disclosure_coordinator import MEMBER as DISCLOSURE_COORDINATOR  # noqa: E402
-from squad.osint_analyst import MEMBER as OSINT_ANALYST  # noqa: E402
-from squad.penetration_tester import MEMBER as PENETRATION_TESTER  # noqa: E402
-from squad.programme_manager import MEMBER as PROGRAMME_MANAGER  # noqa: E402
-from squad.technical_author import MEMBER as TECHNICAL_AUTHOR  # noqa: E402
-from squad.vulnerability_researcher import MEMBER as VULNERABILITY_RESEARCHER  # noqa: E402
-from tasks import build_tasks  # noqa: E402
+import squad
+from squad import SquadMember
+from squad.disclosure_coordinator import MEMBER as DISCLOSURE_COORDINATOR
+from squad.osint_analyst import MEMBER as OSINT_ANALYST
+from squad.penetration_tester import MEMBER as PENETRATION_TESTER
+from squad.programme_manager import MEMBER as PROGRAMME_MANAGER
+from squad.technical_author import MEMBER as TECHNICAL_AUTHOR
+from squad.vulnerability_researcher import MEMBER as VULNERABILITY_RESEARCHER
+from tasks import build_tasks
 
 pytestmark = pytest.mark.unit
 

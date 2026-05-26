@@ -1,19 +1,19 @@
 """
 Exposed database / search-index probes - look for unauthenticated
 admin / data endpoints on Elasticsearch, CouchDB, Redis, MongoDB,
-PostgreSQL, MySQL / MariaDB. Each check derives candidate
-host:port pairs from recon's open-port map and probes for the
-service's signature unauthenticated endpoint.
+PostgreSQL, MySQL / MariaDB.
 
-See the package-level scope-of-target FIXME in ``cloud/__init__.py``
-(tracked in #156).
+Each wrapper takes typed ``list[Hostname]`` picked by the agent from
+recon (the host:port pairs surfaced by the nmap pass) and a wrapper-
+level ``scope_filter`` drops anything outside the selected programme's
+structured scope before the probe fires. See the recon-side precedent
+in ``squad/osint_analyst/discovery.py`` (``Probe Hostnames``).
 """
 
 from pydantic import BaseModel, Field
 
-from models import RawFinding
+from models import Hostname, RawFinding
 from squad import cyber_tool
-from squad.penetration_tester._decorator import _recon_from_path
 from tools.cloud import (
     check_couchdb,
     check_elasticsearch,
@@ -22,179 +22,184 @@ from tools.cloud import (
     check_postgresql,
     check_redis,
 )
+from tools.recon.scope import TargetHostnames
 
 
 class _ElasticsearchCheckArgs(BaseModel):
     """Explicit args_schema for the Unauthenticated Elasticsearch Check tool."""
 
-    recon_path: str = Field(
+    hostnames: TargetHostnames = Field(
         description=(
-            "Relative path to recon.json in the run directory. Fire when"
-            " open_ports shows 9200, or when technologies mention"
-            " Elasticsearch. Probes /_cluster/health; a 200 with"
-            " cluster_name confirms no auth."
+            "Hostnames showing port 9200 open (or technologies mentioning"
+            " Elasticsearch). Probes /_cluster/health on each; a 200 with"
+            " cluster_name confirms no auth. The wrapper's scope filter"
+            " drops any hostname outside the selected programme's"
+            " structured scope before the probe fires."
         ),
     )
 
 
 @cyber_tool("Unauthenticated Elasticsearch Check", args_schema=_ElasticsearchCheckArgs)
-def elasticsearch_tool(recon_path: str) -> list[RawFinding]:
+def elasticsearch_tool(hostnames: list[Hostname]) -> list[RawFinding]:
     """
-    Check for an unauthenticated Elasticsearch instance on port 9200.
-    Probes /_cluster/health - a 200 response with cluster_name confirms no auth.
-    Use when open_ports shows 9200, or when technologies mention Elasticsearch.
-    Pass the path to the recon.json file in the run directory.
+    Check for an unauthenticated Elasticsearch instance on port 9200 on each
+    supplied hostname. Probes /_cluster/health - a 200 response with
+    cluster_name confirms no auth.
+
+    Pick hostnames from the Recon Open Ports slicer where port 9200 shows
+    open, or where Recon Endpoints / Annotate Host called out an
+    Elasticsearch technology. The wrapper scope-filters the list against
+    the selected programme; the body iterates whatever survives.
     """
-    recon = _recon_from_path(recon_path)
-    findings = []
-    for host, ports in recon.open_ports.items():
-        if 9200 in ports:
-            findings.extend(check_elasticsearch(host))
-    return list(findings)
+    findings: list[RawFinding] = []
+    for host in hostnames:
+        findings.extend(check_elasticsearch(host))
+    return findings
 
 
 class _CouchdbCheckArgs(BaseModel):
     """Explicit args_schema for the Unauthenticated CouchDB Check tool."""
 
-    recon_path: str = Field(
+    hostnames: TargetHostnames = Field(
         description=(
-            "Relative path to recon.json in the run directory. Fire when"
-            " open_ports shows 5984. Probes /_all_dbs; a 200 listing"
-            " databases confirms no auth."
+            "Hostnames showing port 5984 open. Probes /_all_dbs on each;"
+            " a 200 listing databases confirms no auth. The wrapper's"
+            " scope filter drops out-of-scope hostnames before any probe."
         ),
     )
 
 
 @cyber_tool("Unauthenticated CouchDB Check", args_schema=_CouchdbCheckArgs)
-def couchdb_tool(recon_path: str) -> list[RawFinding]:
+def couchdb_tool(hostnames: list[Hostname]) -> list[RawFinding]:
     """
-    Check for an unauthenticated CouchDB instance on port 5984.
-    Probes /_all_dbs - a 200 response listing databases confirms no auth.
-    Use when open_ports shows 5984.
-    Pass the path to the recon.json file in the run directory.
+    Check for an unauthenticated CouchDB instance on port 5984 on each
+    supplied hostname. Probes /_all_dbs - a 200 response listing databases
+    confirms no auth.
+
+    Pick hostnames from the Recon Open Ports slicer where port 5984 shows
+    open. The wrapper scope-filters the list.
     """
-    recon = _recon_from_path(recon_path)
-    findings = []
-    for host, ports in recon.open_ports.items():
-        if 5984 in ports:
-            findings.extend(check_couchdb(host))
-    return list(findings)
+    findings: list[RawFinding] = []
+    for host in hostnames:
+        findings.extend(check_couchdb(host))
+    return findings
 
 
 class _RedisCheckArgs(BaseModel):
     """Explicit args_schema for the Unauthenticated Redis Check tool."""
 
-    recon_path: str = Field(
+    hostnames: TargetHostnames = Field(
         description=(
-            "Relative path to recon.json in the run directory. Fire when"
-            " open_ports shows 6379. Sends a PING; a +PONG without AUTH"
-            " confirms no password is set."
+            "Hostnames showing port 6379 open. Sends a PING; a +PONG"
+            " without AUTH confirms no password is set. The wrapper's"
+            " scope filter drops out-of-scope hostnames before any probe."
         ),
     )
 
 
 @cyber_tool("Unauthenticated Redis Check", args_schema=_RedisCheckArgs)
-def redis_tool(recon_path: str) -> list[RawFinding]:
+def redis_tool(hostnames: list[Hostname]) -> list[RawFinding]:
     """
-    Check for an unauthenticated Redis instance on port 6379 via a PING command.
-    A +PONG response without sending AUTH confirms no password is set.
-    Use when open_ports shows 6379.
-    Pass the path to the recon.json file in the run directory.
+    Check for an unauthenticated Redis instance on port 6379 via a PING
+    command. A +PONG response without sending AUTH confirms no password
+    is set.
+
+    Pick hostnames from the Recon Open Ports slicer where port 6379 shows
+    open. The wrapper scope-filters the list.
     """
-    recon = _recon_from_path(recon_path)
-    findings = []
-    for host, ports in recon.open_ports.items():
-        if 6379 in ports:
-            findings.extend(check_redis(host))
-    return list(findings)
+    findings: list[RawFinding] = []
+    for host in hostnames:
+        findings.extend(check_redis(host))
+    return findings
 
 
 class _MongodbCheckArgs(BaseModel):
     """Explicit args_schema for the Unauthenticated MongoDB Check tool."""
 
-    recon_path: str = Field(
+    hostnames: TargetHostnames = Field(
         description=(
-            "Relative path to recon.json in the run directory. Fire when"
-            " open_ports shows 27017. Sends a minimal isMaster wire query;"
-            " a valid response without error confirms unauthenticated"
-            " access."
+            "Hostnames showing port 27017 open. Sends a minimal isMaster"
+            " wire query; a valid response without error confirms"
+            " unauthenticated access. The wrapper's scope filter drops"
+            " out-of-scope hostnames before any probe."
         ),
     )
 
 
 @cyber_tool("Unauthenticated MongoDB Check", args_schema=_MongodbCheckArgs)
-def mongodb_tool(recon_path: str) -> list[RawFinding]:
+def mongodb_tool(hostnames: list[Hostname]) -> list[RawFinding]:
     """
-    Check for an unauthenticated MongoDB instance on port 27017.
-    Sends a minimal isMaster wire-protocol query - a valid response without
-    error confirms the instance accepts connections without credentials.
-    Use when open_ports shows 27017.
-    Pass the path to the recon.json file in the run directory.
+    Check for an unauthenticated MongoDB instance on port 27017 on each
+    supplied hostname. Sends a minimal isMaster wire-protocol query - a
+    valid response without error confirms the instance accepts connections
+    without credentials.
+
+    Pick hostnames from the Recon Open Ports slicer where port 27017 shows
+    open. The wrapper scope-filters the list.
     """
-    recon = _recon_from_path(recon_path)
-    findings = []
-    for host, ports in recon.open_ports.items():
-        if 27017 in ports:
-            findings.extend(check_mongodb(host))
-    return list(findings)
+    findings: list[RawFinding] = []
+    for host in hostnames:
+        findings.extend(check_mongodb(host))
+    return findings
 
 
 class _PostgresqlCheckArgs(BaseModel):
     """Explicit args_schema for the Exposed PostgreSQL Check tool."""
 
-    recon_path: str = Field(
+    hostnames: TargetHostnames = Field(
         description=(
-            "Relative path to recon.json in the run directory. Fire when"
-            " open_ports shows 5432. CRITICAL if trust authentication"
-            " allows connection without a password; MEDIUM if the port is"
-            " exposed but credentials are required (unnecessary internet"
-            " exposure)."
+            "Hostnames showing port 5432 open. CRITICAL if trust"
+            " authentication allows connection without a password;"
+            " MEDIUM if the port is exposed but credentials are required"
+            " (unnecessary internet exposure). The wrapper's scope filter"
+            " drops out-of-scope hostnames before any probe."
         ),
     )
 
 
 @cyber_tool("Exposed PostgreSQL Check", args_schema=_PostgresqlCheckArgs)
-def postgresql_tool(recon_path: str) -> list[RawFinding]:
+def postgresql_tool(hostnames: list[Hostname]) -> list[RawFinding]:
     """
-    Check for PostgreSQL on port 5432. Returns CRITICAL if trust authentication
-    allows connection without a password; MEDIUM if the port is exposed but
-    credentials are required (unnecessary internet exposure).
-    Use when open_ports shows 5432.
-    Pass the path to the recon.json file in the run directory.
+    Check for PostgreSQL on port 5432 on each supplied hostname. Returns
+    CRITICAL if trust authentication allows connection without a password;
+    MEDIUM if the port is exposed but credentials are required
+    (unnecessary internet exposure).
+
+    Pick hostnames from the Recon Open Ports slicer where port 5432 shows
+    open. The wrapper scope-filters the list.
     """
-    recon = _recon_from_path(recon_path)
-    findings = []
-    for host, ports in recon.open_ports.items():
-        if 5432 in ports:
-            findings.extend(check_postgresql(host))
-    return list(findings)
+    findings: list[RawFinding] = []
+    for host in hostnames:
+        findings.extend(check_postgresql(host))
+    return findings
 
 
 class _MysqlCheckArgs(BaseModel):
     """Explicit args_schema for the Exposed MySQL/MariaDB Check tool."""
 
-    recon_path: str = Field(
+    hostnames: TargetHostnames = Field(
         description=(
-            "Relative path to recon.json in the run directory. Fire when"
-            " open_ports shows 3306. MEDIUM if the port is reachable and"
-            " the server responds with a valid handshake (unnecessary"
-            " internet exposure; verify anonymous login is disabled)."
+            "Hostnames showing port 3306 open. MEDIUM if the port is"
+            " reachable and the server responds with a valid handshake"
+            " (unnecessary internet exposure; verify anonymous login is"
+            " disabled). The wrapper's scope filter drops out-of-scope"
+            " hostnames before any probe."
         ),
     )
 
 
 @cyber_tool("Exposed MySQL/MariaDB Check", args_schema=_MysqlCheckArgs)
-def mysql_tool(recon_path: str) -> list[RawFinding]:
+def mysql_tool(hostnames: list[Hostname]) -> list[RawFinding]:
     """
-    Check for MySQL or MariaDB on port 3306. Returns MEDIUM if the port is
-    reachable and the server responds with a valid handshake (unnecessary
-    internet exposure; verify anonymous login is disabled).
-    Use when open_ports shows 3306.
-    Pass the path to the recon.json file in the run directory.
+    Check for MySQL or MariaDB on port 3306 on each supplied hostname.
+    Returns MEDIUM if the port is reachable and the server responds with a
+    valid handshake (unnecessary internet exposure; verify anonymous
+    login is disabled).
+
+    Pick hostnames from the Recon Open Ports slicer where port 3306 shows
+    open. The wrapper scope-filters the list.
     """
-    recon = _recon_from_path(recon_path)
-    findings = []
-    for host, ports in recon.open_ports.items():
-        if 3306 in ports:
-            findings.extend(check_mysql(host))
-    return list(findings)
+    findings: list[RawFinding] = []
+    for host in hostnames:
+        findings.extend(check_mysql(host))
+    return findings

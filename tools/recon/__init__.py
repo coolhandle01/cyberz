@@ -17,7 +17,7 @@ from tools.recon.dnsx import TakeoverCandidate, detect_takeover_candidates
 from tools.recon.llm import detect_llm_endpoints
 from tools.recon.nmap import port_scan
 from tools.recon.probe import probe_endpoints
-from tools.recon.scope import extract_domain, filter_in_scope
+from tools.recon.scope import filter_in_scope, host_of
 from tools.recon.subfinder import enumerate_subdomains
 from tools.recon.tls import check_dns_email_security, check_tls
 from tools.recon.traceroute import run_traceroute
@@ -84,9 +84,9 @@ __all__ = [
     "detect_takeover_candidates",
     "discover_paths",
     "enumerate_subdomains",
-    "extract_domain",
     "filter_in_scope",
     "historical_urls",
+    "host_of",
     "port_scan",
     "probe_endpoints",
     "run_recon",

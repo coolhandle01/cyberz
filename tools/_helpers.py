@@ -58,7 +58,7 @@ def adaptive_sleep(delay: float, status_code: int) -> float:
 def _run(
     cmd: list[str],
     timeout: int = 120,
-    input: str | None = None,  # noqa: A002
+    input: str | None = None,
 ) -> subprocess.CompletedProcess:
     logger.debug("Running: %s", " ".join(cmd))
     result = subprocess.run(  # nosemgrep: dangerous-subprocess-use-audit

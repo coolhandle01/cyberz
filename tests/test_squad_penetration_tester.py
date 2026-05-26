@@ -1,12 +1,14 @@
 """
-tests/test_squad_penetration_tester.py - exercise a representative sample of
-the @tool wrappers on the Penetration Tester.
+tests/test_squad_penetration_tester.py - exercise the @tool wrappers on
+the Penetration Tester.
 
-42 tools live on this agent; the bodies are near-identical thin wrappers, so a
-representative sample is enough for regression value without inflating the
-test suite to no benefit. The wrappers unmarshal JSON, call into tools/*
-helpers, and serialise the result; the underlying helpers are exercised in
-their own dedicated test files.
+Roughly 55 tools live on this agent; the bodies are near-identical thin
+wrappers, so the per-wrapper bespoke tests at the top cover the unique
+shapes (probes that mock specific helpers) and the parametrize tables
+further down (``TestHostnameWrapperPassThrough`` and
+``TestEndpointWrapperPassThrough``) cover every typed cloud wrapper for
+the wrapper-level scope-filter + helper-forwarding contract at once.
+The underlying helpers are exercised in their own dedicated test files.
 """
 
 from __future__ import annotations
@@ -20,7 +22,7 @@ pytestmark = pytest.mark.unit
 
 
 class TestPenetrationTesterTools:
-    def test_nuclei_scan_tool(self, endpoint, raw_finding_low) -> None:
+    def test_nuclei_scan_tool(self, programme_in_workspace, endpoint, raw_finding_low) -> None:
         from squad.penetration_tester import nuclei_scan_tool
 
         with patch(
@@ -31,7 +33,7 @@ class TestPenetrationTesterTools:
 
         assert result == [raw_finding_low]
 
-    def test_sqlmap_tool(self, endpoint, raw_finding_low) -> None:
+    def test_sqlmap_tool(self, programme_in_workspace, endpoint, raw_finding_low) -> None:
         from squad.penetration_tester import sqlmap_tool
 
         with patch(
@@ -78,7 +80,7 @@ class TestPenetrationTesterTools:
 
         assert result == [raw_finding_low]
 
-    def test_ssrf_probe_tool(self, endpoint, raw_finding_low) -> None:
+    def test_ssrf_probe_tool(self, programme_in_workspace, endpoint, raw_finding_low) -> None:
         from squad.penetration_tester import ssrf_probe_tool
 
         with patch(
@@ -152,189 +154,217 @@ class TestPenetrationTesterTools:
         assert result.hosts == recon_result.open_ports
 
 
-# The 10 recon-driven cloud / infra wrappers that just forward the
-# loaded ReconResult to their ``check_X`` callable:
-# ``_recon_from_path(recon_path)`` -> ``check_X(recon)`` -> return its
-# findings. Per-wrapper behavioural tests would all look identical, so
-# this parametrize covers them in one place - the cloud sub-modules were
-# at 33-87% line coverage post-split because only a representative
-# sample was hit individually in the class above; this lifts them to
-# 100% without 10 near-duplicate test methods.
-_RECON_PASSING_CLOUD_WRAPPERS: list[tuple[str, str]] = [
+# Hostname-passing cloud wrappers split by body shape: each takes
+# ``list[Hostname]`` and scope-filters at the wrapper, but the body
+# differs in how it forwards to ``check_X``.
+#
+# - Iterating: the databases call ``check_X(host)`` per host inside a
+#   loop. When the filtered list is empty, ``check_X`` is never called.
+# - List-passing: panels / dashboards / consul / storage call
+#   ``check_X(hostnames)`` once with the whole list. The downstream
+#   helper handles empty internally - the per-hostname HTTP probe
+#   never fires - but ``check_X`` itself IS called with ``[]``.
+#
+# Splitting per body shape lets each parametrize assert exactly what
+# the body does, rather than a both-shapes "or" assertion.
+_HOSTNAME_PASSING_ITERATING_WRAPPERS: list[tuple[str, str]] = [
+    ("elasticsearch_tool", "squad.penetration_tester.cloud.databases.check_elasticsearch"),
+    ("couchdb_tool", "squad.penetration_tester.cloud.databases.check_couchdb"),
+    ("redis_tool", "squad.penetration_tester.cloud.databases.check_redis"),
+    ("mongodb_tool", "squad.penetration_tester.cloud.databases.check_mongodb"),
+    ("postgresql_tool", "squad.penetration_tester.cloud.databases.check_postgresql"),
+    ("mysql_tool", "squad.penetration_tester.cloud.databases.check_mysql"),
+]
+
+_HOSTNAME_PASSING_LIST_WRAPPERS: list[tuple[str, str]] = [
     ("s3_check_tool", "squad.penetration_tester.cloud.storage.check_s3_buckets"),
-    ("azure_storage_check_tool", "squad.penetration_tester.cloud.storage.check_azure_storage"),
+    (
+        "azure_blob_container_check_tool",
+        "squad.penetration_tester.cloud.storage.check_azure_blob_containers",
+    ),
     ("cpanel_tool", "squad.penetration_tester.cloud.panels.check_cpanel"),
     ("plesk_tool", "squad.penetration_tester.cloud.panels.check_plesk"),
     ("directadmin_tool", "squad.penetration_tester.cloud.panels.check_directadmin"),
     ("webmin_tool", "squad.penetration_tester.cloud.panels.check_webmin"),
-    ("grafana_tool", "squad.penetration_tester.cloud.dashboards.check_grafana"),
-    ("kibana_tool", "squad.penetration_tester.cloud.dashboards.check_kibana"),
-    ("portainer_tool", "squad.penetration_tester.cloud.dashboards.check_portainer"),
+    ("grafana_port_check_tool", "squad.penetration_tester.cloud.dashboards.check_grafana_ports"),
+    ("kibana_port_check_tool", "squad.penetration_tester.cloud.dashboards.check_kibana_ports"),
     (
-        "consul_vault_tool",
-        "squad.penetration_tester.cloud.service_discovery.check_consul_vault",
+        "portainer_port_check_tool",
+        "squad.penetration_tester.cloud.dashboards.check_portainer_ports",
+    ),
+    (
+        "consul_vault_port_check_tool",
+        "squad.penetration_tester.cloud.service_discovery.check_consul_vault_ports",
     ),
 ]
 
 
-class TestCloudWrapperPassThrough:
-    """Each recon-passing cloud / infra wrapper loads the recon and
-    forwards to its ``check_X`` callable. The body is mechanical; this
-    class pins the pass-through shape (recon resolved, check_fn invoked,
-    findings returned, http programme context set) for every wrapper at
-    once."""
+def _resolve_check_fn(check_fn_path: str) -> tuple[object, str]:
+    import importlib
+
+    module_path, attr = check_fn_path.rsplit(".", 1)
+    return importlib.import_module(module_path), attr
+
+
+class TestHostnameIteratingWrappers:
+    """Databases iterate the supplied hostnames and call
+    ``check_X(host)`` per host. The wrapper-level scope_filter drops
+    OOS hosts before the loop body runs, so on an empty filtered list
+    the loop is a no-op and ``check_X`` is never called."""
 
     @pytest.mark.parametrize(
         ("tool_name", "check_fn_path"),
-        _RECON_PASSING_CLOUD_WRAPPERS,
-        ids=[name.removesuffix("_tool") for name, _ in _RECON_PASSING_CLOUD_WRAPPERS],
+        _HOSTNAME_PASSING_ITERATING_WRAPPERS,
+        ids=[name.removesuffix("_tool") for name, _ in _HOSTNAME_PASSING_ITERATING_WRAPPERS],
     )
-    def test_wrapper_loads_recon_and_returns_check_fn_output(
+    def test_wrapper_calls_check_fn_per_in_scope_host(
         self,
         tool_name: str,
         check_fn_path: str,
-        recon_result,
+        programme_in_workspace,
         raw_finding_low,
-        run_dir,
+        target_apex: str,
     ) -> None:
-        import importlib
-
         import squad.penetration_tester as pt_module
 
         wrapper = getattr(pt_module, tool_name)
-        (run_dir / "recon.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
+        in_scope_host = f"api.{target_apex}"
 
-        check_module_path, check_attr = check_fn_path.rsplit(".", 1)
-        check_module = importlib.import_module(check_module_path)
+        check_module, check_attr = _resolve_check_fn(check_fn_path)
         with patch.object(check_module, check_attr, return_value=[raw_finding_low]) as mcheck:
-            result = wrapper.func("recon.json")
+            result = wrapper.func([in_scope_host])
 
         assert result == [raw_finding_low]
-        # The wrapper loaded recon.json and passed the typed ReconResult to
-        # check_X (rather than the raw path string).
-        mcheck.assert_called_once()
-        passed_recon = mcheck.call_args[0][0]
-        assert passed_recon.programme.handle == recon_result.programme.handle
-
-
-# The 6 database wrappers share a different shape from the rest of the
-# cloud package: they iterate ``recon.open_ports`` and only call
-# ``check_X(host)`` when the engine's signature port is in the open list.
-# Parametrise per-engine + signature-port so the test mutates the
-# ``recon_result`` fixture's open_ports map to include the right port via
-# ``model_copy`` (per the cybersquad-tool skill's "derive variants with
-# model_copy" rule), exercises the iteration branch, and asserts the
-# wrapper passes only the matching host to ``check_X``.
-_DATABASE_WRAPPERS: list[tuple[str, str, int]] = [
-    (
-        "elasticsearch_tool",
-        "squad.penetration_tester.cloud.databases.check_elasticsearch",
-        9200,
-    ),
-    ("couchdb_tool", "squad.penetration_tester.cloud.databases.check_couchdb", 5984),
-    ("redis_tool", "squad.penetration_tester.cloud.databases.check_redis", 6379),
-    ("mongodb_tool", "squad.penetration_tester.cloud.databases.check_mongodb", 27017),
-    (
-        "postgresql_tool",
-        "squad.penetration_tester.cloud.databases.check_postgresql",
-        5432,
-    ),
-    ("mysql_tool", "squad.penetration_tester.cloud.databases.check_mysql", 3306),
-]
-
-
-class TestDatabaseWrapperPassThrough:
-    """Each database wrapper checks for its engine's signature port in
-    ``recon.open_ports`` and forwards the matching host to ``check_X``.
-    Pins the iteration branch (port present -> findings forwarded; port
-    absent -> empty list returned without firing check_X) for every
-    engine at once."""
+        mcheck.assert_called_once_with(in_scope_host)
 
     @pytest.mark.parametrize(
-        ("tool_name", "check_fn_path", "port"),
-        _DATABASE_WRAPPERS,
-        ids=[name.removesuffix("_tool") for name, _, _ in _DATABASE_WRAPPERS],
+        ("tool_name", "check_fn_path"),
+        _HOSTNAME_PASSING_ITERATING_WRAPPERS,
+        ids=[name.removesuffix("_tool") for name, _ in _HOSTNAME_PASSING_ITERATING_WRAPPERS],
     )
-    def test_wrapper_fires_check_fn_when_port_is_open(
+    def test_wrapper_skips_check_fn_when_all_hosts_out_of_scope(
         self,
         tool_name: str,
         check_fn_path: str,
-        port: int,
-        recon_result,
-        raw_finding_low,
-        run_dir,
+        programme_in_workspace,
+        bystander_url: str,
+        invoke_tool,
     ) -> None:
-        import importlib
+        from urllib.parse import urlparse
 
         import squad.penetration_tester as pt_module
 
         wrapper = getattr(pt_module, tool_name)
-        # Mutate the conftest fixture's open_ports to include this
-        # engine's signature port on the in-scope host.
-        target_host = "api.example.com"
-        recon_with_port = recon_result.model_copy(update={"open_ports": {target_host: [port]}})
-        (run_dir / "recon.json").write_text(recon_with_port.model_dump_json(), encoding="utf-8")
+        oos_host = urlparse(bystander_url).hostname
 
-        check_module_path, check_attr = check_fn_path.rsplit(".", 1)
-        check_module = importlib.import_module(check_module_path)
-        with patch.object(check_module, check_attr, return_value=[raw_finding_low]) as mcheck:
-            result = wrapper.func("recon.json")
-
-        assert result == [raw_finding_low]
-        mcheck.assert_called_once_with(target_host)
-
-    @pytest.mark.parametrize(
-        ("tool_name", "check_fn_path", "port"),
-        _DATABASE_WRAPPERS,
-        ids=[name.removesuffix("_tool") for name, _, _ in _DATABASE_WRAPPERS],
-    )
-    def test_wrapper_skips_check_fn_when_port_is_absent(
-        self,
-        tool_name: str,
-        check_fn_path: str,
-        port: int,  # noqa: ARG002 - parametrize value unused, kept for symmetry / id derivation
-        recon_result,
-        run_dir,
-    ) -> None:
-        import importlib
-
-        import squad.penetration_tester as pt_module
-
-        wrapper = getattr(pt_module, tool_name)
-        # Fixture's default open_ports is {"api.example.com": [80, 443]} -
-        # none of the DB signature ports. The wrapper should skip
-        # check_X entirely and return [].
-        (run_dir / "recon.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
-
-        check_module_path, check_attr = check_fn_path.rsplit(".", 1)
-        check_module = importlib.import_module(check_module_path)
-        with patch.object(check_module, check_attr) as mcheck:
-            result = wrapper.func("recon.json")
+        check_module, check_attr = _resolve_check_fn(check_fn_path)
+        with patch.object(check_module, check_attr, return_value=[]) as mcheck:
+            result = invoke_tool(wrapper, hostnames=[oos_host])
 
         assert result == []
         mcheck.assert_not_called()
 
 
+class TestHostnameListPassingWrappers:
+    """Panels / dashboards / consul / storage call ``check_X(hostnames)``
+    once with the filtered list. When everything filters out, the
+    wrapper calls ``check_X([])`` - the helper handles empty internally
+    and no per-hostname HTTP probe fires."""
+
+    @pytest.mark.parametrize(
+        ("tool_name", "check_fn_path"),
+        _HOSTNAME_PASSING_LIST_WRAPPERS,
+        ids=[name.removesuffix("_tool") for name, _ in _HOSTNAME_PASSING_LIST_WRAPPERS],
+    )
+    def test_wrapper_forwards_in_scope_hostnames_to_check_fn(
+        self,
+        tool_name: str,
+        check_fn_path: str,
+        programme_in_workspace,
+        raw_finding_low,
+        target_apex: str,
+    ) -> None:
+        import squad.penetration_tester as pt_module
+
+        wrapper = getattr(pt_module, tool_name)
+        in_scope_host = f"api.{target_apex}"
+
+        check_module, check_attr = _resolve_check_fn(check_fn_path)
+        with patch.object(check_module, check_attr, return_value=[raw_finding_low]) as mcheck:
+            result = wrapper.func([in_scope_host])
+
+        assert result == [raw_finding_low]
+        mcheck.assert_called_once_with([in_scope_host])
+
+    @pytest.mark.parametrize(
+        ("tool_name", "check_fn_path"),
+        _HOSTNAME_PASSING_LIST_WRAPPERS,
+        ids=[name.removesuffix("_tool") for name, _ in _HOSTNAME_PASSING_LIST_WRAPPERS],
+    )
+    def test_wrapper_calls_check_fn_with_empty_list_when_out_of_scope(
+        self,
+        tool_name: str,
+        check_fn_path: str,
+        programme_in_workspace,
+        bystander_url: str,
+        invoke_tool,
+    ) -> None:
+        from urllib.parse import urlparse
+
+        import squad.penetration_tester as pt_module
+
+        wrapper = getattr(pt_module, tool_name)
+        oos_host = urlparse(bystander_url).hostname
+
+        check_module, check_attr = _resolve_check_fn(check_fn_path)
+        with patch.object(check_module, check_attr, return_value=[]) as mcheck:
+            result = invoke_tool(wrapper, hostnames=[oos_host])
+
+        assert result == []
+        mcheck.assert_called_once_with([])
+        # Sanity-check: the OOS host never reached the helper.
+        passed = mcheck.call_args[0][0]
+        assert oos_host not in passed, (
+            f"{tool_name}: scope_filter let the OOS host reach check_X; got {passed!r}"
+        )
+
+
 _ENDPOINT_DRIVEN_CLOUD_WRAPPERS: list[tuple[str, str]] = [
     ("sensitive_files_tool", "squad.penetration_tester.cloud.web_content.check_sensitive_files"),
     ("admin_panels_tool", "squad.penetration_tester.cloud.web_content.check_admin_panels"),
+    (
+        "azure_sas_token_check_tool",
+        "squad.penetration_tester.cloud.storage.check_azure_sas_tokens",
+    ),
+    ("grafana_path_check_tool", "squad.penetration_tester.cloud.dashboards.check_grafana_paths"),
+    ("kibana_path_check_tool", "squad.penetration_tester.cloud.dashboards.check_kibana_paths"),
+    (
+        "portainer_path_check_tool",
+        "squad.penetration_tester.cloud.dashboards.check_portainer_paths",
+    ),
+    (
+        "consul_vault_path_check_tool",
+        "squad.penetration_tester.cloud.service_discovery.check_consul_vault_paths",
+    ),
 ]
 
 
-class TestEndpointDrivenCloudWrapperPassThrough:
-    """The two cloud wrappers that take ``list[Endpoint]`` rather than a
-    recon path. Same pass-through shape as the recon-driven ones, just
-    fed the agent's endpoint pick directly."""
+class TestEndpointWrapperPassThrough:
+    """Each endpoint-passing cloud wrapper takes ``list[Endpoint]``,
+    scope-filters via ``filter_endpoints_in_scope`` on the URL host,
+    and forwards the survivors to ``check_X``. Pins the wrapper-level
+    pass-through and the scope-filter guard for all 6 at once."""
 
     @pytest.mark.parametrize(
         ("tool_name", "check_fn_path"),
         _ENDPOINT_DRIVEN_CLOUD_WRAPPERS,
         ids=[name.removesuffix("_tool") for name, _ in _ENDPOINT_DRIVEN_CLOUD_WRAPPERS],
     )
-    def test_wrapper_passes_validated_endpoints_to_check_fn(
+    def test_wrapper_passes_in_scope_endpoints_to_check_fn(
         self,
         tool_name: str,
         check_fn_path: str,
+        programme_in_workspace,
         endpoint,
         raw_finding_low,
     ) -> None:
@@ -355,3 +385,41 @@ class TestEndpointDrivenCloudWrapperPassThrough:
         passed_endpoints = mcheck.call_args[0][0]
         assert len(passed_endpoints) == 1
         assert passed_endpoints[0].url == endpoint.url
+
+    @pytest.mark.parametrize(
+        ("tool_name", "check_fn_path"),
+        _ENDPOINT_DRIVEN_CLOUD_WRAPPERS,
+        ids=[name.removesuffix("_tool") for name, _ in _ENDPOINT_DRIVEN_CLOUD_WRAPPERS],
+    )
+    def test_wrapper_drops_out_of_scope_endpoints(
+        self,
+        tool_name: str,
+        check_fn_path: str,
+        programme_in_workspace,
+        bystander_url: str,
+        invoke_tool,
+    ) -> None:
+        """The args_schema's ``TargetEndpoints`` validator drops
+        endpoints whose host is outside the programme's structured
+        scope before the wrapper body runs; ``check_X`` still receives
+        the (empty) filtered list but the per-endpoint HTTP probe
+        never fires."""
+        import importlib
+
+        import squad.penetration_tester as pt_module
+
+        wrapper = getattr(pt_module, tool_name)
+        oos_endpoint = {"url": bystander_url, "status_code": 200}
+
+        check_module_path, check_attr = check_fn_path.rsplit(".", 1)
+        check_module = importlib.import_module(check_module_path)
+        with patch.object(check_module, check_attr, return_value=[]) as mcheck:
+            result = invoke_tool(wrapper, endpoints=[oos_endpoint])
+
+        assert result == []
+        for call in mcheck.call_args_list:
+            args = call.args[0] if call.args else None
+            assert args == [], (
+                f"{tool_name}: scope_filter let the OOS endpoint reach check_X; "
+                f"got call args {args!r}"
+            )

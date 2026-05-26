@@ -17,6 +17,7 @@ from __future__ import annotations
 from typing import Any
 
 import requests
+from requests.structures import CaseInsensitiveDict
 
 import runtime
 from config import config
@@ -48,11 +49,30 @@ def user_agent() -> str:
 def _inject_headers(kwargs: dict[str, Any]) -> dict[str, Any]:
     """Merge our User-Agent into the caller's headers dict.
 
-    A caller-supplied User-Agent wins (test fixtures occasionally pin one),
-    but the default for every request is our traceable UA.
+    The merged value is a ``requests.structures.CaseInsensitiveDict``
+    (https://requests.readthedocs.io/en/latest/api/#requests.structures.CaseInsensitiveDict
+    - source at https://github.com/psf/requests/blob/main/src/requests/structures.py).
+    Setting ``"User-Agent"`` and ``"user-agent"`` on a plain ``dict``
+    produces two entries; HTTP header semantics treat field names as
+    case-insensitive (RFC 9110 section 5.1) so the second send wins
+    silently. ``CaseInsensitiveDict`` dedupes by lower-cased key, so
+    the safe default never accidentally ships duplicate headers.
+
+    A header-mutation probe that NEEDS to send literal duplicate
+    headers (HTTP request smuggling, header-injection / CRLF probes,
+    duplicate-Host attacks) deliberately works around this safe
+    default - that is the explicit override, auditable as such in the
+    probe's source. The unsafe pattern to avoid (and the reason this
+    helper exists rather than letting callers build headers raw):
+
+        # unsafe - silent dedupe by send order; the second wins
+        headers = {"User-Agent": "ours", "user-agent": "theirs"}
+
+    A caller-supplied User-Agent wins (test fixtures occasionally pin
+    one); the default for every request is our traceable UA.
     """
-    headers = dict(kwargs.get("headers") or {})
-    if not any(k.lower() == "user-agent" for k in headers):
+    headers: CaseInsensitiveDict[str] = CaseInsensitiveDict(kwargs.get("headers") or {})
+    if "User-Agent" not in headers:
         headers["User-Agent"] = user_agent()
     kwargs["headers"] = headers
     return kwargs

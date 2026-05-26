@@ -14,21 +14,23 @@ Every CrewAI `@tool`-wrapped function the agents see follows these rules. They a
 ```python
 from pydantic import BaseModel, Field
 from squad import cyber_tool
+from tools.recon.scope import TargetHostnames
 
 class _S3CheckArgs(BaseModel):
     """Explicit args_schema for the S3 Bucket Check tool."""
 
-    recon_path: str = Field(
+    hostnames: TargetHostnames = Field(
         description=(
-            "Relative path to recon.json in the run directory. Buckets are"
-            " derived from the programme handle and any S3 subdomains the"
-            " OSINT Analyst surfaced."
+            "S3 hostnames the OSINT Analyst surfaced in recon.subdomains"
+            " (matching ``*.s3.*.amazonaws.com``) or via cert"
+            " transparency / historical URLs. Probes each for public"
+            " listing or bare 200."
         ),
     )
 
 
 @cyber_tool("S3 Bucket Check", args_schema=_S3CheckArgs)
-def s3_check_tool(recon_path: str) -> list[RawFinding]:
+def s3_check_tool(hostnames: list[Hostname]) -> list[RawFinding]:
     ...
 ```
 
@@ -45,41 +47,43 @@ Rules:
 
 Specialist wrappers compose on top of `@cyber_tool`: `@pentest_tool` (pentest probes - layers OWASP categories from `check_fn.owasp_categories` into the docstring) and `@research_brief_tool` (Vulnerability Researcher - layers `PROBE_VOCABULARY` and `RECON_EVIDENCE_KINDS`) both call `cyber_tool` underneath and pass `args_schema=` through.
 
-### Scope guards belong on the wrapper, not in the body
+### Scope guards are built in via the typed args_schema field
 
-Any tool that takes an agent-supplied target (hostname, endpoint, URL) and runs an external scan / attack against it declares the guard on the decorator, not inline in the body:
+The pipeline split this discipline supports: **PM transcribes scope** (from H1's programme detail into a `Programme` snapshot at `<run_dir>/programme.json`); **OSINT inventories the surface** (the discovered hostnames / endpoints in `recon.json` are already filtered through `filter_in_scope` against `programme.in_scope`); **PT attacks the inventoried surface** (the args_schema validation re-checks the agent's pick against the same `programme.in_scope`). The PT never invents targets; it only attacks what OSINT inventoried. Wrappers that fuzz / guess / enumerate beyond OSINT's inventory belong in policy-gated high-risk tooling (see #65 and #67 for the precedent), not in the unconditional probe surface.
+
+Mechanics: four typed aliases in `tools/recon/scope.py` carry the scope guard as a Pydantic `AfterValidator`. Each is `Annotated[<inner>, AfterValidator(...)]` so CrewAI's standard `args_schema.model_validate(...)` runs the filter at parse time - upstream-blessed Pydantic, no per-tool decorator parameter, no wrapper-side introspection.
+
+| Alias | Inner | Semantic |
+|---|---|---|
+| `TargetHostnames` | `list[Hostname]` | Filter silently - LLM may pass mixed candidate list, only in-scope survive |
+| `TargetEndpoints` | `list[Endpoint]` | Same filter semantic, host-extracted from `Endpoint.url` |
+| `TargetHostname` | `Hostname` | Reject loudly - a single target is the LLM committing; OOS raises ValueError |
+| `TargetEndpoint` | `Endpoint` | Same loud-reject semantic |
 
 ```python
 from squad import cyber_tool
+from tools.recon.scope import TargetHostnames
 
-def _normalise_and_filter_hostnames(
-    hostnames: list[Hostname], programme: Programme
-) -> list[Hostname]:
-    cleaned = [h.strip().lower() for h in hostnames if h.strip()]
-    return filter_in_scope(cleaned, programme)
+class _ProbeHostnamesArgs(BaseModel):
+    hostnames: TargetHostnames = Field(description="...")
 
-
-@cyber_tool(
-    "Probe Hostnames",
-    args_schema=_ProbeHostnamesArgs,
-    scope_filter=("hostnames", _normalise_and_filter_hostnames),
-)
+@cyber_tool("Probe Hostnames", args_schema=_ProbeHostnamesArgs)
 def probe_hostnames_tool(hostnames: list[Hostname]) -> list[Endpoint]:
-    """The wrapper has already dropped out-of-scope hostnames; the body
-    just runs the probe."""
+    """The args_schema validation has already dropped out-of-scope
+    hostnames; the body just runs the probe."""
     if not hostnames:
         return []
     return list(probe_endpoints_impl(hostnames))
 ```
 
-Mechanics: when `scope_filter=(field_name, filter_fn)` is set, the wrapper validates args via `args_schema`, looks up the named field, and - if non-empty - calls `filter_fn(values, current_programme())` to replace the field's value before invoking the body. The `Programme` is read from `<run_dir>/programme.json` (the snapshot the PM's `Save Selected Programme` writes at run start), so the body never carries `programme_handle` as a parameter and the LLM cannot mis-thread it mid-run.
+The args_schema field type IS the opt-in signal. The `Hostname` primitive (composed into each `Target*` alias) lowercases / strips / rejects empty / rejects schemes-ports-paths at validation time, so the filter input is canonical before the filter sees it - no per-wrapper normalisation step needed.
 
 Rules:
 
-- The `filter_fn` lives at module scope, not as a lambda. Multiple tools sharing the same shape (e.g. `Probe Hostnames` and `Detect Takeover Candidates` both normalise + scope-check hostnames) share one helper, not one per call site.
-- The body must still handle an empty filtered list. The wrapper does not short-circuit on empty; it forwards the empty list and the body decides.
-- Bodies skip the redundant `if not values: return []` guard only when the upstream typed input is already scope-filtered (e.g. PT wrappers that take `list[Endpoint]` from `recon.json`, which `Finalise Recon` already filtered).
-- Do not duplicate the wrapper-level guard inside the body. The whole point of lifting it out is that the contract lives at the wrapper site where reviewers can see it.
+- Use `TargetHostnames` / `TargetEndpoints` (list filter, silent drop) on multi-target args_schema fields; use `TargetHostname` / `TargetEndpoint` (single, loud reject) on commit-to-one fields. The matching field type IS the scope-safety signal. A field typed plain `list[Hostname]` / `Endpoint` validates RFC 1123 / URL shape but does *not* scope-check - reach for the `Target*` variant when the agent picks the targets.
+- The body must still handle an empty filtered list. The validator does not short-circuit on empty; it forwards the empty list and the body decides.
+- Tests for a wrapper with an `Target*` field need `programme_in_workspace` (the conftest fixture) so the validator's `current_programme()` lookup resolves. Tests that exercise the OOS-drop path take `bystander_url` and pass its hostname; tests that invoke a wrapper end-to-end use the `invoke_tool` fixture (mirrors CrewAI's `args_schema.model_validate(...).model_dump()` -> `func(**dumped)` path so the validator actually runs - direct `.func(...)` calls bypass args_schema).
+- Do not duplicate the validator inside the body. The whole point of the typed alias is that scope-safety lives in the type signature - the body trusts the validated input.
 
 ## Typed string primitives
 
@@ -190,7 +194,8 @@ Dependency layers flow `primitives -> finding -> h1 -> asset`; modules import on
 - Adding a new model directly to `models/__init__.py`. The package is split per domain; put it in the matching module and let the re-export carry it.
 - New workspace writer with no typed reader.
 - `from squad.workspace_tools import ...` in a consumer instead of `from squad import ...` - the re-export exists so the import path stays stable when shared tools move.
-- Inline scope dance in a tool body that takes agent-supplied targets (the `_load_programme + filter_in_scope` pattern). Lift it onto the decorator via `scope_filter=(field_name, filter_fn)` so the guarantee lives at the wrapper site.
+- Inline scope dance in a tool body that takes agent-supplied targets (the `_load_programme + filter_in_scope` pattern). Use the typed `Target*` alias on the `args_schema` field so the Pydantic-native `AfterValidator` is what enforces scope; the guarantee lives in the type signature, not in the body.
+- Fuzzing or guessing customer cloud-tenant names / bucket names / account names to probe `*.s3.amazonaws.com`, `*.blob.core.windows.net`, or any other third-party infrastructure. The PT only attacks what OSINT inventoried in `recon.subdomains` / `recon.endpoints`; if a candidate name isn't there, OSINT didn't surface it through legitimate discovery (DNS / cert transparency / historical URLs) and the PT can't fabricate it. High-risk post-discovery exploitation that goes beyond OSINT's inventory (credential checks against discovered panels, brute-force, ...) is policy-gated; see #65 (default credential checks) and #67 (credential stuffing) for the canonical pattern (programme-policy parser confirms authorisation, hard per-target cap enforced in code, full rate-limiter respected).
 - A new `programme_handle: str` field on an args_schema for a tool whose body would only thread it into `current_programme()` or `filter_in_scope`. Workspace state (`runtime.programme_handle` / `<run_dir>/programme.json`) is the contract; the per-call handle is duplication.
 - Direct assignment to `runtime.programme_handle` or `runtime.run_id`. Use the `runtime.bind_programme(...)` / `runtime.bind_run_id(...)` setters - they enforce the single-pipeline-at-a-time invariant by raising on a conflicting rebind (same-value rebind is a no-op for retries and tests). Reads stay on the module attribute. The invariant is load-bearing for the planned Flow refactor in #128 where parallel sub-flows would otherwise silently stomp each other's run folders.
 
@@ -198,7 +203,7 @@ Dependency layers flow `primitives -> finding -> h1 -> asset`; modules import on
 
 These rules apply to every agent's `@cyber_tool` / `@pentest_tool` / `@research_brief_tool` wrappers, not just the pentester's.
 
-- `squad/penetration_tester/__init__.py` and `squad/osint_analyst/__init__.py` are the largest reference surfaces. Each wrapper carries an explicit `_<ToolName>Args` schema directly above the decorator with `Field(description=...)` on every field. Pentest probes (`ssrf_probe_tool`, `idor_probe_tool`) are the shortest StrEnum examples; cloud / infra wrappers (`s3_check_tool`, `mongodb_tool`) show the bare `recon_path: str`; OSINT (`probe_hostnames_tool`, `annotate_host_tool`) show `Hostname` composition.
+- `squad/penetration_tester/__init__.py` and `squad/osint_analyst/__init__.py` are the largest reference surfaces. Each wrapper carries an explicit `_<ToolName>Args` schema directly above the decorator with `Field(description=...)` on every field. Pentest probes (`ssrf_probe_tool`, `idor_probe_tool`) are the shortest StrEnum examples; cloud / infra wrappers (`s3_check_tool`, `mongodb_tool`, `grafana_port_check_tool`) show `list[Hostname]` typed-target fields (auto-scope-filtered); path-style cloud wrappers (`sensitive_files_tool`, `grafana_path_check_tool`, `azure_sas_token_check_tool`) show `list[Endpoint]` typed-target fields; OSINT (`probe_hostnames_tool`, `annotate_host_tool`) show the same composition on the OSINT side.
 - `squad/penetration_tester/__init__.py` `recon_endpoints_tool` returns `EndpointPage` - the canonical typed-return example. The wrapper lives on PT but reads OSINT's recon output, so the pattern is cross-agent.
 - `squad/workspace_tools.py` `read_attack_plan_tool` returns `AttackPlan` - mirror this shape on any new workspace reader (typed return, no `dict`).
 - The workspace-handle string family demonstrates the `str` exception (writer returns the filename, next agent passes it to a typed reader):

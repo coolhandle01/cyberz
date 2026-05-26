@@ -26,8 +26,6 @@ Assembly (LLM wiring, pipeline order, approval gates) lives in crew.py / tasks.p
 
 from __future__ import annotations
 
-import functools
-import inspect
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -76,14 +74,10 @@ class SquadTool(Protocol):
     def func(self) -> Callable[..., object]: ...
 
 
-ScopeFilter = tuple[str, Callable[..., object]]
-
-
 def cyber_tool(
     name: str,
     *,
     args_schema: type[BaseModel],
-    scope_filter: ScopeFilter | None = None,
 ) -> Callable[[Callable[..., object]], SquadTool]:
     """The blessed cybersquad replacement for bare ``@crewai.tools.tool``.
 
@@ -91,76 +85,34 @@ def cyber_tool(
     required: the explicit Pydantic class overrides the signature-inferred
     schema CrewAI would otherwise build. Every cybersquad ``@tool``
     wrapper carries one - the inferred path is not reachable anywhere
-    in the squad. Per-field ``Field(description=...)`` is the
-    targeting guidance the agent reads when picking the tool.
+    in the squad. Per-field ``Field(description=...)`` is the targeting
+    guidance the agent reads when picking the tool.
 
-    ``pentest_tool`` and ``research_brief_tool`` compose on top of this
-    helper: they call ``cyber_tool`` underneath and then layer their own
-    docstring-injection (OWASP categories for the pentest wrapper, brief
-    formatting for the research one). Anything that does not need a
-    specialist wrapper uses ``@cyber_tool`` directly.
-
-    ``scope_filter=(field_name, filter_fn)`` lifts the in-line scope
-    guard out of every "agent picked a target, run something external
-    against it" tool body. When set, the wrapper validates args via
-    ``args_schema`` (CrewAI's path), then - if the named field is non-
-    empty - calls ``filter_fn(values, current_programme())`` and
-    replaces the field's value with the filtered list before invoking
-    the body. The ``Programme`` is sourced from
-    ``squad.workspace_tools.current_programme()`` (which reads
-    ``<run_dir>/programme.json``), so the wrapper carries the
-    workspace-state lookup and the body just runs the tool. Bodies
-    must still handle an empty filtered list - the wrapper does not
-    short-circuit on empty.
+    Scope safety is a Pydantic-native property of the args_schema, not
+    of this decorator: agent-facing target fields are typed via the
+    ``TargetHostnames`` / ``TargetEndpoints`` (list, filter) or
+    ``TargetHostname`` / ``TargetEndpoint`` (single, reject) aliases
+    in ``tools.recon.scope``. The ``AfterValidator`` on each alias
+    consults ``current_programme()`` during
+    ``args_schema.model_validate(...)`` - CrewAI's tool-call path runs
+    that validation before the wrapper body sees any input. The type
+    IS the contract; there is no wrapper-side guard to forget.
     """
 
     def decorator(fn: Callable[..., object]) -> SquadTool:
-        target = _apply_scope_filter(fn, scope_filter) if scope_filter else fn
-        wrapped = tool(name)(target)
+        wrapped = tool(name)(fn)
         wrapped.args_schema = args_schema
         return cast(SquadTool, wrapped)
 
     return decorator
 
 
-def _apply_scope_filter(
-    fn: Callable[..., object], scope_filter: ScopeFilter
-) -> Callable[..., object]:
-    """Wrap ``fn`` so the named field is run through ``filter_fn`` first.
-
-    Kept out of ``cyber_tool``'s body so the decorator's closure is small
-    and the wrapping is testable on its own. The lookup of
-    ``current_programme`` is deferred to call time to avoid the
-    ``squad.workspace_tools`` -> ``squad`` import cycle that would fire
-    at decoration time otherwise.
-
-    ``inspect.signature.bind_partial`` resolves the named field whether
-    the caller passes it positionally or by keyword - CrewAI's runtime
-    path uses kwargs (built from ``args_schema``), but direct
-    ``tool.func(value)`` test invocations pass positionally and the
-    wrapper has to cover both shapes.
-    """
-    field_name, filter_fn = scope_filter
-    sig = inspect.signature(fn)
-
-    @functools.wraps(fn)
-    def guarded(*args: object, **kwargs: object) -> object:
-        bound = sig.bind_partial(*args, **kwargs)
-        values = bound.arguments.get(field_name)
-        if values:
-            from squad.workspace_tools import current_programme
-
-            bound.arguments[field_name] = filter_fn(values, current_programme())
-        return fn(*bound.args, **bound.kwargs)
-
-    return guarded
-
-
 # Shared workspace wrappers are imported after ``cyber_tool`` is defined,
 # because ``squad/workspace_tools.py`` decorates with ``@cyber_tool`` and
 # would hit a circular import if pulled in alongside the top-of-module
-# imports.
-from squad.workspace_tools import (  # noqa: E402
+# imports. The deferred-import pattern is explicitly endorsed by ruff for
+# this case: https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file/
+from squad.workspace_tools import (  # noqa: E402 - deferred to break import cycle (see comment above)
     read_attack_plan_tool,
     read_run_file_tool,
     read_run_filelist_tool,
@@ -241,12 +193,12 @@ def build_task(
 
 
 __all__ = [
-    "SquadTool",
     "SquadMember",
+    "SquadTool",
     "build_agent",
     "build_task",
-    "read_attack_plan_tool",
-    "read_run_filelist_tool",
-    "read_run_file_tool",
     "cyber_tool",
+    "read_attack_plan_tool",
+    "read_run_file_tool",
+    "read_run_filelist_tool",
 ]

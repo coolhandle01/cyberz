@@ -56,7 +56,7 @@ The shape is mechanical - mirror it for every new singleton so the conflict-dete
 
 ## Test contract
 
-`tests/conftest.py` carries:
+`tests/fixtures/programme.py` carries:
 
 - `run_dir` - points `runtime.run_dir()` at the test's `tmp_path` and returns the `Path`. Take this instead of patching `runtime.run_dir` at every consumer's import alias.
 - `programme_in_workspace` / `dvwa_in_workspace` - stage `programme.json` into the rundir and monkeypatch `runtime.programme_handle`. Composes on top of `run_dir`.

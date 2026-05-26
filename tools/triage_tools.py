@@ -41,7 +41,7 @@ from config import config
 from models import RawFinding, Severity, VerifiedVulnerability
 from models.h1 import Programme
 from tools._helpers import _SEVERITY_FLOOR_ORDER
-from tools.recon.scope import extract_domain, filter_in_scope
+from tools.recon.scope import filter_in_scope, host_of
 from tools.report_tools import _HAND_WAVY_IMPACT, _URL, calculate_cvss_score
 
 _ASSESSMENTS_SUBDIR = "assessments"
@@ -60,8 +60,9 @@ _STALE_STEP = "observe the following evidence:"
 # SeverityDecision lives in models/triage.py per the typed-shapes-live-
 # in-models rule. Re-exported here so existing ``from tools.triage_tools
 # import SeverityDecision`` consumers keep working; the canonical
-# import path is ``from models import SeverityDecision``.
-from models.triage import SeverityDecision  # noqa: E402
+# import path is ``from models import SeverityDecision``. Deferred-import
+# context documented at https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file/
+from models.triage import SeverityDecision  # noqa: E402 - re-export at module bottom
 
 
 class DiscardReason(StrEnum):
@@ -85,8 +86,7 @@ def above_floor(severity: Severity) -> bool:
 
 def in_scope(target: str, programme: Programme) -> bool:
     """True when ``target``'s hostname is in the programme's structured scope."""
-    domain = extract_domain(target)
-    return bool(filter_in_scope([domain], programme))
+    return bool(filter_in_scope([host_of(target)], programme))
 
 
 # Models

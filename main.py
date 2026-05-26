@@ -69,7 +69,7 @@ def check_env() -> None:
         sys.exit(1)
 
 
-def dry_run_summary(crew: Any) -> None:  # noqa: ANN401
+def dry_run_summary(crew: Any) -> None:  # noqa: ANN401 - Crew is decorator-wrapped by the time the CLI sees it; tighter type buys nothing
     """Render the crew layout as rich tables without executing."""
     console.rule("[bold cyan]BOUNTY SQUAD - DRY RUN[/bold cyan]")
     console.print()

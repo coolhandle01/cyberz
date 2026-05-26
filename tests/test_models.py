@@ -200,9 +200,12 @@ class TestHttpUrl:
     def test_rejects_malformed(self, target_url):
         """Walks the malformed corpus, deriving each case from target_url so
         intent ("a deliberately broken URL based on the in-scope target") is
-        readable at the call site. The Hostname-component check inside
-        HttpUrl is exercised by the leading-hyphen case - a URL whose host
-        fails Hostname validation rejects too.
+        readable at the call site. Delegates to ``pydantic.HttpUrl`` for the
+        URL contract; the host component then runs through the
+        ``Hostname`` validator so RFC 1123 strictness holds inside URLs
+        too - ``-evil.example.com`` rejects bare, and
+        ``https://-evil.example.com`` rejects wrapped (the leading-hyphen
+        case below pins that defense-in-depth).
         """
         from urllib.parse import urlparse
 

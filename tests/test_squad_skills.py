@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 
@@ -47,7 +48,7 @@ class TestSquadWideSkills:
 
 
 class TestProgrammeManagerSkills:
-    EXPECTED = {
+    EXPECTED: ClassVar[set[str]] = {
         "programme-selection-scoring",
         "policy-reading-discipline",
         "access-authorisation",

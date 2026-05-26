@@ -31,9 +31,11 @@ from squad import SquadTool
 from squad.penetration_tester import (
     MEMBER,
     _AdminPanelsArgs,
-    _AzureStorageCheckArgs,
+    _AzureBlobContainerArgs,
+    _AzureSasTokenArgs,
     _CmdInjectionArgs,
-    _ConsulVaultArgs,
+    _ConsulVaultPathArgs,
+    _ConsulVaultPortArgs,
     _CookieCheckArgs,
     _CorsCheckArgs,
     _CouchdbCheckArgs,
@@ -42,14 +44,16 @@ from squad.penetration_tester import (
     _DirectadminArgs,
     _ElasticsearchCheckArgs,
     _ErrorDisclosureArgs,
-    _GrafanaArgs,
+    _GrafanaPathArgs,
+    _GrafanaPortArgs,
     _HeaderInjectionArgs,
     _HeaderXssArgs,
     _HostHeaderArgs,
     _HppArgs,
     _IdorArgs,
     _JwtCheckArgs,
-    _KibanaArgs,
+    _KibanaPathArgs,
+    _KibanaPortArgs,
     _LdapInjectionArgs,
     _MongodbCheckArgs,
     _MysqlCheckArgs,
@@ -58,7 +62,8 @@ from squad.penetration_tester import (
     _OpenRedirectArgs,
     _PathTraversalArgs,
     _PleskArgs,
-    _PortainerArgs,
+    _PortainerPathArgs,
+    _PortainerPortArgs,
     _PostgresqlCheckArgs,
     _PromptInjectionArgs,
     _PrototypePollutionArgs,
@@ -85,6 +90,19 @@ from squad.workspace_tools import (
 )
 
 pytestmark = pytest.mark.unit
+
+
+# Every schema in this file with a typed-target field
+# (``TargetHostnames`` / ``TargetEndpoints`` / ``TargetHostname`` /
+# ``TargetEndpoint``) runs its ``AfterValidator`` during
+# ``model_validate`` - and that validator calls ``current_programme()``.
+# Autousing ``programme_in_workspace`` stages a programme into the
+# rundir so every schema-shape test has the run-time context the
+# validator needs. Tests that explicitly want a missing-programme
+# branch should re-monkeypatch to undo it.
+@pytest.fixture(autouse=True)
+def _seed_programme(programme_in_workspace):
+    return programme_in_workspace
 
 
 # Tool-name -> explicit schema class. Covers every PT @cyber_tool /
@@ -119,7 +137,8 @@ _PT_SCHEMAS: dict[str, type[BaseModel]] = {
     "JWT Vulnerability Check": _JwtCheckArgs,
     # @cyber_tool cloud / infra wrappers
     "S3 Bucket Check": _S3CheckArgs,
-    "Azure Blob Storage Check": _AzureStorageCheckArgs,
+    "Azure Blob Container Check": _AzureBlobContainerArgs,
+    "Azure SAS Token Check": _AzureSasTokenArgs,
     "Unauthenticated Elasticsearch Check": _ElasticsearchCheckArgs,
     "Unauthenticated CouchDB Check": _CouchdbCheckArgs,
     "Unauthenticated Redis Check": _RedisCheckArgs,
@@ -132,10 +151,14 @@ _PT_SCHEMAS: dict[str, type[BaseModel]] = {
     "Plesk Check": _PleskArgs,
     "DirectAdmin Check": _DirectadminArgs,
     "Webmin Check": _WebminArgs,
-    "Grafana Check": _GrafanaArgs,
-    "Kibana Check": _KibanaArgs,
-    "Portainer Check": _PortainerArgs,
-    "Consul/Vault Check": _ConsulVaultArgs,
+    "Grafana Port Check": _GrafanaPortArgs,
+    "Grafana Path Check": _GrafanaPathArgs,
+    "Kibana Port Check": _KibanaPortArgs,
+    "Kibana Path Check": _KibanaPathArgs,
+    "Portainer Port Check": _PortainerPortArgs,
+    "Portainer Path Check": _PortainerPathArgs,
+    "Consul/Vault Port Check": _ConsulVaultPortArgs,
+    "Consul/Vault Path Check": _ConsulVaultPathArgs,
     # PT recon / save wrappers
     "Recon Subdomains": _PtReconSubdomainsArgs,
     "Recon Endpoints": _PtReconEndpointsArgs,
@@ -147,11 +170,15 @@ _PT_SCHEMAS: dict[str, type[BaseModel]] = {
     "Read Attack Plan": _ReadAttackPlanArgs,
 }
 
-# Cloud / infra wrappers that take ``recon_path: str``. Used by the
-# missing-required-field parametrize below.
-_RECON_PATH_CLOUD_SCHEMAS: list[type[BaseModel]] = [
+# Cloud wrappers that take ``hostnames: list[Hostname]`` and scope-filter
+# via ``filter_in_scope``. Used by the missing-required-hostnames
+# parametrize below. Every cloud wrapper now takes a typed target -
+# storage no longer needs an exception now that bucket-name fuzzing
+# is gone; the agent picks S3 / Azure hostnames OSINT actually
+# discovered in recon.subdomains.
+_HOSTNAMES_CLOUD_SCHEMAS: list[type[BaseModel]] = [
     _S3CheckArgs,
-    _AzureStorageCheckArgs,
+    _AzureBlobContainerArgs,
     _ElasticsearchCheckArgs,
     _CouchdbCheckArgs,
     _RedisCheckArgs,
@@ -162,10 +189,23 @@ _RECON_PATH_CLOUD_SCHEMAS: list[type[BaseModel]] = [
     _PleskArgs,
     _DirectadminArgs,
     _WebminArgs,
-    _GrafanaArgs,
-    _KibanaArgs,
-    _PortainerArgs,
-    _ConsulVaultArgs,
+    _GrafanaPortArgs,
+    _KibanaPortArgs,
+    _PortainerPortArgs,
+    _ConsulVaultPortArgs,
+]
+
+# Cloud wrappers that take ``endpoints: list[Endpoint]`` and scope-filter
+# via ``filter_endpoints_in_scope``. Used by the missing-required-endpoints
+# parametrize below.
+_ENDPOINTS_CLOUD_SCHEMAS: list[type[BaseModel]] = [
+    _SensitiveFilesArgs,
+    _AdminPanelsArgs,
+    _AzureSasTokenArgs,
+    _GrafanaPathArgs,
+    _KibanaPathArgs,
+    _PortainerPathArgs,
+    _ConsulVaultPathArgs,
 ]
 
 
@@ -248,12 +288,13 @@ class TestSchemaAcceptReject:
                 _JwtCheckArgs,
                 {
                     "token": "eyJ.x.y",
-                    # endpoint is typed Endpoint; minimum shape is the URL.
-                    # Literal here, not f-string with target_apex: this is class-level
-                    # @pytest.mark.parametrize data, evaluated at collection time when
-                    # fixtures are not yet resolved. The URL value is incidental shape
-                    # data - the args_schema validation under test is URL-format-only.
-                    "endpoint": {"url": "https://example.invalid/api/me"},
+                    # endpoint is typed ``TargetEndpoint``; the URL must be
+                    # in-scope per the programme fixture (which has
+                    # ``*.example.com`` in its in-scope catalogue). Literal
+                    # rather than f-string with target_apex: this is
+                    # class-level parametrize data, evaluated at collection
+                    # time when fixtures are not yet resolved.
+                    "endpoint": {"url": "https://victim.example.com/api/me"},
                     "attacks": ["alg-none"],
                 },
             ),
@@ -270,25 +311,38 @@ class TestSchemaAcceptReject:
             (_HostHeaderArgs, {"recon_path": "recon.json"}),
             (_SourceMapsArgs, {"recon_path": "recon.json"}),
             (_SriCheckArgs, {"recon_path": "recon.json"}),
-            # @cyber_tool cloud / infra acceptance cases
-            (_S3CheckArgs, {"recon_path": "recon.json"}),
-            (_AzureStorageCheckArgs, {"recon_path": "recon.json"}),
-            (_ElasticsearchCheckArgs, {"recon_path": "recon.json"}),
-            (_CouchdbCheckArgs, {"recon_path": "recon.json"}),
-            (_RedisCheckArgs, {"recon_path": "recon.json"}),
-            (_MongodbCheckArgs, {"recon_path": "recon.json"}),
-            (_PostgresqlCheckArgs, {"recon_path": "recon.json"}),
-            (_MysqlCheckArgs, {"recon_path": "recon.json"}),
+            # @cyber_tool cloud / infra acceptance cases.
+            # The endpoint-taking shape accepts the empty list; the
+            # hostname-taking shape's in-scope acceptance lives in
+            # ``test_hostnames_schema_accepts_in_scope`` below where the
+            # target_apex fixture makes test intent ("a real in-scope
+            # hostname") readable at the call site.
             (_SensitiveFilesArgs, {"endpoints": []}),
             (_AdminPanelsArgs, {"endpoints": []}),
-            (_CpanelArgs, {"recon_path": "recon.json"}),
-            (_PleskArgs, {"recon_path": "recon.json"}),
-            (_DirectadminArgs, {"recon_path": "recon.json"}),
-            (_WebminArgs, {"recon_path": "recon.json"}),
-            (_GrafanaArgs, {"recon_path": "recon.json"}),
-            (_KibanaArgs, {"recon_path": "recon.json"}),
-            (_PortainerArgs, {"recon_path": "recon.json"}),
-            (_ConsulVaultArgs, {"recon_path": "recon.json"}),
+            (_AzureSasTokenArgs, {"endpoints": []}),
+            (_GrafanaPathArgs, {"endpoints": []}),
+            (_KibanaPathArgs, {"endpoints": []}),
+            (_PortainerPathArgs, {"endpoints": []}),
+            (_ConsulVaultPathArgs, {"endpoints": []}),
+            # Empty-list acceptance is the safe shape: scope_filter runs on
+            # non-empty values only, so an empty payload validates without
+            # touching the workspace.
+            (_S3CheckArgs, {"hostnames": []}),
+            (_AzureBlobContainerArgs, {"hostnames": []}),
+            (_ElasticsearchCheckArgs, {"hostnames": []}),
+            (_CouchdbCheckArgs, {"hostnames": []}),
+            (_RedisCheckArgs, {"hostnames": []}),
+            (_MongodbCheckArgs, {"hostnames": []}),
+            (_PostgresqlCheckArgs, {"hostnames": []}),
+            (_MysqlCheckArgs, {"hostnames": []}),
+            (_CpanelArgs, {"hostnames": []}),
+            (_PleskArgs, {"hostnames": []}),
+            (_DirectadminArgs, {"hostnames": []}),
+            (_WebminArgs, {"hostnames": []}),
+            (_GrafanaPortArgs, {"hostnames": []}),
+            (_KibanaPortArgs, {"hostnames": []}),
+            (_PortainerPortArgs, {"hostnames": []}),
+            (_ConsulVaultPortArgs, {"hostnames": []}),
             # PT recon / save acceptance cases
             (_PtReconSubdomainsArgs, {"recon_path": "recon.json"}),
             (_PtReconSubdomainsArgs, {"recon_path": "recon.json", "host_filter": "api"}),
@@ -382,14 +436,44 @@ class TestSchemaAcceptReject:
             _HppArgs,
             _ErrorDisclosureArgs,
             # @cyber_tool cloud wrappers that take endpoints
-            _SensitiveFilesArgs,
-            _AdminPanelsArgs,
+            *_ENDPOINTS_CLOUD_SCHEMAS,
         ],
     )
     def test_missing_required_endpoints_rejected(self, schema_cls: type[BaseModel]) -> None:
         """``endpoints`` is required on every endpoint-taking PT typed-tool schema."""
         with pytest.raises(ValidationError):
             schema_cls.model_validate({})
+
+    @pytest.mark.parametrize("schema_cls", _HOSTNAMES_CLOUD_SCHEMAS)
+    def test_missing_required_hostnames_rejected(self, schema_cls: type[BaseModel]) -> None:
+        """``hostnames`` is required on every hostname-taking cloud schema."""
+        with pytest.raises(ValidationError):
+            schema_cls.model_validate({})
+
+    @pytest.mark.parametrize("schema_cls", _HOSTNAMES_CLOUD_SCHEMAS)
+    def test_hostnames_schema_accepts_in_scope(
+        self, schema_cls: type[BaseModel], target_apex: str
+    ) -> None:
+        """An in-scope hostname validates through the ``Hostname`` primitive.
+
+        Uses ``target_apex`` so test intent ("a real in-scope target
+        hostname") is readable at the call site rather than via an
+        opaque literal. The wrapper-level scope filter runs at call
+        time, not at schema validation, so this exercises only the
+        ``Hostname`` primitive's RFC 1123 contract.
+        """
+        instance = schema_cls.model_validate({"hostnames": [f"api.{target_apex}"]})
+        assert isinstance(instance, schema_cls)
+
+    @pytest.mark.parametrize("schema_cls", _HOSTNAMES_CLOUD_SCHEMAS)
+    def test_hostnames_schema_rejects_url(
+        self, schema_cls: type[BaseModel], target_url: str
+    ) -> None:
+        """The ``Hostname`` primitive rejects a URL where a bare hostname
+        is expected - passing a full URL trips the validator upstream of
+        the wrapper, before any scope check or HTTP request."""
+        with pytest.raises(ValidationError):
+            schema_cls.model_validate({"hostnames": [target_url]})
 
     @pytest.mark.parametrize(
         "schema_cls",
@@ -401,7 +485,6 @@ class TestSchemaAcceptReject:
             _HostHeaderArgs,
             _SourceMapsArgs,
             _SriCheckArgs,
-            *_RECON_PATH_CLOUD_SCHEMAS,
             # PT recon wrappers - all take a required ``recon_path``
             _PtReconSubdomainsArgs,
             _PtReconEndpointsArgs,

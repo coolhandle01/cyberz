@@ -5,8 +5,8 @@ Two halves:
 - ``@cyber_tool`` wrappers around the workspace artefact IO (``List
   Run Files``, ``Read Run File``, ``Read Attack Plan``).
 - ``current_programme()`` - the shared programme-loader used by every
-  agent (and by ``@cyber_tool(scope_filter=...)``) that needs the
-  parsed ``Programme`` to reason against. Reads from
+  agent (and by ``@cyber_tool``'s auto-detected scope filter) that
+  needs the parsed ``Programme`` to reason against. Reads from
   ``<run_dir>/programme.json`` - the snapshot the Programme Manager's
   ``Save Selected Programme`` tool writes at the top of every run.
   No H1 API call: the workspace is the authoritative source once a
@@ -32,9 +32,10 @@ def current_programme() -> Programme:
     Reads ``<run_dir>/programme.json`` - written by the Programme
     Manager's ``Save Selected Programme`` tool at run start
     (``squad/programme_manager/__init__.py``). Every downstream agent
-    and every ``@cyber_tool(scope_filter=...)`` wrapper sources its
-    Programme through this function rather than hitting the H1 API
-    again: the workspace snapshot is the contract.
+    and every ``@cyber_tool``-wrapped tool that takes a typed-target
+    field (``Hostname`` / ``Endpoint``) sources its Programme through
+    this function rather than hitting the H1 API again: the workspace
+    snapshot is the contract.
 
     Raises ``FileNotFoundError`` if the file is missing - that means
     the PM has not run yet, and any caller reaching this code path is

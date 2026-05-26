@@ -24,6 +24,7 @@ from squad import cyber_tool
 from squad.workspace_tools import current_programme
 from tools.cwe_data import lookup as cwe_lookup
 from tools.owasp_data import lookup as owasp_lookup
+from tools.recon.scope import TargetHostname
 from tools.recon_insights import (
     finalise_recon,
     save_insight,
@@ -90,7 +91,7 @@ def lookup_owasp_tool(query: str) -> list[OWASPEntry]:
 class _AnnotateHostArgs(BaseModel):
     """Explicit args_schema for the Annotate Host tool."""
 
-    hostname: Hostname = Field(
+    hostname: TargetHostname = Field(
         description=(
             "Hostname to annotate. Must already be in the sweep, or have"
             " been surfaced by Certificate Transparency / Historical URL"

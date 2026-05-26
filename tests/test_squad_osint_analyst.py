@@ -143,15 +143,16 @@ class TestOsintAnalystTools:
         assert probe_hostnames_tool.func([]) == []
 
     def test_probe_hostnames_tool_drops_out_of_scope(
-        self, programme_in_workspace, bystander_url
+        self, programme_in_workspace, bystander_url, invoke_tool
     ) -> None:
-        """Out-of-scope hostnames are dropped by the wrapper before the body fires.
+        """Out-of-scope hostnames are dropped at args_schema validation
+        before the body fires.
 
         Asserts on the real scope-guard path: the fixture programme's
         structured scope (``example.com`` + ``*.example.com``) does not
-        cover ``bystander.example.org``, so the wrapper's
-        ``scope_filter`` empties the list and ``probe_endpoints_impl``
-        is never called.
+        cover ``bystander.example.org``, so the ``TargetHostnames``
+        validator empties the list and ``probe_endpoints_impl`` is
+        never called.
         """
         from urllib.parse import urlparse
 
@@ -160,7 +161,7 @@ class TestOsintAnalystTools:
         oos_host = urlparse(bystander_url).hostname
         mprobe = MagicMock()
         with patch("squad.osint_analyst.discovery.probe_endpoints_impl", mprobe):
-            result = probe_hostnames_tool.func([oos_host])
+            result = invoke_tool(probe_hostnames_tool, hostnames=[oos_host])
 
         assert result == []
         mprobe.assert_not_called()
@@ -190,11 +191,12 @@ class TestOsintAnalystTools:
         assert detect_takeover_candidates_tool.func([]) == []
 
     def test_detect_takeover_candidates_tool_drops_out_of_scope(
-        self, programme_in_workspace, bystander_url
+        self, programme_in_workspace, bystander_url, invoke_tool
     ) -> None:
         """Same scope-guard contract as ``test_probe_hostnames_tool_drops_out_of_scope``,
-        on the DNS side: the wrapper drops the out-of-scope hostname
-        before any DNS traffic fires."""
+        on the DNS side: the ``TargetHostnames`` validator drops the
+        out-of-scope hostname at args_schema time, before any DNS
+        traffic fires."""
         from urllib.parse import urlparse
 
         from squad.osint_analyst import detect_takeover_candidates_tool
@@ -202,7 +204,7 @@ class TestOsintAnalystTools:
         oos_host = urlparse(bystander_url).hostname
         mdetect = MagicMock()
         with patch("squad.osint_analyst.discovery.detect_takeover_candidates", mdetect):
-            result = detect_takeover_candidates_tool.func([oos_host])
+            result = invoke_tool(detect_takeover_candidates_tool, hostnames=[oos_host])
 
         assert result == []
         mdetect.assert_not_called()
@@ -252,7 +254,7 @@ class TestOsintAnalystTools:
         assert result == sentinel
         m.assert_called_once_with("example.com")
 
-    def test_llm_detection_tool(self, endpoint) -> None:
+    def test_llm_detection_tool(self, programme_in_workspace, endpoint) -> None:
         from models import LlmEndpoint
         from squad.osint_analyst import llm_detection_tool
 

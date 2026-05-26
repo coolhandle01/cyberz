@@ -39,11 +39,21 @@ def pentest_tool(
 ) -> Callable[[_PentestFn], _PentestTool]:
     """Pentest-specialised wrapper. Composes ``cyber_tool`` plus OWASP injection.
 
-    ``cyber_tool`` handles the schema override; ``pentest_tool`` layers the
-    OWASP categories from ``check_fn.owasp_categories`` into the agent-facing
-    docstring. Every pentest probe goes through this wrapper, never bare
-    ``@tool`` and never raw ``@cyber_tool`` - the OWASP framing is what the
-    PT agent's role.md teaches it to reason against.
+    ``cyber_tool`` handles the schema override (and the auto-detected
+    typed-target scope guard); ``pentest_tool`` layers the OWASP
+    categories from ``check_fn.owasp_categories`` into the agent-facing
+    docstring. Every pentest probe goes through this wrapper, never
+    bare ``@tool`` and never raw ``@cyber_tool`` - the OWASP framing is
+    what the PT agent's role.md teaches it to reason against.
+
+    FIXME(#88): both ``check_fn=`` and the helper-side ``@owasp`` that
+    stamps ``owasp_categories`` onto it are interim plumbing. The
+    redesign in #88 replaces this whole layer with ``@attack(name=,
+    requires={Label.X, ...})`` on typed ``Exploit`` classes - the
+    OWASP / cheat-sheet label catalogue becomes the source of truth,
+    queryable for precondition filtering, and the per-helper docstring
+    stamp goes away. Don't simplify the indirection here in the
+    meantime; #88 rewrites the surface.
     """
 
     def decorator(fn: _PentestFn) -> _PentestTool:

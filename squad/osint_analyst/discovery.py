@@ -19,7 +19,6 @@ from models import (
     OpenPortsMap,
     TakeoverCandidate,
 )
-from models.h1 import Programme
 from squad import cyber_tool
 from squad.workspace_tools import current_programme
 from tools.recon import (
@@ -31,7 +30,11 @@ from tools.recon import (
 )
 from tools.recon import probe_endpoints as probe_endpoints_impl
 from tools.recon.query import recon_endpoints, recon_open_ports, recon_subdomains
-from tools.recon.scope import filter_in_scope as filter_in_scope_impl
+from tools.recon.scope import (
+    TargetEndpoints,
+    TargetHostname,
+    TargetHostnames,
+)
 
 
 class _RunInitialSweepArgs(BaseModel):
@@ -212,7 +215,7 @@ def recon_open_ports_tool(
 class _CertTransparencyArgs(BaseModel):
     """Explicit args_schema for the Certificate Transparency Lookup tool."""
 
-    domain: Hostname = Field(
+    domain: TargetHostname = Field(
         description=(
             "Apex domain to look up in crt.sh certificate transparency logs"
             " (e.g. 'example.com'). Validated as an RFC 1123 hostname"
@@ -236,7 +239,7 @@ def cert_transparency_tool(domain: Hostname) -> list[str]:
 class _HistoricalUrlsArgs(BaseModel):
     """Explicit args_schema for the Historical URL Discovery tool."""
 
-    domain: Hostname = Field(
+    domain: TargetHostname = Field(
         description=(
             "Domain to query waybackurls for (apex or subdomain). Validated"
             " as an RFC 1123 hostname (URLs / ports / paths reject"
@@ -260,7 +263,7 @@ def historical_urls_tool(domain: Hostname) -> list[str]:
 class _LlmDetectionArgs(BaseModel):
     """Explicit args_schema for the LLM Endpoint Detection tool."""
 
-    endpoints: list[Endpoint] = Field(
+    endpoints: TargetEndpoints = Field(
         description=(
             "Live endpoint objects from the sweep (or a filtered subset)."
             " Each entry needs ``url`` and ideally ``technologies``;"
@@ -287,26 +290,10 @@ def llm_detection_tool(endpoints: list[Endpoint]) -> list[LlmEndpoint]:
     return [LlmEndpoint.model_validate(ep.model_dump()) for ep in detect_llm_endpoints(parsed)]
 
 
-def _normalise_and_filter_hostnames(
-    hostnames: list[Hostname], programme: Programme
-) -> list[Hostname]:
-    """Strip / lowercase before delegating to the canonical scope filter.
-
-    Wraps ``tools.recon.scope.filter_in_scope`` (imported as
-    ``filter_in_scope_impl``) with the input-shaping the two OSINT
-    probe tools used to do inline. Lives at module scope - rather than
-    as a lambda passed to ``scope_filter=...`` - so the ``Probe
-    Hostnames`` and ``Detect Takeover Candidates`` wrappers share the
-    same normalisation step exactly once.
-    """
-    cleaned = [h.strip().lower() for h in hostnames if h.strip()]
-    return filter_in_scope_impl(cleaned, programme)
-
-
 class _ProbeHostnamesArgs(BaseModel):
     """Explicit args_schema for the Probe Hostnames tool."""
 
-    hostnames: list[Hostname] = Field(
+    hostnames: TargetHostnames = Field(
         description=(
             "Hostnames to re-probe with httpx for liveness, status code,"
             " and technology fingerprinting. Each entry is validated as an"
@@ -322,11 +309,7 @@ class _ProbeHostnamesArgs(BaseModel):
     )
 
 
-@cyber_tool(
-    "Probe Hostnames",
-    args_schema=_ProbeHostnamesArgs,
-    scope_filter=("hostnames", _normalise_and_filter_hostnames),
-)
+@cyber_tool("Probe Hostnames", args_schema=_ProbeHostnamesArgs)
 def probe_hostnames_tool(hostnames: list[Hostname]) -> list[Endpoint]:
     """
     Re-probe a list of hostnames with httpx to confirm liveness, capture
@@ -349,7 +332,7 @@ def probe_hostnames_tool(hostnames: list[Hostname]) -> list[Endpoint]:
 class _DetectTakeoverCandidatesArgs(BaseModel):
     """Explicit args_schema for the Detect Takeover Candidates tool."""
 
-    hostnames: list[Hostname] = Field(
+    hostnames: TargetHostnames = Field(
         description=(
             "Hostnames to resolve via dnsx and flag for subdomain takeover."
             " Each entry is validated as an RFC 1123 hostname; URLs / ports"
@@ -363,11 +346,7 @@ class _DetectTakeoverCandidatesArgs(BaseModel):
     )
 
 
-@cyber_tool(
-    "Detect Takeover Candidates",
-    args_schema=_DetectTakeoverCandidatesArgs,
-    scope_filter=("hostnames", _normalise_and_filter_hostnames),
-)
+@cyber_tool("Detect Takeover Candidates", args_schema=_DetectTakeoverCandidatesArgs)
 def detect_takeover_candidates_tool(
     hostnames: list[Hostname],
 ) -> list[TakeoverCandidate]:

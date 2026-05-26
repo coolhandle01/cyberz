@@ -74,17 +74,6 @@ def _unique_origins(endpoints: list[Endpoint]) -> list[str]:
     return result
 
 
-def _unique_hostnames(endpoints: list[Endpoint]) -> list[str]:
-    seen: set[str] = set()
-    result: list[str] = []
-    for ep in endpoints:
-        h = urlparse(ep.url).hostname or ""
-        if h and h not in seen:
-            seen.add(h)
-            result.append(h)
-    return result
-
-
 def _probe_panel(
     hostnames: list[str],
     scheme: str,
@@ -102,7 +91,7 @@ def _probe_panel(
             resp = http.get(  # nosemgrep
                 url,
                 timeout=5,
-                verify=False,  # nosec B501  # noqa: S501 - intentional: probing for self-signed/expired certs is the point
+                verify=False,  # nosec B501
                 allow_redirects=True,
             )
             if resp.status_code == 200 and marker.lower() in resp.text.lower():
@@ -238,9 +227,8 @@ def check_admin_panels(endpoints: list[Endpoint]) -> list[RawFinding]:
     return findings
 
 
-def check_cpanel(recon: ReconResult) -> list[RawFinding]:
+def check_cpanel(hostnames: list[str]) -> list[RawFinding]:
     """Check for exposed cPanel (ports 2082/2083) and WHM (ports 2086/2087)."""
-    hostnames = _unique_hostnames(recon.endpoints)
     findings: list[RawFinding] = []
     for scheme, port, marker, label in [
         ("http", 2082, "cPanel", "cPanel"),
@@ -253,9 +241,8 @@ def check_cpanel(recon: ReconResult) -> list[RawFinding]:
     return findings
 
 
-def check_plesk(recon: ReconResult) -> list[RawFinding]:
+def check_plesk(hostnames: list[str]) -> list[RawFinding]:
     """Check for an exposed Plesk control panel (ports 8880/8443)."""
-    hostnames = _unique_hostnames(recon.endpoints)
     findings = _probe_panel(hostnames, "http", 8880, "/", "Plesk", "Plesk", "plesk_check")
     findings += _probe_panel(
         hostnames, "https", 8443, "/login.php", "Plesk", "Plesk", "plesk_check"
@@ -264,9 +251,8 @@ def check_plesk(recon: ReconResult) -> list[RawFinding]:
     return findings
 
 
-def check_directadmin(recon: ReconResult) -> list[RawFinding]:
+def check_directadmin(hostnames: list[str]) -> list[RawFinding]:
     """Check for an exposed DirectAdmin control panel (port 2222)."""
-    hostnames = _unique_hostnames(recon.endpoints)
     findings = _probe_panel(
         hostnames, "http", 2222, "/login.php", "DirectAdmin", "DirectAdmin", "directadmin_check"
     )
@@ -274,64 +260,79 @@ def check_directadmin(recon: ReconResult) -> list[RawFinding]:
     return findings
 
 
-def check_webmin(recon: ReconResult) -> list[RawFinding]:
+def check_webmin(hostnames: list[str]) -> list[RawFinding]:
     """Check for an exposed Webmin administration panel (port 10000)."""
-    hostnames = _unique_hostnames(recon.endpoints)
     findings = _probe_panel(hostnames, "https", 10000, "/", "Webmin", "Webmin", "webmin_check")
     logger.info("Webmin check found %d findings", len(findings))
     return findings
 
 
-def check_grafana(recon: ReconResult) -> list[RawFinding]:
-    """Check for an exposed Grafana instance on port 3000 and via /grafana reverse-proxy
-    path on existing endpoints."""
-    hostnames = _unique_hostnames(recon.endpoints)
+def check_grafana_ports(hostnames: list[str]) -> list[RawFinding]:
+    """Check for an exposed Grafana instance on port 3000."""
     findings = _probe_panel(hostnames, "http", 3000, "/", "Grafana", "Grafana", "grafana_check")
-    findings += _probe_path(
-        _unique_origins(recon.endpoints), "/grafana", "Grafana", "Grafana", "grafana_check"
-    )
-    logger.info("Grafana check found %d findings", len(findings))
+    logger.info("Grafana port check found %d findings", len(findings))
     return findings
 
 
-def check_kibana(recon: ReconResult) -> list[RawFinding]:
-    """Check for an exposed Kibana instance on port 5601 and via /kibana reverse-proxy
-    path on existing endpoints."""
-    hostnames = _unique_hostnames(recon.endpoints)
+def check_grafana_paths(endpoints: list[Endpoint]) -> list[RawFinding]:
+    """Check for Grafana reverse-proxied at /grafana on existing endpoints."""
+    findings = _probe_path(
+        _unique_origins(endpoints), "/grafana", "Grafana", "Grafana", "grafana_check"
+    )
+    logger.info("Grafana path check found %d findings", len(findings))
+    return findings
+
+
+def check_kibana_ports(hostnames: list[str]) -> list[RawFinding]:
+    """Check for an exposed Kibana instance on port 5601."""
     findings = _probe_panel(hostnames, "http", 5601, "/", "Kibana", "Kibana", "kibana_check")
-    findings += _probe_path(
-        _unique_origins(recon.endpoints), "/kibana", "Kibana", "Kibana", "kibana_check"
-    )
-    logger.info("Kibana check found %d findings", len(findings))
+    logger.info("Kibana port check found %d findings", len(findings))
     return findings
 
 
-def check_portainer(recon: ReconResult) -> list[RawFinding]:
-    """Check for an exposed Portainer Docker management UI on port 9000 and via
-    /portainer reverse-proxy path on existing endpoints."""
-    hostnames = _unique_hostnames(recon.endpoints)
+def check_kibana_paths(endpoints: list[Endpoint]) -> list[RawFinding]:
+    """Check for Kibana reverse-proxied at /kibana on existing endpoints."""
+    findings = _probe_path(
+        _unique_origins(endpoints), "/kibana", "Kibana", "Kibana", "kibana_check"
+    )
+    logger.info("Kibana path check found %d findings", len(findings))
+    return findings
+
+
+def check_portainer_ports(hostnames: list[str]) -> list[RawFinding]:
+    """Check for an exposed Portainer Docker management UI on port 9000."""
     findings = _probe_panel(
         hostnames, "http", 9000, "/", "Portainer", "Portainer", "portainer_check"
     )
-    findings += _probe_path(
-        _unique_origins(recon.endpoints), "/portainer", "Portainer", "Portainer", "portainer_check"
-    )
-    logger.info("Portainer check found %d findings", len(findings))
+    logger.info("Portainer port check found %d findings", len(findings))
     return findings
 
 
-def check_consul_vault(recon: ReconResult) -> list[RawFinding]:
-    """Check for exposed Consul UI (port 8500) and Vault UI (port 8200), and via
-    /consul/ui and /vault/ui reverse-proxy paths on existing endpoints."""
-    hostnames = _unique_hostnames(recon.endpoints)
-    origins = _unique_origins(recon.endpoints)
+def check_portainer_paths(endpoints: list[Endpoint]) -> list[RawFinding]:
+    """Check for Portainer reverse-proxied at /portainer on existing endpoints."""
+    findings = _probe_path(
+        _unique_origins(endpoints), "/portainer", "Portainer", "Portainer", "portainer_check"
+    )
+    logger.info("Portainer path check found %d findings", len(findings))
+    return findings
+
+
+def check_consul_vault_ports(hostnames: list[str]) -> list[RawFinding]:
+    """Check for exposed Consul UI (port 8500) and Vault UI (port 8200)."""
     findings = _probe_panel(
         hostnames, "http", 8500, "/ui/", "Consul", "Consul", "consul_vault_check"
     )
     findings += _probe_panel(
         hostnames, "http", 8200, "/ui/", "Vault", "Vault", "consul_vault_check"
     )
-    findings += _probe_path(origins, "/consul/ui", "Consul", "Consul", "consul_vault_check")
+    logger.info("Consul/Vault port check found %d findings", len(findings))
+    return findings
+
+
+def check_consul_vault_paths(endpoints: list[Endpoint]) -> list[RawFinding]:
+    """Check for Consul / Vault reverse-proxied at /consul/ui or /vault/ui."""
+    origins = _unique_origins(endpoints)
+    findings = _probe_path(origins, "/consul/ui", "Consul", "Consul", "consul_vault_check")
     findings += _probe_path(origins, "/vault/ui", "Vault", "Vault", "consul_vault_check")
-    logger.info("Consul/Vault check found %d findings", len(findings))
+    logger.info("Consul/Vault path check found %d findings", len(findings))
     return findings

@@ -45,7 +45,7 @@ def bind_run_id(new_run_id: str) -> None:
     the single-pipeline-at-a-time invariant. Same-value rebind is a
     no-op. See module docstring + #128 for the Flow-era replacement.
     """
-    global run_id  # noqa: PLW0603 - module-level singleton, documented in module docstring
+    global run_id
     if run_id and run_id != new_run_id:
         raise RuntimeError(
             f"runtime.run_id already bound to {run_id!r}; refusing to rebind to "
@@ -61,7 +61,7 @@ def bind_programme(handle: str) -> None:
     the single-pipeline-at-a-time invariant. Same-value rebind is a
     no-op. See module docstring + #128 for the Flow-era replacement.
     """
-    global programme_handle  # noqa: PLW0603 - module-level singleton, documented in module docstring
+    global programme_handle
     if programme_handle and programme_handle != handle:
         raise RuntimeError(
             f"runtime.programme_handle already bound to {programme_handle!r}; "

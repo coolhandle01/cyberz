@@ -20,9 +20,9 @@ from tools.recon import (
     cert_transparency,
     discover_paths,
     enumerate_subdomains,
-    extract_domain,
     filter_in_scope,
     historical_urls,
+    host_of,
     port_scan,
     probe_endpoints,
 )
@@ -30,22 +30,22 @@ from tools.recon import (
 pytestmark = pytest.mark.unit
 
 
-# extract_domain
-class TestExtractDomain:
-    def test_plain_domain(self):
-        assert extract_domain("example.com") == "example.com"
-
+# host_of - thin stdlib urlparse wrapper. Returns the URL's hostname
+# or "" when the input has no host (a bare hostname rather than a URL).
+class TestHostOf:
     def test_url_with_scheme(self, target_apex):
-        assert extract_domain(f"https://{target_apex}") == "example.com"
+        assert host_of(f"https://{target_apex}") == "example.com"
 
     def test_url_with_path(self, target_apex):
-        assert extract_domain(f"https://api.{target_apex}/v1/search") == "api.example.com"
-
-    def test_subdomain(self):
-        assert extract_domain("sub.example.com") == "sub.example.com"
+        assert host_of(f"https://api.{target_apex}/v1/search") == "api.example.com"
 
     def test_url_with_port(self, target_apex):
-        assert extract_domain(f"https://{target_apex}:8443") == "example.com"
+        assert host_of(f"https://{target_apex}:8443") == "example.com"
+
+    def test_bare_hostname_returns_empty(self):
+        """No scheme means urlparse cannot identify a netloc; the helper
+        is intentionally URL-only and returns "" rather than guessing."""
+        assert host_of("example.com") == ""
 
 
 class TestSeedingConstants:
@@ -124,6 +124,114 @@ class TestFilterInScope:
             out_of_scope=[],
         )
         assert filter_in_scope(["example.com"], bare_programme) == []
+
+    def test_non_url_wildcard_scope_items_are_skipped(self, target_apex):
+        """``filter_in_scope`` only consults URL / WILDCARD scope items.
+        A programme whose in-scope catalogue mixes other ``ScopeType``
+        members (``IP_ADDRESS``, ``CIDR``, ``OTHER``, mobile-app IDs)
+        skips those entries entirely - they do not match hostnames.
+        Pins the branch that would otherwise silently treat a CIDR
+        ``asset_identifier`` as a hostname pattern."""
+        from models.h1 import ScopeItem, ScopeType
+
+        prog = Programme(
+            handle="mixed",
+            name="Mixed Scope",
+            url="https://hackerone.com/mixed",
+            bounty_table={},
+            in_scope=[
+                ScopeItem(asset_identifier="10.0.0.0/8", asset_type=ScopeType.CIDR),
+                ScopeItem(asset_identifier="192.0.2.1", asset_type=ScopeType.IP_ADDRESS),
+                ScopeItem(asset_identifier="com.example.app", asset_type=ScopeType.OTHER),
+                ScopeItem(asset_identifier=f"*.{target_apex}", asset_type=ScopeType.WILDCARD),
+            ],
+            out_of_scope=[],
+        )
+        # Only the WILDCARD entry matches; the IP / CIDR / OTHER entries
+        # are skipped per the ``continue`` branch.
+        assert filter_in_scope([f"api.{target_apex}"], prog) == [f"api.{target_apex}"]
+        assert filter_in_scope(["10.0.0.5"], prog) == []
+        assert filter_in_scope(["com.example.app"], prog) == []
+
+
+class TestInScopeTypedAliases:
+    """The ``TargetHostnames`` / ``TargetEndpoints`` typed aliases run
+    a Pydantic ``AfterValidator`` at ``args_schema.model_validate(...)``
+    time - that is the scope guard. List variants filter silently
+    (mixed candidate lists pass survivors); single variants
+    (``TargetHostname`` / ``TargetEndpoint``) raise ``ValueError`` on
+    an OOS pick. The aliases are exercised end-to-end via a small
+    args_schema stub that mirrors what the cloud / probe / OSINT
+    wrappers declare in production.
+    """
+
+    def test_list_hostnames_filters_oos(self, programme_in_workspace, target_apex):
+        from pydantic import BaseModel
+
+        from tools.recon.scope import TargetHostnames
+
+        class _Args(BaseModel):
+            hostnames: TargetHostnames
+
+        parsed = _Args.model_validate(
+            {"hostnames": [f"api.{target_apex}", "bystander.example.org"]}
+        )
+        assert parsed.hostnames == [f"api.{target_apex}"]
+
+    def test_list_endpoints_filters_oos(self, programme_in_workspace, target_apex, bystander_url):
+        from pydantic import BaseModel
+
+        from tools.recon.scope import TargetEndpoints
+
+        class _Args(BaseModel):
+            endpoints: TargetEndpoints
+
+        parsed = _Args.model_validate(
+            {
+                "endpoints": [
+                    {"url": f"https://api.{target_apex}", "status_code": 200},
+                    {"url": bystander_url, "status_code": 200},
+                ]
+            }
+        )
+        assert len(parsed.endpoints) == 1
+        assert parsed.endpoints[0].url == f"https://api.{target_apex}"
+
+    def test_single_hostname_rejects_oos(self, programme_in_workspace):
+        from pydantic import BaseModel, ValidationError
+
+        from tools.recon.scope import TargetHostname
+
+        class _Args(BaseModel):
+            hostname: TargetHostname
+
+        with pytest.raises(ValidationError, match="not in the selected programme's scope"):
+            _Args.model_validate({"hostname": "bystander.example.org"})
+
+    def test_single_endpoint_rejects_oos(self, programme_in_workspace, bystander_url):
+        from pydantic import BaseModel, ValidationError
+
+        from tools.recon.scope import TargetEndpoint
+
+        class _Args(BaseModel):
+            endpoint: TargetEndpoint
+
+        with pytest.raises(ValidationError, match="not in the selected programme's scope"):
+            _Args.model_validate({"endpoint": {"url": bystander_url, "status_code": 200}})
+
+    def test_empty_list_skips_programme_lookup(self):
+        """An empty list short-circuits the validator - no
+        ``current_programme()`` lookup. No ``programme_in_workspace``
+        fixture is taken, so the lookup would raise if it ran."""
+        from pydantic import BaseModel
+
+        from tools.recon.scope import TargetHostnames
+
+        class _Args(BaseModel):
+            hostnames: TargetHostnames
+
+        parsed = _Args.model_validate({"hostnames": []})
+        assert parsed.hostnames == []
 
 
 # enumerate_subdomains
