@@ -1,18 +1,15 @@
 """
-tests/test_mcp_servers.py - unit tests for the provisioned-MCP module.
+tests/test_mcp_servers.py - unit tests for the provisioned-MCP package.
 
-Covers the three observable behaviours of ``provisioned_mcp_tools()``:
+Mock targets land on the per-MCP submodule (today only ``_time``) because
+that is where ``MCPServerAdapter`` is imported and the availability
+checks live. The package-level ``provisioned_mcp_tools()`` orchestrator
+imports a name from ``_common``; monkeypatch the function on the *parent
+package's* module-level namespace to control the dispatched branch.
 
-  1. Yields an empty registry when no MCP is enabled.
-  2. Constructs and enters the time adapter when ``time_enabled`` is True
-     *and* ``mcp_server_time`` is importable.
-  3. Skips the time adapter (with a warning) when ``time_enabled`` is True
-     but the vendor package is not importable.
-
-``MCPServerAdapter`` is mocked at the ``mcp_servers`` import boundary so
-no subprocess is started; the discipline being checked is that
-``provisioned_mcp_tools()`` is the only construction site - the mocks
-prove the wiring, not the adapter's runtime behaviour.
+``MCPServerAdapter`` is mocked so no subprocess is started; the discipline
+being checked is that ``provisioned_mcp_tools()`` is the only construction
+site - the mocks prove the wiring, not the adapter's runtime behaviour.
 """
 
 from __future__ import annotations
@@ -25,13 +22,24 @@ pytestmark = pytest.mark.unit
 
 
 def _reload_mcp_servers():
-    """Reload `mcp_servers` so it picks up the patched env / module state."""
+    """Reload ``mcp_servers`` (and submodules) so env / module state refreshes.
+
+    Reloading the package re-runs ``__init__.py``; the submodules cached
+    in ``sys.modules`` keep their identity across reloads, so the
+    ``from . import _time`` in ``__init__.py`` re-binds the same module
+    object - patches the test makes on ``mcp_servers._time`` survive
+    through the package-level dispatch.
+    """
     import importlib
 
     import config
     import mcp_servers
+    import mcp_servers._common as mcp_common
+    import mcp_servers._time as mcp_time
 
     importlib.reload(config)
+    importlib.reload(mcp_common)
+    importlib.reload(mcp_time)
     importlib.reload(mcp_servers)
     return mcp_servers
 
@@ -49,7 +57,7 @@ class TestProvisionedMCPToolsDisabled:
         mcp_servers = _reload_mcp_servers()
 
         sentinel_adapter = MagicMock()
-        monkeypatch.setattr(mcp_servers, "MCPServerAdapter", sentinel_adapter)
+        monkeypatch.setattr(mcp_servers._time, "MCPServerAdapter", sentinel_adapter)
 
         with mcp_servers.provisioned_mcp_tools():
             pass
@@ -59,14 +67,19 @@ class TestProvisionedMCPToolsDisabled:
 
 class TestProvisionedMCPToolsTimeEnabled:
     def _wire_fake_adapter(self, monkeypatch, mcp_servers, fake_tool):
-        """Common scaffold: a fake MCPServerAdapter returning ``fake_tool``."""
+        """Common scaffold: a fake MCPServerAdapter returning ``fake_tool``.
+
+        Patches land on ``mcp_servers._time`` (where MCPServerAdapter is
+        imported) and ``mcp_servers._time.available`` (the per-MCP
+        availability check).
+        """
         fake_adapter_cm = MagicMock()
         fake_adapter_cm.__enter__ = MagicMock(return_value=[fake_tool])
         fake_adapter_cm.__exit__ = MagicMock(return_value=None)
 
         adapter_factory = MagicMock(return_value=fake_adapter_cm)
-        monkeypatch.setattr(mcp_servers, "MCPServerAdapter", adapter_factory)
-        monkeypatch.setattr(mcp_servers, "_mcp_server_time_available", lambda: True)
+        monkeypatch.setattr(mcp_servers._time, "MCPServerAdapter", adapter_factory)
+        monkeypatch.setattr(mcp_servers._time, "available", lambda: True)
         return adapter_factory, fake_adapter_cm
 
     def test_constructs_time_adapter_when_available(self, monkeypatch):
@@ -90,8 +103,8 @@ class TestProvisionedMCPToolsTimeEnabled:
 
         Defence-in-depth: a vendor version bump that adds a new tool does
         not silently widen the agent's surface. The skill upgrade ritual
-        is to extend ``_TIME_MCP_ALLOWED_TOOLS`` after re-vetting the new
-        tool's prose - a review event by construction.
+        is to extend ``_ALLOWED_TOOLS`` in the submodule after re-vetting
+        the new tool's prose - a review event by construction.
         """
         monkeypatch.setenv("CYBERSQUAD_MCP_TIME_ENABLED", "true")
         mcp_servers = _reload_mcp_servers()
@@ -128,7 +141,7 @@ class TestProvisionedMCPToolsTimeEnabled:
         fake_tool.name = "get_current_time"
         self._wire_fake_adapter(monkeypatch, mcp_servers, fake_tool)
 
-        with caplog.at_level("INFO", logger="mcp_servers"):
+        with caplog.at_level("INFO", logger="mcp_servers._time"):
             with mcp_servers.provisioned_mcp_tools():
                 pass
 
@@ -137,19 +150,24 @@ class TestProvisionedMCPToolsTimeEnabled:
         assert any("started" in m and "get_current_time" in m for m in messages)
 
     def test_skips_with_warning_when_time_package_missing(self, monkeypatch, caplog):
-        """mcpadapt available but `mcp_server_time` itself is not."""
+        """mcpadapt available but `mcp_server_time` itself is not.
+
+        Pin BOTH availability checks so the test does not depend on
+        whether the venv has `mcpadapt` or `mcp_server_time` installed.
+        CI installs `.[dev]` not `.[mcp]`, so neither is present there;
+        this test pretends the adapter stack is fine but the vendor
+        server module is the only missing piece.
+        """
         monkeypatch.setenv("CYBERSQUAD_MCP_TIME_ENABLED", "true")
         mcp_servers = _reload_mcp_servers()
 
         adapter_factory = MagicMock()
-        monkeypatch.setattr(mcp_servers, "MCPServerAdapter", adapter_factory)
-        # Pin BOTH availability checks so the test does not depend on
-        # whether the venv has `mcpadapt` or `mcp_server_time` installed.
-        # CI installs `.[dev]` not `.[mcp]`, so neither is present there;
-        # this test pretends the adapter stack is fine but the vendor
-        # server module is the only missing piece.
-        monkeypatch.setattr(mcp_servers, "_mcp_adapter_stack_usable", lambda: True)
-        monkeypatch.setattr(mcp_servers, "_mcp_server_time_available", lambda: False)
+        monkeypatch.setattr(mcp_servers._time, "MCPServerAdapter", adapter_factory)
+        # The orchestrator imports `mcp_adapter_stack_usable` from `_common`
+        # into the package-level namespace; patching here is sufficient
+        # because the orchestrator only consults its local-name binding.
+        monkeypatch.setattr(mcp_servers, "mcp_adapter_stack_usable", lambda: True)
+        monkeypatch.setattr(mcp_servers._time, "available", lambda: False)
 
         with caplog.at_level("WARNING", logger="mcp_servers"):
             with mcp_servers.provisioned_mcp_tools() as registry:
@@ -164,18 +182,18 @@ class TestProvisionedMCPToolsTimeEnabled:
         """The whole CrewAI MCP stack is missing (the click.confirm trap).
 
         This is the failure mode on a fresh `pip install -e .[dev]` -
-        crewai-tools is present (so the import at top of `mcp_servers.py`
-        succeeds) but mcpadapt is not, so `MCPServerAdapter.__init__`
-        would abort with an interactive `click.confirm` install prompt.
-        The pre-flight check turns that into a clean warning + skip.
+        crewai-tools is present (so the import in `_time.py` succeeds)
+        but mcpadapt is not, so `MCPServerAdapter.__init__` would abort
+        with an interactive `click.confirm` install prompt. The pre-flight
+        check turns that into a clean warning + skip.
         """
         monkeypatch.setenv("CYBERSQUAD_MCP_TIME_ENABLED", "true")
         mcp_servers = _reload_mcp_servers()
 
         adapter_factory = MagicMock()
-        monkeypatch.setattr(mcp_servers, "MCPServerAdapter", adapter_factory)
-        monkeypatch.setattr(mcp_servers, "_mcp_adapter_stack_usable", lambda: False)
-        monkeypatch.setattr(mcp_servers, "_mcp_server_time_available", lambda: False)
+        monkeypatch.setattr(mcp_servers._time, "MCPServerAdapter", adapter_factory)
+        monkeypatch.setattr(mcp_servers, "mcp_adapter_stack_usable", lambda: False)
+        monkeypatch.setattr(mcp_servers._time, "available", lambda: False)
 
         with caplog.at_level("WARNING", logger="mcp_servers"):
             with mcp_servers.provisioned_mcp_tools() as registry:
@@ -189,7 +207,7 @@ class TestProvisionedMCPToolsTimeEnabled:
         monkeypatch.setenv("CYBERSQUAD_MCP_TIME_TIMEZONE", "Europe/London")
         mcp_servers = _reload_mcp_servers()
 
-        params = mcp_servers._time_server_params()
+        params = mcp_servers._time._server_params()
 
         assert "--local-timezone" in params.args
         tz_index = params.args.index("--local-timezone") + 1
@@ -197,22 +215,24 @@ class TestProvisionedMCPToolsTimeEnabled:
 
 
 class TestAvailabilityChecks:
-    """The other tests monkeypatch the two availability functions for
+    """The other tests monkeypatch the availability functions for
     determinism. These tests exercise the real ``importlib.util.find_spec``
     branches so the production code paths stay covered.
 
     Returning a bool either way is the contract; the actual True/False
     depends on whether the venv has ``mcpadapt`` / ``mcp_server_time``
-    installed (CI: only `.[dev]` => False; dev: `.[dev,mcp]` => True).
+    installed (CI: only ``.[dev]`` => False; dev: ``.[dev,mcp]`` => True).
     """
 
     def test_mcp_adapter_stack_usable_returns_bool(self):
-        mcp_servers = _reload_mcp_servers()
-        assert isinstance(mcp_servers._mcp_adapter_stack_usable(), bool)
+        from mcp_servers._common import mcp_adapter_stack_usable
 
-    def test_mcp_server_time_available_returns_bool(self):
-        mcp_servers = _reload_mcp_servers()
-        assert isinstance(mcp_servers._mcp_server_time_available(), bool)
+        assert isinstance(mcp_adapter_stack_usable(), bool)
+
+    def test_time_available_returns_bool(self):
+        from mcp_servers._time import available
+
+        assert isinstance(available(), bool)
 
 
 class TestProvisionedMCPToolsRegistryShape:

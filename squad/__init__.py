@@ -29,10 +29,10 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol, cast, runtime_checkable
+from typing import Protocol, cast, runtime_checkable
 
-from crewai import Agent, Task
-from crewai.tools import tool
+from crewai import LLM, Agent, Task
+from crewai.tools import BaseTool, tool
 from pydantic import BaseModel
 
 SQUAD_SKILLS_DIR = Path(__file__).parent / "skills"
@@ -157,9 +157,9 @@ class SquadMember:
 
 def build_agent(
     member: SquadMember,
-    llm: object,
+    llm: LLM,
     verbose: bool = False,
-    extra_tools: Sequence[Any] = (),
+    crew_wide_mcp_tools: Sequence[BaseTool] = (),
 ) -> Agent:
     """Construct a CrewAI Agent from the member's role/goal/backstory files.
 
@@ -169,20 +169,34 @@ def build_agent(
     and pays the body cost only on activation. Squad-wide skills are merged
     in at Crew construction (crew.py) so they are discovered once per run.
 
-    ``extra_tools`` is the crew-wide tool injection point - today it
-    carries the provisioned-MCP tool list from ``mcp_servers.py`` (per
-    the ``cybersquad-mcp`` skill, MCPs are attached at construction
-    time). The list is appended to ``member.tools`` so the per-member
-    typed registry stays authoritative for cybersquad-side contract
-    tests; MCP tools come from a third-party adapter and live outside
-    the ``SquadTool`` Protocol surface by design.
+    ``crew_wide_mcp_tools`` is the *only* injection point for
+    provisioned-MCP tools. Per the ``cybersquad-mcp`` skill (Rule 2 - no
+    runtime MCP attach), MCP tools come exclusively from
+    ``mcp_servers.provisioned_mcp_tools()`` and are wired in here at
+    ``build_crew()`` time. The list is appended to ``member.tools`` so
+    the per-member typed registry stays authoritative for the
+    cybersquad-side contract tests; MCP tools come from a third-party
+    adapter and live outside the ``SquadTool`` Protocol surface by
+    design.
     """
     skills: list[Path] = [member.skills_dir] if member.skills_dir.is_dir() else []
+    # Static, contract-tested tools first; provisioned-MCP tools spliced
+    # on the end. The order is observable in the LLM-visible tool menu -
+    # the agent's canonical typed surface opens the menu, MCP-sourced
+    # tools sit after as opaque BaseTool instances (per the discipline
+    # in the cybersquad-mcp skill, see also #144 and #141).
+    #
+    # No explicit `list[BaseTool]` annotation here: `member.tools` is
+    # `list[SquadTool]` - a Protocol that BaseTool satisfies structurally
+    # - but `list[...]` is invariant so mypy cannot reconcile the splat
+    # against a concrete `list[BaseTool]` literal. The runtime contract
+    # (Agent(tools=...) accepts BaseTool) is the same either way.
+    agent_tools = [*member.tools, *crew_wide_mcp_tools]
     return Agent(
         role=member.read("role"),
         goal=member.read("goal"),
         backstory=member.read("backstory"),
-        tools=[*member.tools, *extra_tools],
+        tools=agent_tools,
         skills=skills,
         allow_delegation=False,
         llm=llm,

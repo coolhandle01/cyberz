@@ -27,7 +27,7 @@ Agents do not pass artefacts inline. Each stage writes a typed JSON file to the 
 
 ### Optional: provisioned MCP servers
 
-Beyond the per-agent tool surface above, the squad can be provisioned with [Model Context Protocol](https://modelcontextprotocol.io/) servers at `build_crew()` time. These add crew-wide capabilities visible to every agent; the contributor discipline (build-time-only attach, exact version pins, explicit tool allowlists, two-line audit log) lives in [`.claude/skills/cybersquad-mcp/SKILL.md`](./.claude/skills/cybersquad-mcp/SKILL.md), which auto-loads on any edit to `mcp_servers.py` or `crew.py`.
+Beyond the per-agent tool surface above, the squad can be provisioned with [Model Context Protocol](https://modelcontextprotocol.io/) servers at `build_crew()` time. These add crew-wide capabilities visible to every agent; the contributor discipline (build-time-only attach, exact version pins, explicit tool allowlists, two-line audit log) lives in [`.claude/skills/cybersquad-mcp/SKILL.md`](./.claude/skills/cybersquad-mcp/SKILL.md), which auto-loads on any edit to `mcp_servers/` or `crew.py`.
 
 | MCP | Provides | Enable via |
 |---|---|---|
@@ -143,7 +143,10 @@ cybersquad/
 +-- crew.py            # Assembles LLM, agents, tasks, and approval gates
 +-- tasks.py           # Pipeline wiring - context chaining and approval gates
 +-- runtime.py         # Pipeline-scoped context (run_id, programme_handle)
-+-- mcp_servers.py     # Provisioned MCP servers (build_crew()-time only; see cybersquad-mcp skill)
++-- mcp_servers/       # Provisioned MCP servers (build_crew()-time only; see cybersquad-mcp skill)
+|   +-- __init__.py    # provisioned_mcp_tools() orchestrator + ProvisionedMCPTools registry
+|   +-- _common.py     # Shared utilities (adapter-stack pre-flight)
+|   +-- _time.py       # The time MCP (one submodule per provisioned MCP)
 +-- config.py          # Env-var-backed configuration (singleton: config.*)
 |
 +-- models/            # Pydantic data contracts between agents

@@ -30,7 +30,7 @@ Skills under `.claude/skills/` auto-load via a `PreToolUse` hook on `Write`/`Edi
 | `cybersquad-models` | Any `*.py` file under `models/`. Carries the LLM-facing contract: typed primitives, workspace artefact shapes, prompt-injection awareness on free-text fields. The consumer-side rules (how a wrapper *uses* these models) live in `cybersquad-tool`. |
 | `cybersquad-runtime` | `runtime.py`, `main.py` |
 | `cybersquad-agent-llm` | `crew.py` |
-| `cybersquad-mcp` | `mcp_servers.py`, plus stacks on `crew.py` where the provisioned-MCP tool list is distributed to agents. Carries the threat-model rules from #144: build-time provisioning only, no runtime attach, disjoint sets for provisioned vs. discovered MCPs. |
+| `cybersquad-mcp` | Any file under `mcp_servers/` (the package with the orchestrator + one submodule per MCP), plus stacks on `crew.py` where the provisioned-MCP tool list is distributed to agents. Carries the threat-model rules from #144: build-time provisioning only, no runtime attach, disjoint sets for provisioned vs. discovered MCPs, explicit tool allowlist, audit log. |
 | `cybersquad-task` | `tasks.py` |
 | `cybersquad-test-fixtures` | Any file under `tests/` (including the `tests/squad/` mirror) |
 | `cybersquad-bdd` | `tests/features/**` or `tests/bdd/**` |

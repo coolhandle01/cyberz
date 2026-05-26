@@ -67,7 +67,7 @@ dev = [
 bounty-squad = "main:main"
 
 [tool.setuptools]
-packages = ["tools"]
+packages = ["tools", "mcp_servers"]
 py-modules = ["config", "models", "tasks", "crew", "main", "runtime"]
 
 # -- pytest --------------------------------------------------------------------

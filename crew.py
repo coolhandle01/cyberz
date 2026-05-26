@@ -10,7 +10,7 @@ from pathlib import Path
 
 from crewai import LLM, Agent, Crew, Process, Task
 from crewai.agents.agent_builder.base_agent import BaseAgent
-from crewai.memory.memory import Memory
+from crewai.memory import Memory
 
 from config import config
 from mcp_servers import ProvisionedMCPTools
@@ -87,11 +87,12 @@ def build_crew(
                  ``MCPServerAdapter`` at runtime.
     """
     be_verbose = verbose if verbose is not None else config.verbose
-    crew_wide_extra = mcp_tools.crew_wide if mcp_tools is not None else ()
+    crew_wide_mcp_tools = mcp_tools.crew_wide if mcp_tools is not None else ()
 
     llm: LLM = _build_llm()
     agents_by_slug: dict[str, Agent] = {
-        m.slug: build_agent(m, llm, be_verbose, extra_tools=crew_wide_extra) for m in _SQUAD
+        m.slug: build_agent(m, llm, be_verbose, crew_wide_mcp_tools=crew_wide_mcp_tools)
+        for m in _SQUAD
     }
     # Crew(agents=...) wants list[BaseAgent]; list[Agent] is invariant
     # against it, so widen on construction.

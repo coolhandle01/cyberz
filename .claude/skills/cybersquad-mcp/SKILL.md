@@ -1,6 +1,6 @@
 ---
 name: cybersquad-mcp
-description: How cybersquad provisions and consumes Model Context Protocol servers. Build-time only, exact version pins, explicit tool allowlist, typed return models, audit logging. Designed around the MCP spec's "tool annotations are untrusted unless from a trusted server" rule and CrewAI's `MCPServerAdapter.__init__`-auto-starts behaviour. Load before editing `mcp_servers.py` or the MCP wiring in `crew.py`.
+description: How cybersquad provisions and consumes Model Context Protocol servers. Build-time only, exact version pins, explicit tool allowlist, typed return models, audit logging. Designed around the MCP spec's "tool annotations are untrusted unless from a trusted server" rule and CrewAI's `MCPServerAdapter.__init__`-auto-starts behaviour. Load before editing any file under `mcp_servers/` or the MCP wiring in `crew.py`.
 ---
 
 # MCP provisioning discipline
@@ -39,7 +39,7 @@ Schemas catch *shape*. They do not catch *intent* - an exfil URL is a valid `str
 
 ### Rule 2 - No runtime MCP attach
 
-`mcp_servers.provisioned_mcp_tools()` is the only place an `MCPServerAdapter` is materialised. `crew.py` consumes its output; nothing else does.
+`mcp_servers.provisioned_mcp_tools()` (the orchestrator in `mcp_servers/__init__.py`) is the only entry point; the actual `MCPServerAdapter` is constructed inside the per-MCP submodule's `enter(stack)` helper (e.g. `mcp_servers/_time.py:enter`). `crew.py` consumes the orchestrator's output; nothing else does.
 
 ```python
 # wrong - runtime attach from inside a tool wrapper
@@ -55,7 +55,7 @@ def record_discovered_mcp(url: str) -> DiscoveredMCP:
     return DiscoveredMCP(url=url, advertised_tools=..., evidence=...)
 ```
 
-If a future test or contributor finds a path to materialise `MCPServerAdapter` outside `mcp_servers.py`, that is a design bug. Fix the path; do not narrow the rule. If you are *certain* you need to materialise an adapter elsewhere and the user has accepted the risk, leave a `FIXME` and open an issue:
+If a future test or contributor finds a path to materialise `MCPServerAdapter` outside `mcp_servers/`, that is a design bug. Fix the path; do not narrow the rule. If you are *certain* you need to materialise an adapter elsewhere and the user has accepted the risk, leave a `FIXME` and open an issue:
 
 ```python
 # FIXME(cybersquad-mcp): out-of-band MCP attach for <reason>. This violates
@@ -72,10 +72,10 @@ The bad case: any agent treating an in-the-wild MCP URL as something it can inst
 
 ### Rule 4 - Explicit tool allowlist via `*tool_names`
 
-`MCPServerAdapter(serverparams, *tool_names, connect_timeout=...)` accepts a positional allowlist of tool names. We always pass one. The allowlist is a per-MCP `_<NAME>_MCP_ALLOWED_TOOLS` tuple in `mcp_servers.py`:
+`MCPServerAdapter(serverparams, *tool_names, connect_timeout=...)` accepts a positional allowlist of tool names. We always pass one. The allowlist is a module-private `_ALLOWED_TOOLS` tuple in each per-MCP submodule (e.g. `mcp_servers/_time.py`):
 
 ```python
-_TIME_MCP_ALLOWED_TOOLS: tuple[str, ...] = ("get_current_time", "convert_time")
+_ALLOWED_TOOLS: tuple[str, ...] = ("get_current_time", "convert_time")
 ```
 
 Why: a vendor version bump that adds a new tool would otherwise silently widen the agent's surface (see Rule 1's "version bump is a review event"). With the allowlist, the new tool only reaches the agent once a contributor extends the tuple - which makes it a reviewer's checkbox at the same time they re-vet the bump.
@@ -89,24 +89,33 @@ Every provisioned MCP logs `MCP[<name>]: starting; allowed_tools=... connect_tim
 - **Pre-start "starting" line** - audit captures *intent* even if the adapter fails to start. If a poisoned server crashes the host during `__init__`, the operator still has the record of "we attempted to load tools X, Y, Z under timeout T".
 - **Post-start "started" line** - audit captures what the server *actually exposed* under our filter. A name discrepancy between intent and resolved is a signal the server is doing something unexpected.
 
-If you add a new provisioned MCP, mirror both lines via the `_enter_<name>_adapter(stack)` pattern in `mcp_servers.py`. Do not collapse to one log line - the failure mode the two-line pattern catches is exactly the one we care about.
+If you add a new provisioned MCP, mirror both lines via the `enter(stack)` helper in the new submodule (model: `mcp_servers/_time.py:enter`). Do not collapse to one log line - the failure mode the two-line pattern catches is exactly the one we care about.
 
 ## Wiring layout
 
-- `mcp_servers.py` - declares each provisioned MCP. `provisioned_mcp_tools()` is the context manager owning adapter lifecycles via `ExitStack`. Each adapter's `__init__` starts the subprocess and `enter_context(adapter)` registers `__exit__` for teardown (which calls `adapter.stop()`).
-- `crew.py` - receives the tool list from `provisioned_mcp_tools()` and distributes it to agents via `build_agent(extra_tools=...)`.
-- `main.py` - wraps `crew.kickoff()` in `with provisioned_mcp_tools() as mcp_tools:`. Dry-run bypasses MCP startup (the agent menu is shown from a no-MCP build).
-- `config.py:MCPConfig` - one `<name>_enabled` boolean per server, defaulting `false`; plus per-server settings (e.g. `time_timezone`) and the shared `connect_timeout_s` (default 10s, tighter than CrewAI's 30).
+```
+mcp_servers/
+├── __init__.py     # provisioned_mcp_tools() orchestrator + ProvisionedMCPTools registry
+├── _common.py      # Shared utilities (e.g. mcp_adapter_stack_usable())
+└── _<name>.py      # One submodule per provisioned MCP - shipped: _time.py
+```
+
+- **`mcp_servers/__init__.py`** - the orchestrator. `provisioned_mcp_tools()` is the context manager owning adapter lifecycles via `ExitStack`. Each enabled MCP's `enter(stack)` is called inside the manager; the stack runs each adapter's `stop()` in reverse on exit, including on exceptions.
+- **`mcp_servers/_common.py`** - utilities shared across submodules. Today: `mcp_adapter_stack_usable()` pre-flight that prevents CrewAI's interactive `click.confirm` install fallback when `mcpadapt` is missing.
+- **`mcp_servers/_<name>.py`** - one submodule per MCP. Each carries `_ALLOWED_TOOLS`, `_server_params()`, `available()`, and `enter(stack)`. Keeping each MCP in its own file means the file-skill loader auto-loads `cybersquad-mcp` on any submodule edit.
+- **`crew.py`** - receives the `ProvisionedMCPTools` registry from `provisioned_mcp_tools()` and distributes it to agents via `build_agent(crew_wide_mcp_tools=...)`.
+- **`main.py`** - wraps `crew.kickoff()` in `with provisioned_mcp_tools() as mcp_tools:`. Dry-run bypasses MCP startup (the agent menu is shown from a no-MCP build).
+- **`config.py:MCPConfig`** - one `<name>_enabled` boolean per server, defaulting `false`; plus per-server settings (e.g. `time_timezone`) and the shared `connect_timeout_s` (default 10s, tighter than CrewAI's 30).
 
 ## Adding a new provisioned MCP
 
 1. **Vet the vendor.** Source repository, maintainer, what other consumers depend on it. The MCP spec is permissive about server behaviour - the vetting is on us.
 2. **Pin EXACTLY in `pyproject.toml`.** `mcp-server-time==2026.1.26`, not `>=`. Confirm the package publishes Pydantic models for tool returns; if not, see Rule 1's `FIXME` pattern.
 3. **Add `<name>_enabled` to `MCPConfig`.** Default `false`. Add any per-server settings (timezone, endpoint, credentials).
-4. **Add `_<NAME>_MCP_ALLOWED_TOOLS` tuple in `mcp_servers.py`.** Explicit allowlist of tool names you intend the agent to see. Justify each entry in a one-liner if it is not self-evident from the name.
-5. **Add `_enter_<name>_adapter(stack)` helper.** Two log lines (Rule 5), `MCPServerAdapter(params, *_<NAME>_MCP_ALLOWED_TOOLS, connect_timeout=config.mcp.connect_timeout_s)`, returns the tool list.
-6. **Distribute in `crew.py`.** Crew-wide via `build_agent(extra_tools=...)` is for genuinely cross-cutting capabilities (time, basic web search). Member-specific is the default - put the tool list on the relevant `SquadMember.tools` or a sibling field on `ProvisionedMCPTools`.
-7. **Tests.** `tests/test_config.py::TestMCPConfig` for the env-var surface; `tests/test_mcp_servers.py` for the wiring (mocking `MCPServerAdapter`). The wiring tests should pin:
+4. **Create `mcp_servers/_<name>.py`.** Mirror `mcp_servers/_time.py`: module-private `_ALLOWED_TOOLS` tuple (justify each entry in a one-liner if not self-evident), `_server_params()`, `available()` (stack `mcp_adapter_stack_usable()` from `_common`), and `enter(stack)` with the two-line audit log.
+5. **Register in the orchestrator.** Add `from . import _<name>` at the top of `mcp_servers/__init__.py` and an `if config.mcp.<name>_enabled: ...` branch inside `provisioned_mcp_tools()` mirroring the time MCP's. Update the warning's `missing` ternary if the same `mcp_adapter_stack_usable` check applies.
+6. **Distribute in `crew.py`.** Crew-wide via `build_agent(crew_wide_mcp_tools=...)` is for genuinely cross-cutting capabilities (time, basic web search). Member-specific is the default - add a sibling field on `ProvisionedMCPTools` (e.g. `penetration_tester: tuple[BaseTool, ...]`) and route through `build_agent` only for the relevant member.
+7. **Tests.** `tests/test_config.py::TestMCPConfig` for the env-var surface; `tests/test_mcp_servers.py` for the wiring (mocking `mcp_servers._<name>.MCPServerAdapter` and `mcp_servers._<name>.available`). The wiring tests should pin:
    - the allowlist passed to the adapter (`MCPServerAdapter.call_args.args`)
    - `connect_timeout` honoured
    - both audit log lines emitted
@@ -122,7 +131,7 @@ Bumping a pinned vendor version is a review event because the spec marks tool pr
    - inputSchema changes (CrewAI inlines the schema into the agent-facing description)
    - outputSchema changes (do our typed-model consumers still validate?)
 2. Update the `==` pin in `pyproject.toml`.
-3. If new tools are wanted, extend `_<NAME>_MCP_ALLOWED_TOOLS`. If existing tools were renamed, update the tuple in lockstep with the pin.
+3. If new tools are wanted, extend the submodule's `_ALLOWED_TOOLS`. If existing tools were renamed, update the tuple in lockstep with the pin.
 4. Re-run the wiring tests. If the audit log's resolved tool names changed, that is the expected diff to review.
 5. PR description must call out the prose diff in the vendor's tool definitions, not just "bump version".
 
@@ -139,7 +148,7 @@ The bar is high. The skill exists to push back on these. If the user wants to la
 
 | Antipattern | Push back this way |
 |---|---|
-| `MCPServerAdapter(...)` constructed outside `mcp_servers.py` | Rule 2. If the contributor is sure, `FIXME(cybersquad-mcp)` + issue link. |
+| `MCPServerAdapter(...)` constructed outside a submodule of `mcp_servers/` | Rule 2. If the contributor is sure, `FIXME(cybersquad-mcp)` + issue link. |
 | Loose `>=X.Y` pin on a vendor MCP package | Rule 1. The version bump is the review event; `>=` skips it. |
 | Omitting `*tool_names` allowlist on `MCPServerAdapter(...)` | Rule 4. "Everything the server has" is the default attack surface. |
 | `dict[str, Any]` return on a consumed MCP tool when the vendor publishes models | Rule 1. Use the vendor's model, or write a local one. |
@@ -165,5 +174,5 @@ The bar is high. The skill exists to push back on these. If the user wants to la
 
 Auto-loads on edits to:
 
-- `mcp_servers.py` - the provisioning module
+- Any file under `mcp_servers/` - the provisioning package (orchestrator, shared utilities, per-MCP submodules)
 - `crew.py` - where MCP tools are distributed to agents (stacks on `cybersquad-agent-llm`)
