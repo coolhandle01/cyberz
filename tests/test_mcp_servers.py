@@ -136,12 +136,19 @@ class TestProvisionedMCPToolsTimeEnabled:
         assert any("starting" in m and "allowed_tools" in m for m in messages)
         assert any("started" in m and "get_current_time" in m for m in messages)
 
-    def test_skips_with_warning_when_vendor_package_missing(self, monkeypatch, caplog):
+    def test_skips_with_warning_when_time_package_missing(self, monkeypatch, caplog):
+        """mcpadapt available but `mcp_server_time` itself is not."""
         monkeypatch.setenv("CYBERSQUAD_MCP_TIME_ENABLED", "true")
         mcp_servers = _reload_mcp_servers()
 
         adapter_factory = MagicMock()
         monkeypatch.setattr(mcp_servers, "MCPServerAdapter", adapter_factory)
+        # Pin BOTH availability checks so the test does not depend on
+        # whether the venv has `mcpadapt` or `mcp_server_time` installed.
+        # CI installs `.[dev]` not `.[mcp]`, so neither is present there;
+        # this test pretends the adapter stack is fine but the vendor
+        # server module is the only missing piece.
+        monkeypatch.setattr(mcp_servers, "_mcp_adapter_stack_usable", lambda: True)
         monkeypatch.setattr(mcp_servers, "_mcp_server_time_available", lambda: False)
 
         with caplog.at_level("WARNING", logger="mcp_servers"):
@@ -149,7 +156,33 @@ class TestProvisionedMCPToolsTimeEnabled:
                 assert registry.crew_wide == ()
 
         adapter_factory.assert_not_called()
-        assert any("mcp_server_time" in r.message for r in caplog.records)
+        # Underscore form is the `missing` placeholder; matching that
+        # rules out the install-hint hyphenated form leaking the assertion.
+        assert any("but mcp_server_time is not importable" in r.message for r in caplog.records)
+
+    def test_skips_with_warning_when_mcpadapt_missing(self, monkeypatch, caplog):
+        """The whole CrewAI MCP stack is missing (the click.confirm trap).
+
+        This is the failure mode on a fresh `pip install -e .[dev]` -
+        crewai-tools is present (so the import at top of `mcp_servers.py`
+        succeeds) but mcpadapt is not, so `MCPServerAdapter.__init__`
+        would abort with an interactive `click.confirm` install prompt.
+        The pre-flight check turns that into a clean warning + skip.
+        """
+        monkeypatch.setenv("CYBERSQUAD_MCP_TIME_ENABLED", "true")
+        mcp_servers = _reload_mcp_servers()
+
+        adapter_factory = MagicMock()
+        monkeypatch.setattr(mcp_servers, "MCPServerAdapter", adapter_factory)
+        monkeypatch.setattr(mcp_servers, "_mcp_adapter_stack_usable", lambda: False)
+        monkeypatch.setattr(mcp_servers, "_mcp_server_time_available", lambda: False)
+
+        with caplog.at_level("WARNING", logger="mcp_servers"):
+            with mcp_servers.provisioned_mcp_tools() as registry:
+                assert registry.crew_wide == ()
+
+        adapter_factory.assert_not_called()
+        assert any("but mcpadapt is not importable" in r.message for r in caplog.records)
 
     def test_time_timezone_is_threaded_into_server_params(self, monkeypatch):
         monkeypatch.setenv("CYBERSQUAD_MCP_TIME_ENABLED", "true")
@@ -161,6 +194,25 @@ class TestProvisionedMCPToolsTimeEnabled:
         assert "--local-timezone" in params.args
         tz_index = params.args.index("--local-timezone") + 1
         assert params.args[tz_index] == "Europe/London"
+
+
+class TestAvailabilityChecks:
+    """The other tests monkeypatch the two availability functions for
+    determinism. These tests exercise the real ``importlib.util.find_spec``
+    branches so the production code paths stay covered.
+
+    Returning a bool either way is the contract; the actual True/False
+    depends on whether the venv has ``mcpadapt`` / ``mcp_server_time``
+    installed (CI: only `.[dev]` => False; dev: `.[dev,mcp]` => True).
+    """
+
+    def test_mcp_adapter_stack_usable_returns_bool(self):
+        mcp_servers = _reload_mcp_servers()
+        assert isinstance(mcp_servers._mcp_adapter_stack_usable(), bool)
+
+    def test_mcp_server_time_available_returns_bool(self):
+        mcp_servers = _reload_mcp_servers()
+        assert isinstance(mcp_servers._mcp_server_time_available(), bool)
 
 
 class TestProvisionedMCPToolsRegistryShape:
