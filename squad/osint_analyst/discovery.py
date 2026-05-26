@@ -30,6 +30,11 @@ from tools.recon import (
 )
 from tools.recon import probe_endpoints as probe_endpoints_impl
 from tools.recon.query import recon_endpoints, recon_open_ports, recon_subdomains
+from tools.recon.scope import (
+    InScopeEndpoints,
+    InScopeHostname,
+    InScopeHostnames,
+)
 
 
 class _RunInitialSweepArgs(BaseModel):
@@ -210,7 +215,7 @@ def recon_open_ports_tool(
 class _CertTransparencyArgs(BaseModel):
     """Explicit args_schema for the Certificate Transparency Lookup tool."""
 
-    domain: Hostname = Field(
+    domain: InScopeHostname = Field(
         description=(
             "Apex domain to look up in crt.sh certificate transparency logs"
             " (e.g. 'example.com'). Validated as an RFC 1123 hostname"
@@ -234,7 +239,7 @@ def cert_transparency_tool(domain: Hostname) -> list[str]:
 class _HistoricalUrlsArgs(BaseModel):
     """Explicit args_schema for the Historical URL Discovery tool."""
 
-    domain: Hostname = Field(
+    domain: InScopeHostname = Field(
         description=(
             "Domain to query waybackurls for (apex or subdomain). Validated"
             " as an RFC 1123 hostname (URLs / ports / paths reject"
@@ -258,7 +263,7 @@ def historical_urls_tool(domain: Hostname) -> list[str]:
 class _LlmDetectionArgs(BaseModel):
     """Explicit args_schema for the LLM Endpoint Detection tool."""
 
-    endpoints: list[Endpoint] = Field(
+    endpoints: InScopeEndpoints = Field(
         description=(
             "Live endpoint objects from the sweep (or a filtered subset)."
             " Each entry needs ``url`` and ideally ``technologies``;"
@@ -288,7 +293,7 @@ def llm_detection_tool(endpoints: list[Endpoint]) -> list[LlmEndpoint]:
 class _ProbeHostnamesArgs(BaseModel):
     """Explicit args_schema for the Probe Hostnames tool."""
 
-    hostnames: list[Hostname] = Field(
+    hostnames: InScopeHostnames = Field(
         description=(
             "Hostnames to re-probe with httpx for liveness, status code,"
             " and technology fingerprinting. Each entry is validated as an"
@@ -327,7 +332,7 @@ def probe_hostnames_tool(hostnames: list[Hostname]) -> list[Endpoint]:
 class _DetectTakeoverCandidatesArgs(BaseModel):
     """Explicit args_schema for the Detect Takeover Candidates tool."""
 
-    hostnames: list[Hostname] = Field(
+    hostnames: InScopeHostnames = Field(
         description=(
             "Hostnames to resolve via dnsx and flag for subdomain takeover."
             " Each entry is validated as an RFC 1123 hostname; URLs / ports"

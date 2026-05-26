@@ -20,12 +20,13 @@ from squad import cyber_tool
 from squad.penetration_tester._decorator import _parse_endpoints
 from tools.cloud.aws import check_s3_buckets
 from tools.cloud.azure import check_azure_blob_containers, check_azure_sas_tokens
+from tools.recon.scope import InScopeEndpoints, InScopeHostnames
 
 
 class _S3CheckArgs(BaseModel):
     """Explicit args_schema for the S3 Bucket Check tool."""
 
-    hostnames: list[Hostname] = Field(
+    hostnames: InScopeHostnames = Field(
         description=(
             "S3 hostnames the OSINT Analyst surfaced in recon.subdomains"
             " (matching ``*.s3.*.amazonaws.com``) or via cert"
@@ -53,7 +54,7 @@ def s3_check_tool(hostnames: list[Hostname]) -> list[RawFinding]:
 class _AzureBlobContainerArgs(BaseModel):
     """Explicit args_schema for the Azure Blob Container Check tool."""
 
-    hostnames: list[Hostname] = Field(
+    hostnames: InScopeHostnames = Field(
         description=(
             "Azure Blob hostnames the OSINT Analyst surfaced in"
             " recon.subdomains (matching ``*.blob.core.windows.net``)."
@@ -81,7 +82,7 @@ def azure_blob_container_check_tool(hostnames: list[Hostname]) -> list[RawFindin
 class _AzureSasTokenArgs(BaseModel):
     """Explicit args_schema for the Azure SAS Token Check tool."""
 
-    endpoints: list[Endpoint] = Field(
+    endpoints: InScopeEndpoints = Field(
         description=(
             "Endpoint objects. Scans each URL for embedded Azure SAS"
             " token query parameters (sv / se / sig / sr / sp). Static"

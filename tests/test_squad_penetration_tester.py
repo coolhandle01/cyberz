@@ -248,6 +248,7 @@ class TestHostnameIteratingWrappers:
         check_fn_path: str,
         programme_in_workspace,
         bystander_url: str,
+        invoke_tool,
     ) -> None:
         from urllib.parse import urlparse
 
@@ -258,7 +259,7 @@ class TestHostnameIteratingWrappers:
 
         check_module, check_attr = _resolve_check_fn(check_fn_path)
         with patch.object(check_module, check_attr, return_value=[]) as mcheck:
-            result = wrapper.func([oos_host])
+            result = invoke_tool(wrapper, hostnames=[oos_host])
 
         assert result == []
         mcheck.assert_not_called()
@@ -306,6 +307,7 @@ class TestHostnameListPassingWrappers:
         check_fn_path: str,
         programme_in_workspace,
         bystander_url: str,
+        invoke_tool,
     ) -> None:
         from urllib.parse import urlparse
 
@@ -316,7 +318,7 @@ class TestHostnameListPassingWrappers:
 
         check_module, check_attr = _resolve_check_fn(check_fn_path)
         with patch.object(check_module, check_attr, return_value=[]) as mcheck:
-            result = wrapper.func([oos_host])
+            result = invoke_tool(wrapper, hostnames=[oos_host])
 
         assert result == []
         mcheck.assert_called_once_with([])
@@ -395,12 +397,13 @@ class TestEndpointWrapperPassThrough:
         check_fn_path: str,
         programme_in_workspace,
         bystander_url: str,
+        invoke_tool,
     ) -> None:
-        """The wrapper-level scope filter drops endpoints whose host is
-        outside the programme's structured scope; ``check_X`` still
-        receives the (empty) filtered list but the per-endpoint HTTP
-        probe never fires. Same shape as the hostname-side OOS test
-        above."""
+        """The args_schema's ``InScopeEndpoints`` validator drops
+        endpoints whose host is outside the programme's structured
+        scope before the wrapper body runs; ``check_X`` still receives
+        the (empty) filtered list but the per-endpoint HTTP probe
+        never fires."""
         import importlib
 
         import squad.penetration_tester as pt_module
@@ -411,7 +414,7 @@ class TestEndpointWrapperPassThrough:
         check_module_path, check_attr = check_fn_path.rsplit(".", 1)
         check_module = importlib.import_module(check_module_path)
         with patch.object(check_module, check_attr, return_value=[]) as mcheck:
-            result = wrapper.func([oos_endpoint])
+            result = invoke_tool(wrapper, endpoints=[oos_endpoint])
 
         assert result == []
         for call in mcheck.call_args_list:

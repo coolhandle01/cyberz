@@ -12,12 +12,13 @@ from squad.penetration_tester._decorator import _parse_endpoints, pentest_tool
 from tools.pentest.header_xss import XSSHeader, check_header_xss
 from tools.pentest.path_traversal import PathTraversalPayload, check_path_traversal
 from tools.pentest.xss import check_reflected_xss
+from tools.recon.scope import InScopeEndpoints
 
 
 class _HeaderXssArgs(BaseModel):
     """Explicit args_schema for the Header XSS Probe tool."""
 
-    endpoints: list[Endpoint] = Field(
+    endpoints: InScopeEndpoints = Field(
         description=(
             "Live HTML-serving endpoint objects. Error pages and admin paths"
             " are especially fruitful - they tend to echo request metadata"
@@ -71,7 +72,7 @@ def header_xss_tool(
 class _PathTraversalArgs(BaseModel):
     """Explicit args_schema for the Path Traversal Probe tool."""
 
-    endpoints: list[Endpoint] = Field(
+    endpoints: InScopeEndpoints = Field(
         description=(
             "Parameterised endpoint objects. Prioritise filesystem-shaped"
             " parameter names (file, filename, path, page, template, include,"
@@ -131,7 +132,7 @@ def path_traversal_tool(
 class _XssArgs(BaseModel):
     """Explicit args_schema for the Reflected XSS Probe tool."""
 
-    endpoints: list[Endpoint] = Field(
+    endpoints: InScopeEndpoints = Field(
         description=(
             "Parameterised endpoint objects. Pass only endpoints whose"
             " response is HTML (the target renders user input back into a"

@@ -23,12 +23,13 @@ from tools.pentest.prototype_pollution import (
 from tools.pentest.sqlmap import run_sqlmap
 from tools.pentest.ssti import SstiPayload, check_ssti
 from tools.pentest.xxe import XxePayload, check_xxe
+from tools.recon.scope import InScopeEndpoints
 
 
 class _SqlmapArgs(BaseModel):
     """Explicit args_schema for the SQLMap Injection Scan tool."""
 
-    endpoints: list[Endpoint] = Field(
+    endpoints: InScopeEndpoints = Field(
         description=(
             "Parameterised endpoint objects to test for SQL injection. Pass"
             " only endpoints whose ``parameters`` is non-empty AND where"
@@ -60,7 +61,7 @@ def sqlmap_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
 class _SstiArgs(BaseModel):
     """Explicit args_schema for the Server-Side Template Injection Probe tool."""
 
-    endpoints: list[Endpoint] = Field(
+    endpoints: InScopeEndpoints = Field(
         description=(
             "Parameterised endpoint objects. Prioritise endpoints where the"
             " parameter is rendered into HTML the response returns (search,"
@@ -119,7 +120,7 @@ def ssti_probe_tool(
 class _PromptInjectionArgs(BaseModel):
     """Explicit args_schema for the Prompt Injection Probe tool."""
 
-    endpoints: list[Endpoint] = Field(
+    endpoints: InScopeEndpoints = Field(
         description=(
             "LLM-backed endpoint objects. Pass endpoints where the OSINT"
             " Analyst's LLM Endpoint Detection tool returned results,"
@@ -174,7 +175,7 @@ def prompt_injection_tool(
 class _NosqliArgs(BaseModel):
     """Explicit args_schema for the NoSQL Injection Scan tool."""
 
-    endpoints: list[Endpoint] = Field(
+    endpoints: InScopeEndpoints = Field(
         description=(
             "Parameterised endpoint objects. Prioritise endpoints where"
             " technologies mention MongoDB / DocumentDB / Mongoose, parameters"
@@ -206,7 +207,7 @@ def nosqli_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
 class _LdapInjectionArgs(BaseModel):
     """Explicit args_schema for the LDAP Injection Probe tool."""
 
-    endpoints: list[Endpoint] = Field(
+    endpoints: InScopeEndpoints = Field(
         description=(
             "Parameterised endpoint objects. Prioritise endpoints whose"
             " parameter names suggest authentication or directory lookup"
@@ -266,7 +267,7 @@ def ldap_injection_tool(
 class _CmdInjectionArgs(BaseModel):
     """Explicit args_schema for the Command Injection Probe tool."""
 
-    endpoints: list[Endpoint] = Field(
+    endpoints: InScopeEndpoints = Field(
         description=(
             "Parameterised endpoint objects. Prioritise endpoints whose"
             " parameter names suggest shell / system interaction (cmd, exec,"
@@ -327,7 +328,7 @@ def cmd_injection_tool(
 class _XxeArgs(BaseModel):
     """Explicit args_schema for the XXE Probe tool."""
 
-    endpoints: list[Endpoint] = Field(
+    endpoints: InScopeEndpoints = Field(
         description=(
             "Endpoint objects. Prioritise endpoints whose technologies mention"
             " SOAP / XML-RPC / WSDL / XML / web services, paths contain"
@@ -387,7 +388,7 @@ def xxe_probe_tool(
 class _PrototypePollutionArgs(BaseModel):
     """Explicit args_schema for the Prototype Pollution Check tool."""
 
-    endpoints: list[Endpoint] = Field(
+    endpoints: InScopeEndpoints = Field(
         description=(
             "Endpoint objects. Prioritise endpoints whose technologies mention"
             " Node.js / Express / Koa / Hapi / Fastify or other JS / TS"

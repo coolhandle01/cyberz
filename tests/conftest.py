@@ -502,6 +502,27 @@ def reload_module():
     return importlib.reload
 
 
+@pytest.fixture()
+def invoke_tool():
+    """Invoke a ``@cyber_tool`` wrapper the way CrewAI does at runtime.
+
+    CrewAI's tool-call path is ``args_schema.model_validate(payload).
+    model_dump()`` -> ``func(**dumped)``. The ``InScopeHostnames`` /
+    ``InScopeEndpoints`` / ``InScopeHostname`` / ``InScopeEndpoint``
+    typed aliases run their ``AfterValidator`` during the
+    ``model_validate`` step - that IS the scope guard. Tests that
+    exercise scope-guard behaviour call wrappers through this fixture
+    so the validator actually fires; ``.func(...)`` alone bypasses the
+    args_schema and sees the raw input verbatim.
+    """
+
+    def _invoke(wrapper, **kwargs):
+        validated = wrapper.args_schema.model_validate(kwargs).model_dump()
+        return wrapper.func(**validated)
+
+    return _invoke
+
+
 @pytest.fixture
 def make_response():
     """Factory for building MagicMock objects shaped like requests.Response.

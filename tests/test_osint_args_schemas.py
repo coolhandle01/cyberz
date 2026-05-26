@@ -52,6 +52,18 @@ from squad.workspace_tools import (
 pytestmark = pytest.mark.unit
 
 
+# Every schema in this file with a typed-target field
+# (``InScopeHostnames`` / ``InScopeEndpoints`` / ``InScopeHostname`` /
+# ``InScopeEndpoint``) runs its ``AfterValidator`` during
+# ``model_validate`` - and that validator calls ``current_programme()``.
+# Autousing ``programme_in_workspace`` stages a programme into the
+# rundir so every schema-shape test has the run-time context the
+# validator needs.
+@pytest.fixture(autouse=True)
+def _seed_programme(programme_in_workspace):
+    return programme_in_workspace
+
+
 # Tool-name -> explicit schema class. Covers every OSINT @cyber_tool
 # wrapper plus the two shared workspace readers re-exported via
 # ``squad.workspace_tools``. The shared ``Lookup CWE`` / ``Lookup OWASP

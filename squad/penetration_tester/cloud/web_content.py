@@ -14,12 +14,13 @@ from models import Endpoint, RawFinding
 from squad import cyber_tool
 from squad.penetration_tester._decorator import _parse_endpoints
 from tools.cloud import check_admin_panels, check_sensitive_files
+from tools.recon.scope import InScopeEndpoints
 
 
 class _SensitiveFilesArgs(BaseModel):
     """Explicit args_schema for the Sensitive Files Check tool."""
 
-    endpoints: list[Endpoint] = Field(
+    endpoints: InScopeEndpoints = Field(
         description=(
             "Endpoint objects. Pass a representative set of live"
             " endpoints; the tool deduplicates by origin so many can be"
@@ -49,7 +50,7 @@ def sensitive_files_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
 class _AdminPanelsArgs(BaseModel):
     """Explicit args_schema for the Admin Panels Check tool."""
 
-    endpoints: list[Endpoint] = Field(
+    endpoints: InScopeEndpoints = Field(
         description=(
             "Endpoint objects. The tool deduplicates by origin so passing"
             " many is safe. Probes common admin paths (/admin, /wp-admin,"

@@ -26,12 +26,10 @@ Assembly (LLM wiring, pipeline order, approval gates) lives in crew.py / tasks.p
 
 from __future__ import annotations
 
-import functools
-import inspect
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Protocol, cast, get_args, get_origin, runtime_checkable
+from typing import Protocol, cast, runtime_checkable
 
 from crewai import Agent, Task
 from crewai.tools import tool
@@ -87,113 +85,26 @@ def cyber_tool(
     required: the explicit Pydantic class overrides the signature-inferred
     schema CrewAI would otherwise build. Every cybersquad ``@tool``
     wrapper carries one - the inferred path is not reachable anywhere
-    in the squad. Per-field ``Field(description=...)`` is the
-    targeting guidance the agent reads when picking the tool.
+    in the squad. Per-field ``Field(description=...)`` is the targeting
+    guidance the agent reads when picking the tool.
 
-    ``pentest_tool`` and ``research_brief_tool`` compose on top of this
-    helper: they call ``cyber_tool`` underneath and then layer their own
-    docstring-injection (OWASP categories for the pentest wrapper, brief
-    formatting for the research one). Anything that does not need a
-    specialist wrapper uses ``@cyber_tool`` directly.
-
-    Scope safety is built in. Any ``args_schema`` field typed as a
-    cybersquad target primitive - ``Hostname`` / ``list[Hostname]`` or
-    ``Endpoint`` / ``list[Endpoint]`` - is automatically scope-filtered
-    against ``<run_dir>/programme.json`` before the body sees it. The
-    typed parameter IS the opt-in signal; there is no per-tool
-    parameter to forget. Fields typed as anything else (``str``,
-    StrEnum filters, recon paths, ...) pass through unchanged.
+    Scope safety is a Pydantic-native property of the args_schema, not
+    of this decorator: agent-facing target fields are typed via the
+    ``InScopeHostnames`` / ``InScopeEndpoints`` (list, filter) or
+    ``InScopeHostname`` / ``InScopeEndpoint`` (single, reject) aliases
+    in ``tools.recon.scope``. The ``AfterValidator`` on each alias
+    consults ``current_programme()`` during
+    ``args_schema.model_validate(...)`` - CrewAI's tool-call path runs
+    that validation before the wrapper body sees any input. The type
+    IS the contract; there is no wrapper-side guard to forget.
     """
 
     def decorator(fn: Callable[..., object]) -> SquadTool:
-        target = _apply_scope_filter(fn, args_schema)
-        wrapped = tool(name)(target)
+        wrapped = tool(name)(fn)
         wrapped.args_schema = args_schema
         return cast(SquadTool, wrapped)
 
     return decorator
-
-
-def _scope_filter_for_field(annotation: object) -> Callable[..., object] | None:
-    """Pick the scope filter for an args_schema field's annotation.
-
-    Returns ``filter_in_scope`` for ``Hostname`` / ``list[Hostname]``,
-    ``filter_endpoints_in_scope`` for ``Endpoint`` / ``list[Endpoint]``,
-    or ``None`` for any other annotation. The cybersquad target
-    primitives are identity-comparable (``Hostname`` is a single
-    ``Annotated[...]`` alias imported by every consumer) so ``is``
-    checks work without unwrapping the ``Annotated`` machinery.
-
-    Lazy imports break the import cycle: ``models`` and ``tools``
-    import nothing from ``squad``; we resolve them at decoration time.
-    """
-    from models import Endpoint, Hostname
-    from tools.recon.scope import filter_endpoints_in_scope, filter_in_scope
-
-    if annotation is Hostname:
-        return filter_in_scope
-    if annotation is Endpoint:
-        return filter_endpoints_in_scope
-
-    if get_origin(annotation) is list:
-        inner_args = get_args(annotation)
-        if inner_args:
-            inner = inner_args[0]
-            if inner is Hostname:
-                return filter_in_scope
-            if inner is Endpoint:
-                return filter_endpoints_in_scope
-
-    return None
-
-
-def _apply_scope_filter(
-    fn: Callable[..., object], args_schema: type[BaseModel]
-) -> Callable[..., object]:
-    """Wrap ``fn`` so every typed-target field is scope-filtered first.
-
-    Auto-detects ``Hostname`` / ``list[Hostname]`` / ``Endpoint`` /
-    ``list[Endpoint]`` fields on ``args_schema`` and wraps ``fn`` so
-    each runs through the matching filter
-    (``filter_in_scope`` / ``filter_endpoints_in_scope``) against
-    ``current_programme()`` before the body sees it. Fields with any
-    other annotation pass through unchanged. The wrapper returns ``fn``
-    unchanged when ``args_schema`` has no typed-target fields, so the
-    Programme lookup is paid for only when something actually needs
-    filtering.
-
-    ``inspect.signature.bind_partial`` resolves the named field whether
-    the caller passes it positionally or by keyword - CrewAI's runtime
-    path uses kwargs (built from ``args_schema``), but direct
-    ``tool.func(value)`` test invocations pass positionally and the
-    wrapper has to cover both shapes.
-    """
-    target_fields: dict[str, Callable[..., object]] = {}
-    for field_name, field_info in args_schema.model_fields.items():
-        filter_fn = _scope_filter_for_field(field_info.annotation)
-        if filter_fn is not None:
-            target_fields[field_name] = filter_fn
-
-    if not target_fields:
-        return fn
-
-    sig = inspect.signature(fn)
-
-    @functools.wraps(fn)
-    def guarded(*args: object, **kwargs: object) -> object:
-        bound = sig.bind_partial(*args, **kwargs)
-        programme = None
-        for field_name, filter_fn in target_fields.items():
-            values = bound.arguments.get(field_name)
-            if values:
-                if programme is None:
-                    from squad.workspace_tools import current_programme
-
-                    programme = current_programme()
-                bound.arguments[field_name] = filter_fn(values, programme)
-        return fn(*bound.args, **bound.kwargs)
-
-    return guarded
 
 
 # Shared workspace wrappers are imported after ``cyber_tool`` is defined,

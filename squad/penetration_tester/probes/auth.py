@@ -10,12 +10,13 @@ from models import Endpoint, RawFinding
 from squad.penetration_tester._decorator import _parse_endpoints, pentest_tool
 from tools.pentest.idor import IDORAttack, check_idor
 from tools.pentest.jwt import JwtAttack, check_jwt
+from tools.recon.scope import InScopeEndpoint, InScopeEndpoints
 
 
 class _IdorArgs(BaseModel):
     """Explicit args_schema for the IDOR Probe tool."""
 
-    endpoints: list[Endpoint] = Field(
+    endpoints: InScopeEndpoints = Field(
         description=(
             "Endpoint objects. Prioritise endpoints whose URL path includes"
             " numeric segments (/api/users/42, /orders/9), parameters include"
@@ -89,7 +90,7 @@ class _JwtCheckArgs(BaseModel):
             " (base64url-encoded JSON header)."
         ),
     )
-    endpoint: Endpoint = Field(
+    endpoint: InScopeEndpoint = Field(
         description=(
             "Endpoint that validates the JWT - one that returns 401 / 403"
             " without a valid token and 200 on success. Use the endpoint"

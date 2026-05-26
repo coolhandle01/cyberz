@@ -26,12 +26,13 @@ from tools.cloud import (
     check_portainer_paths,
     check_portainer_ports,
 )
+from tools.recon.scope import InScopeEndpoints, InScopeHostnames
 
 
 class _GrafanaPortArgs(BaseModel):
     """Explicit args_schema for the Grafana Port Check tool."""
 
-    hostnames: list[Hostname] = Field(
+    hostnames: InScopeHostnames = Field(
         description=(
             "Hostnames showing port 3000 open, hostnames whose"
             " technologies mention Grafana, or hostnames on a DevOps /"
@@ -58,7 +59,7 @@ def grafana_port_check_tool(hostnames: list[Hostname]) -> list[RawFinding]:
 class _GrafanaPathArgs(BaseModel):
     """Explicit args_schema for the Grafana Path Check tool."""
 
-    endpoints: list[Endpoint] = Field(
+    endpoints: InScopeEndpoints = Field(
         description=(
             "Endpoint objects. Probes /grafana on each origin (the tool"
             " deduplicates by origin). Fire when the target reverse-"
@@ -84,7 +85,7 @@ def grafana_path_check_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
 class _KibanaPortArgs(BaseModel):
     """Explicit args_schema for the Kibana Port Check tool."""
 
-    hostnames: list[Hostname] = Field(
+    hostnames: InScopeHostnames = Field(
         description=(
             "Hostnames showing port 5601 (Kibana) or 9200 (Elasticsearch"
             " stack) open, or hostnames whose technologies mention Kibana"
@@ -110,7 +111,7 @@ def kibana_port_check_tool(hostnames: list[Hostname]) -> list[RawFinding]:
 class _KibanaPathArgs(BaseModel):
     """Explicit args_schema for the Kibana Path Check tool."""
 
-    endpoints: list[Endpoint] = Field(
+    endpoints: InScopeEndpoints = Field(
         description=(
             "Endpoint objects. Probes /kibana on each origin (the tool"
             " deduplicates by origin). Fire when the target reverse-"
@@ -136,7 +137,7 @@ def kibana_path_check_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
 class _PortainerPortArgs(BaseModel):
     """Explicit args_schema for the Portainer Port Check tool."""
 
-    hostnames: list[Hostname] = Field(
+    hostnames: InScopeHostnames = Field(
         description=(
             "Hostnames showing port 9000 open, or hostnames whose"
             " technologies mention Docker / containerised infrastructure."
@@ -162,7 +163,7 @@ def portainer_port_check_tool(hostnames: list[Hostname]) -> list[RawFinding]:
 class _PortainerPathArgs(BaseModel):
     """Explicit args_schema for the Portainer Path Check tool."""
 
-    endpoints: list[Endpoint] = Field(
+    endpoints: InScopeEndpoints = Field(
         description=(
             "Endpoint objects. Probes /portainer on each origin (the tool"
             " deduplicates by origin). Fire when the target reverse-"

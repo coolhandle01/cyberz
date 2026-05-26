@@ -92,6 +92,19 @@ from squad.workspace_tools import (
 pytestmark = pytest.mark.unit
 
 
+# Every schema in this file with a typed-target field
+# (``InScopeHostnames`` / ``InScopeEndpoints`` / ``InScopeHostname`` /
+# ``InScopeEndpoint``) runs its ``AfterValidator`` during
+# ``model_validate`` - and that validator calls ``current_programme()``.
+# Autousing ``programme_in_workspace`` stages a programme into the
+# rundir so every schema-shape test has the run-time context the
+# validator needs. Tests that explicitly want a missing-programme
+# branch should re-monkeypatch to undo it.
+@pytest.fixture(autouse=True)
+def _seed_programme(programme_in_workspace):
+    return programme_in_workspace
+
+
 # Tool-name -> explicit schema class. Covers every PT @cyber_tool /
 # @pentest_tool wrapper, including the four recon / save tools and the
 # three shared workspace readers.
@@ -275,12 +288,13 @@ class TestSchemaAcceptReject:
                 _JwtCheckArgs,
                 {
                     "token": "eyJ.x.y",
-                    # endpoint is typed Endpoint; minimum shape is the URL.
-                    # Literal here, not f-string with target_apex: this is class-level
-                    # @pytest.mark.parametrize data, evaluated at collection time when
-                    # fixtures are not yet resolved. The URL value is incidental shape
-                    # data - the args_schema validation under test is URL-format-only.
-                    "endpoint": {"url": "https://example.invalid/api/me"},
+                    # endpoint is typed ``InScopeEndpoint``; the URL must be
+                    # in-scope per the programme fixture (which has
+                    # ``*.example.com`` in its in-scope catalogue). Literal
+                    # rather than f-string with target_apex: this is
+                    # class-level parametrize data, evaluated at collection
+                    # time when fixtures are not yet resolved.
+                    "endpoint": {"url": "https://victim.example.com/api/me"},
                     "attacks": ["alg-none"],
                 },
             ),

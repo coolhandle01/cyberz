@@ -41,7 +41,7 @@ from config import config
 from models import RawFinding, Severity, VerifiedVulnerability
 from models.h1 import Programme
 from tools._helpers import _SEVERITY_FLOOR_ORDER
-from tools.recon.scope import extract_domain, filter_in_scope
+from tools.recon.scope import filter_in_scope, host_of
 from tools.report_tools import _HAND_WAVY_IMPACT, _URL, calculate_cvss_score
 
 _ASSESSMENTS_SUBDIR = "assessments"
@@ -86,8 +86,7 @@ def above_floor(severity: Severity) -> bool:
 
 def in_scope(target: str, programme: Programme) -> bool:
     """True when ``target``'s hostname is in the programme's structured scope."""
-    domain = extract_domain(target)
-    return bool(filter_in_scope([domain], programme))
+    return bool(filter_in_scope([host_of(target)], programme))
 
 
 # Models
