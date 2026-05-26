@@ -69,12 +69,7 @@ def check_env() -> None:
         sys.exit(1)
 
 
-# ``Any`` here is deliberate: CrewAI's ``Crew`` is wrapped through several
-# decorators by the time this CLI handler sees it, and ``Crew | object``
-# adds no useful constraint at the boundary. ruff: noqa ANN401 - see
-# https://docs.astral.sh/ruff/rules/any-type/ for the rule's rationale
-# (the dynamic-typing escape hatch is exactly the right call at CLI edges).
-def dry_run_summary(crew: Any) -> None:  # noqa: ANN401
+def dry_run_summary(crew: Any) -> None:  # noqa: ANN401 - Crew is decorator-wrapped by the time the CLI sees it; tighter type buys nothing
     """Render the crew layout as rich tables without executing."""
     console.rule("[bold cyan]BOUNTY SQUAD - DRY RUN[/bold cyan]")
     console.print()

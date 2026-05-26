@@ -42,15 +42,9 @@ class TestCheckS3Buckets:
     no bucket-name guessing - we only probe assets the programme has
     exposed."""
 
-    def test_detects_publicly_listable_bucket(self, s3_hostname):
-        listing_xml = (
-            '<?xml version="1.0"?><ListBucketResult><Name>example</Name></ListBucketResult>'
-        )
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.text = listing_xml
-
-        with patch("requests.get", return_value=mock_resp):
+    def test_detects_publicly_listable_bucket(self, s3_hostname, make_response):
+        listing_xml = '<?xml version="1.0"?><ListBucketResult></ListBucketResult>'
+        with patch("requests.get", return_value=make_response(status=200, body=listing_xml)):
             results = check_s3_buckets([s3_hostname])
 
         listable = [r for r in results if "Publicly Listable" in r.title]
@@ -59,24 +53,19 @@ class TestCheckS3Buckets:
         assert listable[0].vuln_class == "CloudMisconfiguration"
         assert listable[0].target == f"https://{s3_hostname}/"
 
-    def test_detects_publicly_accessible_bucket(self, make_s3_hostname):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.text = "some non-listing content"
-
-        with patch("requests.get", return_value=mock_resp):
+    def test_detects_publicly_accessible_bucket(self, make_s3_hostname, make_response):
+        with patch(
+            "requests.get",
+            return_value=make_response(status=200, body="some non-listing content"),
+        ):
             results = check_s3_buckets([make_s3_hostname()])
 
         accessible = [r for r in results if "Publicly Accessible" in r.title]
         assert len(accessible) == 1
         assert accessible[0].severity_hint == Severity.MEDIUM
 
-    def test_non_200_produces_no_finding(self, s3_hostname):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 403
-        mock_resp.text = "Access Denied"
-
-        with patch("requests.get", return_value=mock_resp):
+    def test_non_200_produces_no_finding(self, s3_hostname, make_response):
+        with patch("requests.get", return_value=make_response(status=403, body="Access Denied")):
             results = check_s3_buckets([s3_hostname])
 
         assert results == []
@@ -88,15 +77,12 @@ class TestCheckS3Buckets:
         assert results == []
         mget.assert_not_called()
 
-    def test_iterates_every_supplied_hostname(self, make_s3_hostname):
+    def test_iterates_every_supplied_hostname(self, make_s3_hostname, make_response):
         seen_urls: list[str] = []
 
         def recording_get(url, **kwargs):
             seen_urls.append(url)
-            resp = MagicMock()
-            resp.status_code = 403
-            resp.text = "Denied"
-            return resp
+            return make_response(status=403, body="Denied")
 
         hostnames = [make_s3_hostname("assets"), make_s3_hostname("backup")]
         with patch("requests.get", side_effect=recording_get):
@@ -119,13 +105,9 @@ class TestCheckAzureBlobContainers:
     recon; the canonical container-name list (``public``, ``assets``,
     ``static``, ...) is probed against each."""
 
-    def test_detects_publicly_listed_container(self, azure_blob_hostname):
+    def test_detects_publicly_listed_container(self, azure_blob_hostname, make_response):
         listing_xml = '<?xml version="1.0"?><EnumerationResults><Blobs/></EnumerationResults>'
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.text = listing_xml
-
-        with patch("requests.get", return_value=mock_resp):
+        with patch("requests.get", return_value=make_response(status=200, body=listing_xml)):
             results = check_azure_blob_containers([azure_blob_hostname])
 
         listed = [r for r in results if "Publicly Listed" in r.title]
@@ -139,15 +121,12 @@ class TestCheckAzureBlobContainers:
         assert results == []
         mget.assert_not_called()
 
-    def test_probes_every_supplied_hostname(self, make_azure_blob_hostname):
+    def test_probes_every_supplied_hostname(self, make_azure_blob_hostname, make_response):
         seen_urls: list[str] = []
 
         def recording_get(url, **kwargs):
             seen_urls.append(url)
-            resp = MagicMock()
-            resp.status_code = 403
-            resp.text = "Denied"
-            return resp
+            return make_response(status=403, body="Denied")
 
         hostnames = [make_azure_blob_hostname("storage"), make_azure_blob_hostname("assets")]
         with patch("requests.get", side_effect=recording_get):
@@ -419,84 +398,76 @@ class TestGranularPanels:
     def _endpoints(self, target_apex: str) -> list[Endpoint]:
         return [Endpoint(url=f"https://app.{target_apex}/", status_code=200)]
 
-    def _port_mock(self, port: int, marker: str):
+    def _port_mock(self, port: int, marker: str, make_response):
         from urllib.parse import urlparse as _up
 
         def fake_get(url, **kwargs):
-            resp = MagicMock()
             parsed = _up(url)
             if parsed.port == port:
-                resp.status_code = 200
-                resp.text = f"<html>{marker}</html>"
-            else:
-                resp.status_code = 404
-                resp.text = ""
-            return resp
+                return make_response(status=200, body=f"<html>{marker}</html>")
+            return make_response(status=404, body="")
 
         return fake_get
 
-    def test_cpanel_port_2083(self, target_apex):
-        with patch("requests.get", side_effect=self._port_mock(2083, "cPanel")):
+    def test_cpanel_port_2083(self, target_apex, make_response):
+        with patch("requests.get", side_effect=self._port_mock(2083, "cPanel", make_response)):
             results = check_cpanel(self._hostnames(target_apex))
         assert any("cPanel" in r.title for r in results)
 
-    def test_whm_port_2087(self, target_apex):
-        with patch("requests.get", side_effect=self._port_mock(2087, "WebHost Manager")):
+    def test_whm_port_2087(self, target_apex, make_response):
+        with patch(
+            "requests.get", side_effect=self._port_mock(2087, "WebHost Manager", make_response)
+        ):
             results = check_cpanel(self._hostnames(target_apex))
         assert any("WHM" in r.title for r in results)
 
-    def test_plesk_port_8443(self, target_apex):
-        with patch("requests.get", side_effect=self._port_mock(8443, "Plesk")):
+    def test_plesk_port_8443(self, target_apex, make_response):
+        with patch("requests.get", side_effect=self._port_mock(8443, "Plesk", make_response)):
             results = check_plesk(self._hostnames(target_apex))
         assert any("Plesk" in r.title for r in results)
 
-    def test_directadmin_port_2222(self, target_apex):
-        with patch("requests.get", side_effect=self._port_mock(2222, "DirectAdmin")):
+    def test_directadmin_port_2222(self, target_apex, make_response):
+        with patch("requests.get", side_effect=self._port_mock(2222, "DirectAdmin", make_response)):
             results = check_directadmin(self._hostnames(target_apex))
         assert any("DirectAdmin" in r.title for r in results)
 
-    def test_webmin_port_10000(self, target_apex):
-        with patch("requests.get", side_effect=self._port_mock(10000, "Webmin")):
+    def test_webmin_port_10000(self, target_apex, make_response):
+        with patch("requests.get", side_effect=self._port_mock(10000, "Webmin", make_response)):
             results = check_webmin(self._hostnames(target_apex))
         assert any("Webmin" in r.title for r in results)
 
-    def test_grafana_port_3000(self, target_apex):
-        with patch("requests.get", side_effect=self._port_mock(3000, "Grafana")):
+    def test_grafana_port_3000(self, target_apex, make_response):
+        with patch("requests.get", side_effect=self._port_mock(3000, "Grafana", make_response)):
             results = check_grafana_ports(self._hostnames(target_apex))
         assert any("Grafana" in r.title for r in results)
 
-    def test_kibana_port_5601(self, target_apex):
-        with patch("requests.get", side_effect=self._port_mock(5601, "Kibana")):
+    def test_kibana_port_5601(self, target_apex, make_response):
+        with patch("requests.get", side_effect=self._port_mock(5601, "Kibana", make_response)):
             results = check_kibana_ports(self._hostnames(target_apex))
         assert any("Kibana" in r.title for r in results)
 
-    def test_portainer_port_9000(self, target_apex):
-        with patch("requests.get", side_effect=self._port_mock(9000, "Portainer")):
+    def test_portainer_port_9000(self, target_apex, make_response):
+        with patch("requests.get", side_effect=self._port_mock(9000, "Portainer", make_response)):
             results = check_portainer_ports(self._hostnames(target_apex))
         assert any("Portainer" in r.title for r in results)
 
-    def test_consul_port_8500(self, target_apex):
-        with patch("requests.get", side_effect=self._port_mock(8500, "Consul")):
+    def test_consul_port_8500(self, target_apex, make_response):
+        with patch("requests.get", side_effect=self._port_mock(8500, "Consul", make_response)):
             results = check_consul_vault_ports(self._hostnames(target_apex))
         assert any("Consul" in r.title for r in results)
 
-    def test_vault_port_8200(self, target_apex):
-        with patch("requests.get", side_effect=self._port_mock(8200, "Vault")):
+    def test_vault_port_8200(self, target_apex, make_response):
+        with patch("requests.get", side_effect=self._port_mock(8200, "Vault", make_response)):
             results = check_consul_vault_ports(self._hostnames(target_apex))
         assert any("Vault" in r.title for r in results)
 
-    def test_grafana_path_probe(self, target_apex):
+    def test_grafana_path_probe(self, target_apex, make_response):
         """Grafana path check probes /grafana on supplied origins."""
 
         def fake_get(url, **kwargs):
-            resp = MagicMock()
             if url.endswith("/grafana"):
-                resp.status_code = 200
-                resp.text = "<html>Grafana dashboard</html>"
-            else:
-                resp.status_code = 404
-                resp.text = ""
-            return resp
+                return make_response(status=200, body="<html>Grafana dashboard</html>")
+            return make_response(status=404, body="")
 
         with patch("requests.get", side_effect=fake_get):
             results = check_grafana_paths(self._endpoints(target_apex))

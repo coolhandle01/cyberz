@@ -24,6 +24,10 @@ description: Use the shared pytest fixtures in tests/conftest.py instead of rede
 | `dvwa_in_workspace` | DVWA staged into the rundir - same shape as `programme_in_workspace` but the in-flight programme is DVWA. Composes on top of `run_dir`. |
 | `endpoint` | An `Endpoint` model at `https://api.<target_apex>`. |
 | `recon_result` | A `ReconResult` combining `programme` and `endpoint`. |
+| `target_sld` | Second-level-domain prefix of `target_apex` (`example` from `example.com`). The basis for cloud bucket / account names, which cannot embed the apex's dot. |
+| `make_s3_hostname` / `s3_hostname` | Factory + canonical value for in-scope-themed S3 hostnames (`example-assets.s3.us-east-1.amazonaws.com`). Pair shape: factory when a test needs variants, single value for the common case. |
+| `make_azure_blob_hostname` / `azure_blob_hostname` | Same pair shape, for Azure Blob hostnames (`examplestorage.blob.core.windows.net`). |
+| `azure_sas_endpoint` | An `Endpoint` whose URL carries embedded Azure SAS-token query parameters - the canonical positive case for `check_azure_sas_tokens`. |
 | `raw_finding_high` / `raw_finding_low` / `raw_finding_oos` | `RawFinding` instances at each severity / scope tier. |
 | `verified_vuln` | A `VerifiedVulnerability` model. |
 | `disclosure_report` | A `DisclosureReport` derived from `verified_vuln`. |
