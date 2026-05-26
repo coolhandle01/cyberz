@@ -234,7 +234,7 @@ Edit the Agent prose (`role.md` / `goal.md` / `backstory.md` at the member root)
 - **Branch naming** - `feat/`, `fix/`, `chore/`, or `docs/` prefixes.
 - **One concern per PR** - a new agent, a new tool, a config change - not all three.
 - **No secrets in code** - credentials belong in `.env` (gitignored). New config fields go in `config.py` and must be documented in `.env.example`.
-- **Scope and safety** - changes to scanning behaviour must preserve rate-limiting and the scope guard in `tools/recon/scope.py`. `filter_in_scope()` is a hard safety boundary; the `@cyber_tool(scope_filter=...)` decorator applies it at the wrapper layer before the body ever sees agent-picked hosts. Do not weaken it or move it body-side.
+- **Scope and safety** - changes to scanning behaviour must preserve rate-limiting and the scope guard in `tools/recon/scope.py`. `filter_in_scope()` is a hard safety boundary; `@cyber_tool` auto-detects typed-target fields (`Hostname` / `list[Hostname]` / `Endpoint` / `list[Endpoint]`) on every wrapper's args_schema and applies the guard at the wrapper layer before the body ever sees agent-picked targets. Do not weaken it or move it body-side.
 
 ### CI jobs
 

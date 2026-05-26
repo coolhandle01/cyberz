@@ -39,10 +39,10 @@ What does **not** belong: the parameter's name (the field name already says that
 
 ## The paranoid-by-design boundary
 
-The args_schema + scope_filter pair is the surface the body trusts:
+The args_schema + auto-detected scope guard pair is the surface the body trusts:
 
 - **args_schema** constrains *shape* at Pydantic validation time. A mis-shaped value never reaches the body.
-- **`@cyber_tool(scope_filter=...)`** constrains *safety* at the wrapper boundary, independent of LLM input. Out-of-scope hosts never reach the body.
+- **`@cyber_tool`'s typed-target auto-detection** constrains *safety* at the wrapper boundary, independent of LLM input. Any field typed `Hostname` / `list[Hostname]` / `Endpoint` / `list[Endpoint]` is scope-filtered against `<run_dir>/programme.json` before the body sees it; out-of-scope targets never reach the body. The typed parameter IS the opt-in - no per-tool parameter to set.
 
 That is what lets the wrapper body be small - it does the work, not the re-checking. The "debatably paranoid" framing is exactly right: the boundary is paranoid so the body does not have to be. Inline scope dances in tool bodies are the anti-pattern this architecture exists to delete.
 

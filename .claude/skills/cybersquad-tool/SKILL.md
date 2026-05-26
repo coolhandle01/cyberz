@@ -64,7 +64,7 @@ def probe_hostnames_tool(hostnames: list[Hostname]) -> list[Endpoint]:
     return list(probe_endpoints_impl(hostnames))
 ```
 
-The typed parameter IS the opt-in signal. No per-tool `scope_filter=` parameter to forget. No sibling normaliser helpers - the `Hostname` primitive already lowercases / strips / rejects empty / rejects schemes-ports-paths at validation time, so the filter input is canonical before the filter sees it.
+The typed parameter IS the opt-in signal. The `Hostname` primitive already lowercases / strips / rejects empty / rejects schemes-ports-paths at validation time, so the filter input is canonical before the filter sees it - no per-wrapper normalisation step needed.
 
 Rules:
 
