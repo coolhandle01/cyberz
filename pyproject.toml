@@ -40,6 +40,8 @@ mcp = [
     # then crashes the host. Pull the extra explicitly so the dependency is
     # declared, not inferred from "we installed crewai-tools and hoped".
     "crewai-tools[mcp]>=1.14.5",
+    # The official Anthropic reference time server.
+    # Source: https://github.com/modelcontextprotocol/servers/tree/main/src/time
     "mcp-server-time==2026.1.26",
 ]
 dev = [

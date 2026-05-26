@@ -1,5 +1,13 @@
 """
-mcp_servers._time - The time MCP (``mcp-server-time``).
+mcp_servers._time - The time MCP.
+
+Vendor: the official ``mcp-server-time`` server from the Anthropic
+reference set, source at
+https://github.com/modelcontextprotocol/servers/tree/main/src/time and
+published to PyPI as ``mcp-server-time`` (pinned exact in
+``pyproject.toml``'s ``[project.optional-dependencies] mcp`` block).
+Exposes ``get_current_time`` and ``convert_time``; we allowlist both
+explicitly via ``_ALLOWED_TOOLS``.
 
 Submodule template for every provisioned MCP. Carries:
 
