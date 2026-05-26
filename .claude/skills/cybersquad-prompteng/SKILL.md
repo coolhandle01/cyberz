@@ -39,10 +39,10 @@ What does **not** belong: the parameter's name (the field name already says that
 
 ## The paranoid-by-design boundary
 
-The args_schema + auto-detected scope guard pair is the surface the body trusts:
+The args_schema is the surface the body trusts:
 
-- **args_schema** constrains *shape* at Pydantic validation time. A mis-shaped value never reaches the body.
-- **`@cyber_tool`'s typed-target auto-detection** constrains *safety* at the wrapper boundary, independent of LLM input. Any field typed `Hostname` / `list[Hostname]` / `Endpoint` / `list[Endpoint]` is scope-filtered against `<run_dir>/programme.json` before the body sees it; out-of-scope targets never reach the body. The typed parameter IS the opt-in - no per-tool parameter to set.
+- **Shape** is constrained at Pydantic validation time. A mis-shaped value never reaches the body.
+- **Scope safety** is constrained by typed args_schema field aliases (`TargetHostnames` / `TargetEndpoints` / `TargetHostname` / `TargetEndpoint` from `tools/recon/scope.py`). Each carries a Pydantic `AfterValidator` that runs the scope filter during `args_schema.model_validate(...)` - out-of-scope targets are filtered (lists) or rejected (singles) before any wrapper body sees input. The typed field IS the contract; see `cybersquad-tool` for the picking guidance per shape.
 
 That is what lets the wrapper body be small - it does the work, not the re-checking. The "debatably paranoid" framing is exactly right: the boundary is paranoid so the body does not have to be. Inline scope dances in tool bodies are the anti-pattern this architecture exists to delete.
 
@@ -53,7 +53,7 @@ That is what lets the wrapper body be small - it does the work, not the re-check
 - A Field description that names the parameter (`"The programme handle to use."`) but not the *shape* or the *constraint*. The field name already says it is the programme handle. The description should say what makes it valid or invalid.
 - Per-call instructions on a Field ("only call this when you have high confidence"). LLM-behaviour guidance belongs in the agent's `goal.md` / `backstory.md` (see `cybersquad-skill`), not on individual tool parameters.
 - A tool docstring carrying the agent's reasoning frame ("you should use this tool when..."). The docstring describes the tool; the agent's prose describes the agent. Cross-talk leaks one audience into the other.
-- A parameter that exists only so the LLM can re-affirm something the workspace already knows (the `programme_handle` parameter pattern this PR's dedupe story killed). If the value is workspace state, drop the parameter and source from `runtime`.
+- A parameter that exists only so the LLM can re-affirm something the workspace already knows (the canonical example: a `programme_handle: str` field, where `runtime.programme_handle` and `<run_dir>/programme.json` already carry the value). If the value is workspace state, drop the parameter and source from `runtime`.
 
 ## Worked examples
 
