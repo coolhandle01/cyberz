@@ -95,4 +95,15 @@ def test_drops_out_of_scope(make_response):
 
 ## Tool-specific response builders
 
-A local response builder that carries extra logic (cookie-jar inspection, POST body reflection - see `_post_resp` in `test_csrf.py`, the cookie-aware `_resp` in `test_cookies.py`) can stay local. The rule is: if the local helper is just constructing a generic mock response, replace it with `make_response`.
+A local response builder that carries extra logic can stay local. Two specific keepers:
+
+- `_resp` in `test_cookies.py` - cookie-jar inspection via `raw.headers.getlist` for multiple Set-Cookie headers.
+- `_post_resp` in `test_csrf.py` - generic in shape but kept for POST-context naming convenience at the call site (16 usages mocking `requests.post` return values).
+
+Otherwise the rule is: if the local helper is just constructing a generic mock response, replace it with `make_response`.
+
+## Args-schema contract tests
+
+Per-agent `tests/squad/<agent>/test_args_schemas.py` files parametrise over `MEMBER.schemas` and call the shared assertions in `tests/squad/_contract_assertions.py` (`assert_tool_wires_explicit_schema`, `assert_field_descriptions_present`, `assert_closed_world_mapping`). The helper module is intentionally not a `test_*.py` so pytest does not collect it; it is imported by each per-agent file. Agent-specific accept / reject cases (StrEnum payload rejection, hostname-shape rejection, wording pins like `Submit Report`'s irreversibility description) stay in the per-agent file.
+
+When adding a new typed tool, add the schema to `MEMBER.schemas` in the agent's `__init__.py` alongside `tools`; the closed-world test refuses the PR if the registry and the mapping disagree.

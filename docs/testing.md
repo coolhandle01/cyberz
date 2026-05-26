@@ -16,6 +16,18 @@ Coverage floor is 90%. Every new public function in `tools/` needs a test. Every
 
 The `cybersquad-test-fixtures` skill at `.claude/skills/cybersquad-test-fixtures/SKILL.md` covers the same material in a form Claude Code can load on demand when editing test files. The reference below is the same information in human-readable prose.
 
+## Args-schema contract tests
+
+Per-agent contract tests under `tests/squad/<agent>/test_args_schemas.py` (plus `tests/test_pt_args_schemas.py` and `tests/test_osint_args_schemas.py` at the root, pending the AC2 file-layout reorganisation) parametrise over `MEMBER.schemas` and call the shared assertions in `tests/squad/_contract_assertions.py`:
+
+- `assert_tool_wires_explicit_schema(member, tool_name)` - the live tool's `args_schema` is the class named in the registry.
+- `assert_field_descriptions_present(tool_name, schema_cls)` - every field on every schema carries a non-empty `Field(description=...)`.
+- `assert_closed_world_mapping(member)` - every private-prefixed args_schema class on `MEMBER.tools` is in `MEMBER.schemas`, and every mapping entry resolves to a registered tool.
+
+`MEMBER.schemas` (a `dict[str, type[BaseModel]]` on the `SquadMember` constant) is the canonical per-agent tool-name -> args_schema registry. Adding a new typed tool means adding both the tool to `MEMBER.tools` and the schema to `MEMBER.schemas` in the same agent's `__init__.py`; the closed-world test refuses the PR otherwise. Agent-specific accept / reject parametrize tables (StrEnum payload rejection, hostname-shape rejection, etc.) stay in each per-agent file.
+
+`tests/squad/_contract_assertions.py` is intentionally not a `test_*.py` module - pytest does not collect it. It is imported by each per-agent test file.
+
 ### `make_response`
 
 Factory for `MagicMock` objects shaped like `requests.Response`. Accepts `status`, `body`, `headers`, `cookies`, and `json`. Use this for any generic HTTP response mock. Tool-specific response builders that carry extra logic (e.g. cookie-jar inspection, POST body reflection) can stay local to their test file.
