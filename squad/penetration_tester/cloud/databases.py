@@ -22,13 +22,13 @@ from tools.cloud import (
     check_postgresql,
     check_redis,
 )
-from tools.recon.scope import InScopeHostnames
+from tools.recon.scope import TargetHostnames
 
 
 class _ElasticsearchCheckArgs(BaseModel):
     """Explicit args_schema for the Unauthenticated Elasticsearch Check tool."""
 
-    hostnames: InScopeHostnames = Field(
+    hostnames: TargetHostnames = Field(
         description=(
             "Hostnames showing port 9200 open (or technologies mentioning"
             " Elasticsearch). Probes /_cluster/health on each; a 200 with"
@@ -60,7 +60,7 @@ def elasticsearch_tool(hostnames: list[Hostname]) -> list[RawFinding]:
 class _CouchdbCheckArgs(BaseModel):
     """Explicit args_schema for the Unauthenticated CouchDB Check tool."""
 
-    hostnames: InScopeHostnames = Field(
+    hostnames: TargetHostnames = Field(
         description=(
             "Hostnames showing port 5984 open. Probes /_all_dbs on each;"
             " a 200 listing databases confirms no auth. The wrapper's"
@@ -88,7 +88,7 @@ def couchdb_tool(hostnames: list[Hostname]) -> list[RawFinding]:
 class _RedisCheckArgs(BaseModel):
     """Explicit args_schema for the Unauthenticated Redis Check tool."""
 
-    hostnames: InScopeHostnames = Field(
+    hostnames: TargetHostnames = Field(
         description=(
             "Hostnames showing port 6379 open. Sends a PING; a +PONG"
             " without AUTH confirms no password is set. The wrapper's"
@@ -116,7 +116,7 @@ def redis_tool(hostnames: list[Hostname]) -> list[RawFinding]:
 class _MongodbCheckArgs(BaseModel):
     """Explicit args_schema for the Unauthenticated MongoDB Check tool."""
 
-    hostnames: InScopeHostnames = Field(
+    hostnames: TargetHostnames = Field(
         description=(
             "Hostnames showing port 27017 open. Sends a minimal isMaster"
             " wire query; a valid response without error confirms"
@@ -146,7 +146,7 @@ def mongodb_tool(hostnames: list[Hostname]) -> list[RawFinding]:
 class _PostgresqlCheckArgs(BaseModel):
     """Explicit args_schema for the Exposed PostgreSQL Check tool."""
 
-    hostnames: InScopeHostnames = Field(
+    hostnames: TargetHostnames = Field(
         description=(
             "Hostnames showing port 5432 open. CRITICAL if trust"
             " authentication allows connection without a password;"
@@ -177,7 +177,7 @@ def postgresql_tool(hostnames: list[Hostname]) -> list[RawFinding]:
 class _MysqlCheckArgs(BaseModel):
     """Explicit args_schema for the Exposed MySQL/MariaDB Check tool."""
 
-    hostnames: InScopeHostnames = Field(
+    hostnames: TargetHostnames = Field(
         description=(
             "Hostnames showing port 3306 open. MEDIUM if the port is"
             " reachable and the server responds with a valid handshake"

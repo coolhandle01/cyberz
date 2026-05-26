@@ -15,13 +15,13 @@ from models import Endpoint, Hostname, RawFinding
 from squad import cyber_tool
 from squad.penetration_tester._decorator import _parse_endpoints
 from tools.cloud import check_consul_vault_paths, check_consul_vault_ports
-from tools.recon.scope import InScopeEndpoints, InScopeHostnames
+from tools.recon.scope import TargetEndpoints, TargetHostnames
 
 
 class _ConsulVaultPortArgs(BaseModel):
     """Explicit args_schema for the Consul/Vault Port Check tool."""
 
-    hostnames: InScopeHostnames = Field(
+    hostnames: TargetHostnames = Field(
         description=(
             "Hostnames showing port 8500 (Consul) or 8200 (Vault) open,"
             " or hostnames on a cloud-native / microservices target."
@@ -48,7 +48,7 @@ def consul_vault_port_check_tool(hostnames: list[Hostname]) -> list[RawFinding]:
 class _ConsulVaultPathArgs(BaseModel):
     """Explicit args_schema for the Consul/Vault Path Check tool."""
 
-    endpoints: InScopeEndpoints = Field(
+    endpoints: TargetEndpoints = Field(
         description=(
             "Endpoint objects. Probes /consul/ui and /vault/ui on each"
             " origin (the tool deduplicates by origin). Fire when the"

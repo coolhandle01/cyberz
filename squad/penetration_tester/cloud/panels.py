@@ -13,13 +13,13 @@ from pydantic import BaseModel, Field
 from models import Hostname, RawFinding
 from squad import cyber_tool
 from tools.cloud import check_cpanel, check_directadmin, check_plesk, check_webmin
-from tools.recon.scope import InScopeHostnames
+from tools.recon.scope import TargetHostnames
 
 
 class _CpanelArgs(BaseModel):
     """Explicit args_schema for the cPanel/WHM Check tool."""
 
-    hostnames: InScopeHostnames = Field(
+    hostnames: TargetHostnames = Field(
         description=(
             "Hostnames showing one of ports 2082, 2083, 2086, or 2087"
             " open, or hostnames on a target that appears to be a shared /"
@@ -48,7 +48,7 @@ def cpanel_tool(hostnames: list[Hostname]) -> list[RawFinding]:
 class _PleskArgs(BaseModel):
     """Explicit args_schema for the Plesk Check tool."""
 
-    hostnames: InScopeHostnames = Field(
+    hostnames: TargetHostnames = Field(
         description=(
             "Hostnames showing port 8880 or 8443 open, or hostnames on a"
             " managed-hosting or VPS provider. Probes Plesk on 8880 (HTTP)"
@@ -74,7 +74,7 @@ def plesk_tool(hostnames: list[Hostname]) -> list[RawFinding]:
 class _DirectadminArgs(BaseModel):
     """Explicit args_schema for the DirectAdmin Check tool."""
 
-    hostnames: InScopeHostnames = Field(
+    hostnames: TargetHostnames = Field(
         description=(
             "Hostnames showing port 2222 open on a target that appears to"
             " be shared hosting. The wrapper's scope filter drops"
@@ -98,7 +98,7 @@ def directadmin_tool(hostnames: list[Hostname]) -> list[RawFinding]:
 class _WebminArgs(BaseModel):
     """Explicit args_schema for the Webmin Check tool."""
 
-    hostnames: InScopeHostnames = Field(
+    hostnames: TargetHostnames = Field(
         description=(
             "Hostnames showing port 10000 open, or hostnames on a"
             " self-hosted Linux server. The wrapper's scope filter drops"

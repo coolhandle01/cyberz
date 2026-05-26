@@ -200,9 +200,11 @@ class TestHttpUrl:
     def test_rejects_malformed(self, target_url):
         """Walks the malformed corpus, deriving each case from target_url so
         intent ("a deliberately broken URL based on the in-scope target") is
-        readable at the call site. The Hostname-component check inside
-        HttpUrl is exercised by the leading-hyphen case - a URL whose host
-        fails Hostname validation rejects too.
+        readable at the call site. Delegates to ``pydantic.HttpUrl`` for the
+        URL contract, so the cases here pin Pydantic-blessed rejects (empty
+        / non-HTTP scheme / missing host) plus the one cybersquad-side
+        workaround (the empty-authority ``https:///path`` case Pydantic
+        otherwise interprets as ``https://path/``).
         """
         from urllib.parse import urlparse
 
@@ -216,7 +218,6 @@ class TestHttpUrl:
             ("file:///etc/passwd", "file scheme"),
             ("https://", "scheme with no host"),
             ("https:///path", "scheme + path with no host"),
-            (f"https://-{host}", "hostname inside URL fails RFC 1123"),
         ]
         for value, label in cases:
             with pytest.raises(ValidationError):

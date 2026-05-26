@@ -11,7 +11,7 @@ from squad.penetration_tester._decorator import _parse_endpoints, _recon_from_pa
 from tools.pentest.errors import check_error_disclosure
 from tools.pentest.sourcemaps import check_js_source_maps
 from tools.pentest.sri import check_sri
-from tools.recon.scope import InScopeEndpoints
+from tools.recon.scope import TargetEndpoints
 
 
 class _SourceMapsArgs(BaseModel):
@@ -71,7 +71,7 @@ def sri_check_tool(recon_path: str) -> list[RawFinding]:
 class _ErrorDisclosureArgs(BaseModel):
     """Explicit args_schema for the Error and Stack Trace Disclosure Check tool."""
 
-    endpoints: InScopeEndpoints = Field(
+    endpoints: TargetEndpoints = Field(
         description=(
             "Endpoint objects to probe with error-triggering inputs."
             " Prioritise parameterised endpoints (parameters increase the"

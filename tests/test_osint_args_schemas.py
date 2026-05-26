@@ -53,8 +53,8 @@ pytestmark = pytest.mark.unit
 
 
 # Every schema in this file with a typed-target field
-# (``InScopeHostnames`` / ``InScopeEndpoints`` / ``InScopeHostname`` /
-# ``InScopeEndpoint``) runs its ``AfterValidator`` during
+# (``TargetHostnames`` / ``TargetEndpoints`` / ``TargetHostname`` /
+# ``TargetEndpoint``) runs its ``AfterValidator`` during
 # ``model_validate`` - and that validator calls ``current_programme()``.
 # Autousing ``programme_in_workspace`` stages a programme into the
 # rundir so every schema-shape test has the run-time context the

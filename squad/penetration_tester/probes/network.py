@@ -11,13 +11,13 @@ from models import Endpoint, RawFinding
 from squad.penetration_tester._decorator import _parse_endpoints, pentest_tool
 from tools.pentest.open_redirect import OpenRedirectPayload, check_open_redirect
 from tools.pentest.ssrf import SsrfPayload, check_ssrf
-from tools.recon.scope import InScopeEndpoints
+from tools.recon.scope import TargetEndpoints
 
 
 class _SsrfArgs(BaseModel):
     """Explicit args_schema for the SSRF Probe tool."""
 
-    endpoints: InScopeEndpoints = Field(
+    endpoints: TargetEndpoints = Field(
         description=(
             "Endpoint objects whose parameters plausibly accept URLs,"
             " hostnames, file paths, or resource identifiers (url=, path=,"
@@ -61,7 +61,7 @@ def ssrf_probe_tool(
 class _OpenRedirectArgs(BaseModel):
     """Explicit args_schema for the Open Redirect Probe tool."""
 
-    endpoints: InScopeEndpoints = Field(
+    endpoints: TargetEndpoints = Field(
         description=(
             "Parameterised endpoint objects. Prioritise redirect-shaped"
             " parameter names (redirect, redirect_uri, return, return_to,"

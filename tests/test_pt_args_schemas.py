@@ -93,8 +93,8 @@ pytestmark = pytest.mark.unit
 
 
 # Every schema in this file with a typed-target field
-# (``InScopeHostnames`` / ``InScopeEndpoints`` / ``InScopeHostname`` /
-# ``InScopeEndpoint``) runs its ``AfterValidator`` during
+# (``TargetHostnames`` / ``TargetEndpoints`` / ``TargetHostname`` /
+# ``TargetEndpoint``) runs its ``AfterValidator`` during
 # ``model_validate`` - and that validator calls ``current_programme()``.
 # Autousing ``programme_in_workspace`` stages a programme into the
 # rundir so every schema-shape test has the run-time context the
@@ -288,7 +288,7 @@ class TestSchemaAcceptReject:
                 _JwtCheckArgs,
                 {
                     "token": "eyJ.x.y",
-                    # endpoint is typed ``InScopeEndpoint``; the URL must be
+                    # endpoint is typed ``TargetEndpoint``; the URL must be
                     # in-scope per the programme fixture (which has
                     # ``*.example.com`` in its in-scope catalogue). Literal
                     # rather than f-string with target_apex: this is

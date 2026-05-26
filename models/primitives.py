@@ -96,15 +96,18 @@ Hostname = Annotated[str, AfterValidator(_validate_hostname)]
 def _validate_endpoint_url(value: str) -> str:
     """Validate that ``value`` is a parseable HTTP / HTTPS URL.
 
-    URL shape (scheme / authority / RFC-3986 well-formedness) delegates
-    to ``pydantic.HttpUrl``; the host component runs through
-    ``_validate_hostname`` so RFC 1123 hostname strictness (no leading
-    hyphens, no oversized labels) holds inside URLs too - Pydantic's
-    URL parser is RFC-3986-permissive on the host, which is broader
-    than the bounty surface should be probing. Keeps the input as
-    ``str`` so every downstream consumer that uses string methods on
-    ``ep.url`` keeps working; see the module docstring for the
-    runtime-type migration plan in FIXME(#163).
+    Delegates to ``pydantic.HttpUrl`` (canonical RFC-3986 parser,
+    http/https scheme, valid host). Keeps the input as ``str`` so every
+    downstream consumer that uses string methods on ``ep.url`` keeps
+    working; see the module docstring for the runtime-type migration
+    plan in FIXME(#163).
+
+    One workaround sits in front of the upstream call: stdlib
+    ``urlparse`` reports an empty netloc for ``https:///path``, but
+    Pydantic interprets the same input as ``https://path/`` (treats the
+    path segment as the host). That LLM-facing contract should reject
+    the empty-authority case rather than silently probe a host called
+    "path", so we look at ``urlparse(...).netloc`` first.
     """
     from urllib.parse import urlparse
 
@@ -115,18 +118,12 @@ def _validate_endpoint_url(value: str) -> str:
     cleaned = value.strip()
     if not cleaned:
         raise ValueError("url cannot be empty")
-    # Pydantic interprets ``https:///path`` as ``https://path/`` (treats
-    # the path segment as the host); check the stdlib parse for an
-    # empty authority before handing off so the empty-host case rejects
-    # the way the LLM-facing contract expects.
     if not urlparse(cleaned).netloc:
         raise ValueError(f"url must include an authority component: {value!r}")
     # Pydantic raises ``ValidationError`` on RFC-3986 violations; the
     # AfterValidator chain propagates it to the calling model as a
     # field-level error.
-    parsed = _PydanticHttpUrl(cleaned)
-    if parsed.host:
-        _validate_hostname(parsed.host)
+    _PydanticHttpUrl(cleaned)
     return cleaned
 
 

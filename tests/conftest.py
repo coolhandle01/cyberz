@@ -507,8 +507,8 @@ def invoke_tool():
     """Invoke a ``@cyber_tool`` wrapper the way CrewAI does at runtime.
 
     CrewAI's tool-call path is ``args_schema.model_validate(payload).
-    model_dump()`` -> ``func(**dumped)``. The ``InScopeHostnames`` /
-    ``InScopeEndpoints`` / ``InScopeHostname`` / ``InScopeEndpoint``
+    model_dump()`` -> ``func(**dumped)``. The ``TargetHostnames`` /
+    ``TargetEndpoints`` / ``TargetHostname`` / ``TargetEndpoint``
     typed aliases run their ``AfterValidator`` during the
     ``model_validate`` step - that IS the scope guard. Tests that
     exercise scope-guard behaviour call wrappers through this fixture

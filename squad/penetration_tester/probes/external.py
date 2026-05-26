@@ -12,13 +12,13 @@ from pydantic import BaseModel, Field
 from models import Endpoint, RawFinding
 from squad.penetration_tester._decorator import _parse_endpoints, pentest_tool
 from tools.pentest.nuclei import run_nuclei
-from tools.recon.scope import InScopeEndpoints
+from tools.recon.scope import TargetEndpoints
 
 
 class _NucleiScanArgs(BaseModel):
     """Explicit args_schema for the Nuclei Scan tool."""
 
-    endpoints: InScopeEndpoints = Field(
+    endpoints: TargetEndpoints = Field(
         description=(
             "Live endpoint objects to scan (status_code < 500). Pass the typed"
             " list directly from recon; do not stringify."

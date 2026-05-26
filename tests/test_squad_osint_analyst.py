@@ -150,7 +150,7 @@ class TestOsintAnalystTools:
 
         Asserts on the real scope-guard path: the fixture programme's
         structured scope (``example.com`` + ``*.example.com``) does not
-        cover ``bystander.example.org``, so the ``InScopeHostnames``
+        cover ``bystander.example.org``, so the ``TargetHostnames``
         validator empties the list and ``probe_endpoints_impl`` is
         never called.
         """
@@ -194,7 +194,7 @@ class TestOsintAnalystTools:
         self, programme_in_workspace, bystander_url, invoke_tool
     ) -> None:
         """Same scope-guard contract as ``test_probe_hostnames_tool_drops_out_of_scope``,
-        on the DNS side: the ``InScopeHostnames`` validator drops the
+        on the DNS side: the ``TargetHostnames`` validator drops the
         out-of-scope hostname at args_schema time, before any DNS
         traffic fires."""
         from urllib.parse import urlparse

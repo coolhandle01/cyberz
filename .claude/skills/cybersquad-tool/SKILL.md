@@ -14,12 +14,12 @@ Every CrewAI `@tool`-wrapped function the agents see follows these rules. They a
 ```python
 from pydantic import BaseModel, Field
 from squad import cyber_tool
-from tools.recon.scope import InScopeHostnames
+from tools.recon.scope import TargetHostnames
 
 class _S3CheckArgs(BaseModel):
     """Explicit args_schema for the S3 Bucket Check tool."""
 
-    hostnames: InScopeHostnames = Field(
+    hostnames: TargetHostnames = Field(
         description=(
             "S3 hostnames the OSINT Analyst surfaced in recon.subdomains"
             " (matching ``*.s3.*.amazonaws.com``) or via cert"
@@ -55,17 +55,17 @@ Mechanics: four typed aliases in `tools/recon/scope.py` carry the scope guard as
 
 | Alias | Inner | Semantic |
 |---|---|---|
-| `InScopeHostnames` | `list[Hostname]` | Filter silently - LLM may pass mixed candidate list, only in-scope survive |
-| `InScopeEndpoints` | `list[Endpoint]` | Same filter semantic, host-extracted from `Endpoint.url` |
-| `InScopeHostname` | `Hostname` | Reject loudly - a single target is the LLM committing; OOS raises ValueError |
-| `InScopeEndpoint` | `Endpoint` | Same loud-reject semantic |
+| `TargetHostnames` | `list[Hostname]` | Filter silently - LLM may pass mixed candidate list, only in-scope survive |
+| `TargetEndpoints` | `list[Endpoint]` | Same filter semantic, host-extracted from `Endpoint.url` |
+| `TargetHostname` | `Hostname` | Reject loudly - a single target is the LLM committing; OOS raises ValueError |
+| `TargetEndpoint` | `Endpoint` | Same loud-reject semantic |
 
 ```python
 from squad import cyber_tool
-from tools.recon.scope import InScopeHostnames
+from tools.recon.scope import TargetHostnames
 
 class _ProbeHostnamesArgs(BaseModel):
-    hostnames: InScopeHostnames = Field(description="...")
+    hostnames: TargetHostnames = Field(description="...")
 
 @cyber_tool("Probe Hostnames", args_schema=_ProbeHostnamesArgs)
 def probe_hostnames_tool(hostnames: list[Hostname]) -> list[Endpoint]:
@@ -80,7 +80,7 @@ The args_schema field type IS the opt-in signal. The `Hostname` primitive (compo
 
 Rules:
 
-- Use `InScopeHostnames` / `InScopeEndpoints` (list filter, silent drop) on multi-target args_schema fields; use `InScopeHostname` / `InScopeEndpoint` (single, loud reject) on commit-to-one fields. The matching field type IS the scope-safety signal. A field typed plain `list[Hostname]` / `Endpoint` validates RFC 1123 / URL shape but does *not* scope-check - reach for the `InScope*` variant when the agent picks the targets.
+- Use `TargetHostnames` / `TargetEndpoints` (list filter, silent drop) on multi-target args_schema fields; use `TargetHostname` / `TargetEndpoint` (single, loud reject) on commit-to-one fields. The matching field type IS the scope-safety signal. A field typed plain `list[Hostname]` / `Endpoint` validates RFC 1123 / URL shape but does *not* scope-check - reach for the `InScope*` variant when the agent picks the targets.
 - The body must still handle an empty filtered list. The validator does not short-circuit on empty; it forwards the empty list and the body decides.
 - Tests for a wrapper with an `InScope*` field need `programme_in_workspace` (the conftest fixture) so the validator's `current_programme()` lookup resolves. Tests that exercise the OOS-drop path take `bystander_url` and pass its hostname; tests that invoke a wrapper end-to-end use the `invoke_tool` fixture (mirrors CrewAI's `args_schema.model_validate(...).model_dump()` -> `func(**dumped)` path so the validator actually runs - direct `.func(...)` calls bypass args_schema).
 - Do not duplicate the validator inside the body. The whole point of the typed alias is that scope-safety lives in the type signature - the body trusts the validated input.

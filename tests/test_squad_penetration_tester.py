@@ -399,7 +399,7 @@ class TestEndpointWrapperPassThrough:
         bystander_url: str,
         invoke_tool,
     ) -> None:
-        """The args_schema's ``InScopeEndpoints`` validator drops
+        """The args_schema's ``TargetEndpoints`` validator drops
         endpoints whose host is outside the programme's structured
         scope before the wrapper body runs; ``check_X`` still receives
         the (empty) filtered list but the per-endpoint HTTP probe

@@ -155,11 +155,11 @@ class TestFilterInScope:
 
 
 class TestInScopeTypedAliases:
-    """The ``InScopeHostnames`` / ``InScopeEndpoints`` typed aliases run
+    """The ``TargetHostnames`` / ``TargetEndpoints`` typed aliases run
     a Pydantic ``AfterValidator`` at ``args_schema.model_validate(...)``
     time - that is the scope guard. List variants filter silently
     (mixed candidate lists pass survivors); single variants
-    (``InScopeHostname`` / ``InScopeEndpoint``) raise ``ValueError`` on
+    (``TargetHostname`` / ``TargetEndpoint``) raise ``ValueError`` on
     an OOS pick. The aliases are exercised end-to-end via a small
     args_schema stub that mirrors what the cloud / probe / OSINT
     wrappers declare in production.
@@ -168,10 +168,10 @@ class TestInScopeTypedAliases:
     def test_list_hostnames_filters_oos(self, programme_in_workspace, target_apex):
         from pydantic import BaseModel
 
-        from tools.recon.scope import InScopeHostnames
+        from tools.recon.scope import TargetHostnames
 
         class _Args(BaseModel):
-            hostnames: InScopeHostnames
+            hostnames: TargetHostnames
 
         parsed = _Args.model_validate(
             {"hostnames": [f"api.{target_apex}", "bystander.example.org"]}
@@ -181,10 +181,10 @@ class TestInScopeTypedAliases:
     def test_list_endpoints_filters_oos(self, programme_in_workspace, target_apex, bystander_url):
         from pydantic import BaseModel
 
-        from tools.recon.scope import InScopeEndpoints
+        from tools.recon.scope import TargetEndpoints
 
         class _Args(BaseModel):
-            endpoints: InScopeEndpoints
+            endpoints: TargetEndpoints
 
         parsed = _Args.model_validate(
             {
@@ -200,10 +200,10 @@ class TestInScopeTypedAliases:
     def test_single_hostname_rejects_oos(self, programme_in_workspace):
         from pydantic import BaseModel, ValidationError
 
-        from tools.recon.scope import InScopeHostname
+        from tools.recon.scope import TargetHostname
 
         class _Args(BaseModel):
-            hostname: InScopeHostname
+            hostname: TargetHostname
 
         with pytest.raises(ValidationError, match="not in the selected programme's scope"):
             _Args.model_validate({"hostname": "bystander.example.org"})
@@ -211,10 +211,10 @@ class TestInScopeTypedAliases:
     def test_single_endpoint_rejects_oos(self, programme_in_workspace, bystander_url):
         from pydantic import BaseModel, ValidationError
 
-        from tools.recon.scope import InScopeEndpoint
+        from tools.recon.scope import TargetEndpoint
 
         class _Args(BaseModel):
-            endpoint: InScopeEndpoint
+            endpoint: TargetEndpoint
 
         with pytest.raises(ValidationError, match="not in the selected programme's scope"):
             _Args.model_validate({"endpoint": {"url": bystander_url, "status_code": 200}})
@@ -225,10 +225,10 @@ class TestInScopeTypedAliases:
         fixture is taken, so the lookup would raise if it ran."""
         from pydantic import BaseModel
 
-        from tools.recon.scope import InScopeHostnames
+        from tools.recon.scope import TargetHostnames
 
         class _Args(BaseModel):
-            hostnames: InScopeHostnames
+            hostnames: TargetHostnames
 
         parsed = _Args.model_validate({"hostnames": []})
         assert parsed.hostnames == []

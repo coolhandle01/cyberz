@@ -14,7 +14,7 @@ from tools.pentest.cors import check_cors_misconfiguration
 from tools.pentest.csrf import check_csrf
 from tools.pentest.hpp import check_hpp
 from tools.pentest.webapp_headers import check_header_injection, check_host_headers
-from tools.recon.scope import InScopeEndpoints
+from tools.recon.scope import TargetEndpoints
 
 
 class _CookieCheckArgs(BaseModel):
@@ -171,7 +171,7 @@ def host_header_tool(recon_path: str) -> list[RawFinding]:
 class _HppArgs(BaseModel):
     """Explicit args_schema for the HTTP Parameter Pollution Probe tool."""
 
-    endpoints: InScopeEndpoints = Field(
+    endpoints: TargetEndpoints = Field(
         description=(
             "Parameterised endpoint objects. Prioritise authorisation-shaped"
             " parameter names (role, admin, is_admin, permission, group,"

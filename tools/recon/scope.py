@@ -1,14 +1,21 @@
 """Scope filtering for recon results, exposed as Pydantic typed aliases.
 
-The agent-facing surface is two ``Annotated`` types:
+The agent-facing surface is four ``Annotated`` types - the LLM picks
+targets, and these are the field types that constrain what survives
+``args_schema.model_validate(...)``:
 
-- ``InScopeHostnames`` - ``list[Hostname]`` that silently drops any
-  hostname outside the in-flight programme's scope at args_schema
-  validation time. Mixed-input semantics: the LLM may pass a wider
-  candidate list and only the in-scope subset reaches the wrapper body.
-- ``InScopeEndpoints`` - ``list[Endpoint]`` with the same filter
+- ``TargetHostnames`` - ``list[Hostname]`` that silently drops any
+  hostname outside the in-flight programme's scope. Mixed-input
+  semantics: the LLM may pass a wider candidate list and only the
+  in-scope subset reaches the wrapper body.
+- ``TargetEndpoints`` - ``list[Endpoint]`` with the same filter
   semantics, host-extracted from ``Endpoint.url`` via stdlib
   ``urllib.parse.urlparse``.
+- ``TargetHostname`` / ``TargetEndpoint`` - single-target variants
+  that raise ``ValueError`` on an out-of-scope pick rather than
+  silently dropping it. A single target is the LLM committing to one
+  address, and a loud reject surfaces the mismatch instead of the run
+  going quiet.
 
 Pydantic's ``AfterValidator`` runs as part of every
 ``args_schema.model_validate(...)`` pass CrewAI does, so the scope guard
@@ -17,11 +24,6 @@ no per-tool body dance. The validator reads ``current_programme()``
 (the run-dir Programme snapshot the PM writes at run start); a tool
 called without a programme bound raises ``FileNotFoundError`` loudly
 rather than running unscoped.
-
-Single-target variants (``InScopeHostname`` / ``InScopeEndpoint``) raise
-``ValueError`` on an out-of-scope target rather than silently dropping
-it - a single target is the LLM committing to one address, and a loud
-reject surfaces the mismatch instead of the run going quiet.
 
 Lower-level helpers (``filter_in_scope`` over a host list,
 ``host_of`` over a URL string) stay exposed for callers outside the
@@ -146,7 +148,7 @@ def _require_endpoint_in_scope(endpoint: Endpoint) -> Endpoint:
 # args_schema validation drops out-of-scope picks (lists) or rejects
 # them (singles) before any wrapper body runs. The cybersquad-tool
 # skill carries the picking guidance.
-InScopeHostnames = Annotated[list[Hostname], AfterValidator(_filter_hostnames)]
-InScopeEndpoints = Annotated[list[Endpoint], AfterValidator(_filter_endpoints)]
-InScopeHostname = Annotated[Hostname, AfterValidator(_require_hostname_in_scope)]
-InScopeEndpoint = Annotated[Endpoint, AfterValidator(_require_endpoint_in_scope)]
+TargetHostnames = Annotated[list[Hostname], AfterValidator(_filter_hostnames)]
+TargetEndpoints = Annotated[list[Endpoint], AfterValidator(_filter_endpoints)]
+TargetHostname = Annotated[Hostname, AfterValidator(_require_hostname_in_scope)]
+TargetEndpoint = Annotated[Endpoint, AfterValidator(_require_endpoint_in_scope)]

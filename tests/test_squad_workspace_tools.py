@@ -90,8 +90,8 @@ class TestCurrentProgramme:
 
 
 # Scope-guard behavioural coverage lives in ``tests/test_recon_tools.py``
-# ``TestInScopeTypedAliases`` - it exercises the ``InScopeHostnames`` /
-# ``InScopeEndpoints`` / ``InScopeHostname`` / ``InScopeEndpoint`` typed
+# ``TestInScopeTypedAliases`` - it exercises the ``TargetHostnames`` /
+# ``TargetEndpoints`` / ``TargetHostname`` / ``TargetEndpoint`` typed
 # aliases that are the scope guard. ``cyber_tool`` itself is a thin
 # args_schema attacher now, exercised end-to-end via every
 # wrapper test.
