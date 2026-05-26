@@ -167,6 +167,15 @@ class TestPenetrationTesterTools:
 #
 # Splitting per body shape lets each parametrize assert exactly what
 # the body does, rather than a both-shapes "or" assertion.
+#
+# These two tables are hand-maintained constants rather than derived
+# from ``MEMBER.schemas``: the iterating vs list-passing distinction
+# is a body-shape property the args_schema cannot express. They also
+# carry the ``check_fn_path`` dotted string each test patches into,
+# which is body-internal and isn't on any registry. The closed-world
+# check ``test_hostname_wrapper_tables_cover_every_schema`` below
+# refuses a new hostname-taking wrapper landing without being added
+# to one of the two tables; same for the endpoint table further down.
 _HOSTNAME_PASSING_ITERATING_WRAPPERS: list[tuple[str, str]] = [
     ("elasticsearch_tool", "squad.penetration_tester.cloud.databases.check_elasticsearch"),
     ("couchdb_tool", "squad.penetration_tester.cloud.databases.check_couchdb"),
@@ -204,6 +213,33 @@ def _resolve_check_fn(check_fn_path: str) -> tuple[object, str]:
 
     module_path, attr = check_fn_path.rsplit(".", 1)
     return importlib.import_module(module_path), attr
+
+
+def test_hostname_wrapper_tables_cover_every_hostname_taking_schema() -> None:
+    """Closed-world: the two hostname-passing tables together cover every
+    PT cloud wrapper whose schema declares a ``hostnames`` field.
+
+    The split into iterating vs list-passing is a body-shape distinction
+    that the args_schema cannot express, so the tables are hand-maintained
+    constants - this check refuses a new hostname-taking wrapper landing
+    without being added to one of the two tables.
+    """
+    import squad.penetration_tester as pt_module
+
+    hostname_schemas = {
+        tool_name
+        for tool_name, schema_cls in pt_module.MEMBER.schemas.items()
+        if "hostnames" in schema_cls.model_fields
+    }
+    table_display_names = {
+        getattr(pt_module, var_name).name
+        for var_name, _ in _HOSTNAME_PASSING_ITERATING_WRAPPERS + _HOSTNAME_PASSING_LIST_WRAPPERS
+    }
+    assert hostname_schemas == table_display_names, (
+        "Hostname-passing wrapper tables drifted from MEMBER.schemas: "
+        f"in schemas but not tables = {hostname_schemas - table_display_names}; "
+        f"in tables but not schemas = {table_display_names - hostname_schemas}"
+    )
 
 
 class TestHostnameIteratingWrappers:
@@ -327,6 +363,33 @@ class TestHostnameListPassingWrappers:
         assert oos_host not in passed, (
             f"{tool_name}: scope_filter let the OOS host reach check_X; got {passed!r}"
         )
+
+
+def test_endpoint_driven_cloud_table_covers_every_cloud_endpoint_wrapper() -> None:
+    """Closed-world: the endpoint-passing table covers every PT cloud
+    wrapper whose schema declares an ``endpoints`` field.
+
+    Probe wrappers (Nuclei, SQLMap, SSRF, ...) also take ``endpoints``,
+    so the cloud-only subset is selected by ``func.__module__`` starting
+    with ``squad.penetration_tester.cloud.``. The split is deliberate -
+    probe wrappers have their own bespoke tests at the top of this file.
+    """
+    import squad.penetration_tester as pt_module
+
+    cloud_endpoint_tools = {
+        tool.name
+        for tool in pt_module.MEMBER.tools
+        if tool.func.__module__.startswith("squad.penetration_tester.cloud.")
+        and "endpoints" in tool.args_schema.model_fields
+    }
+    table_display_names = {
+        getattr(pt_module, var_name).name for var_name, _ in _ENDPOINT_DRIVEN_CLOUD_WRAPPERS
+    }
+    assert cloud_endpoint_tools == table_display_names, (
+        "Endpoint-driven cloud wrapper table drifted from MEMBER.tools: "
+        f"in cloud / endpoints but not table = {cloud_endpoint_tools - table_display_names}; "
+        f"in table but not cloud / endpoints = {table_display_names - cloud_endpoint_tools}"
+    )
 
 
 _ENDPOINT_DRIVEN_CLOUD_WRAPPERS: list[tuple[str, str]] = [

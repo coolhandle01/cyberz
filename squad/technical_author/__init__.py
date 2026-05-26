@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 import runtime
 from models import AuthoredDraft, CWEEntry, OWASPEntry, ProgrammeReportSummary
 from squad import SquadMember, cyber_tool, read_run_file_tool, read_run_filelist_tool
+from squad.workspace_tools import _ListRunFilesArgs, _ReadRunFileArgs
 from tools.cwe_data import lookup as cwe_lookup
 from tools.h1_api import h1
 from tools.owasp_data import lookup as owasp_lookup
@@ -334,4 +335,16 @@ MEMBER = SquadMember(
         read_run_filelist_tool,
         read_run_file_tool,
     ],
+    schemas={
+        "Sanitise Evidence": _SanitiseEvidenceArgs,
+        "Lookup CWE": _TaLookupCweArgs,
+        "Lookup OWASP Guidance": _TaLookupOwaspArgs,
+        "Calculate CVSS Score": _TaCalculateCvssArgs,
+        "List Programme Reports": _TaListProgrammeReportsArgs,
+        "Draft Vulnerability Report": _DraftReportArgs,
+        "Finalise Reports": _FinaliseReportsArgs,
+        # Shared workspace wrappers (re-exported via squad.workspace_tools)
+        "List Run Files": _ListRunFilesArgs,
+        "Read Run File": _ReadRunFileArgs,
+    },
 )

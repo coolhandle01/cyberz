@@ -11,9 +11,12 @@ Coordinator's submission path. The per-field descriptions enforced
 here are what teaches the LLM the gate's grammar upstream of any
 draft being written.
 
-Structural / accept / reject pattern mirrors
-``tests/test_pt_args_schemas.py`` so the same closed-world guarantee
-holds for the TA agent.
+The generic contract loop (tool wires the explicit schema, every field
+has a description, closed-world mapping) lives in
+``tests/squad/_contract_assertions.py`` and is exercised below by
+parametrising over ``MEMBER.schemas``. Agent-specific cases (the CVSS
+vector-format description, the AuthoredDraft evidence-sanitisation
+description, accept / reject shapes) stay in this file.
 """
 
 from __future__ import annotations
@@ -21,7 +24,6 @@ from __future__ import annotations
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from squad import SquadTool
 from squad.technical_author import (
     MEMBER,
     _DraftReportArgs,
@@ -36,34 +38,13 @@ from squad.workspace_tools import (
     _ListRunFilesArgs,
     _ReadRunFileArgs,
 )
+from tests.squad._contract_assertions import (
+    assert_closed_world_mapping,
+    assert_field_descriptions_present,
+    assert_tool_wires_explicit_schema,
+)
 
 pytestmark = pytest.mark.unit
-
-
-# Tool-name -> explicit schema class. Covers every TA @cyber_tool wrapper
-# plus the two shared workspace readers re-exported via
-# ``squad.workspace_tools``. The shared ``Lookup CWE`` / ``Lookup OWASP
-# Guidance`` / ``Calculate CVSS Score`` / ``List Programme Reports``
-# wrappers are declared per-agent (each gets its own ``_Ta*`` class) -
-# consolidating the duplicated lookup tools is a separate refactor, not
-# this one.
-_TA_SCHEMAS: dict[str, type[BaseModel]] = {
-    "Sanitise Evidence": _SanitiseEvidenceArgs,
-    "Lookup CWE": _TaLookupCweArgs,
-    "Lookup OWASP Guidance": _TaLookupOwaspArgs,
-    "Calculate CVSS Score": _TaCalculateCvssArgs,
-    "List Programme Reports": _TaListProgrammeReportsArgs,
-    "Draft Vulnerability Report": _DraftReportArgs,
-    "Finalise Reports": _FinaliseReportsArgs,
-    # Shared workspace wrappers
-    "List Run Files": _ListRunFilesArgs,
-    "Read Run File": _ReadRunFileArgs,
-}
-
-
-def _tools_by_name() -> dict[str, SquadTool]:
-    """Look up MEMBER.tools by display name once, share across tests."""
-    return {t.name: t for t in MEMBER.tools}
 
 
 def _good_authored_draft(target_apex) -> dict[str, object]:
@@ -116,49 +97,20 @@ def _good_draft_kwargs(target_apex) -> dict[str, object]:
 
 
 class TestTaArgsSchemaContracts:
-    @pytest.mark.parametrize("tool_name", sorted(_TA_SCHEMAS))
+    @pytest.mark.parametrize("tool_name", sorted(MEMBER.schemas))
     def test_tool_wires_explicit_schema(self, tool_name: str) -> None:
-        """Every TA typed tool registers the explicit schema class on its Tool."""
-        tool_obj = _tools_by_name()[tool_name]
-        expected = _TA_SCHEMAS[tool_name]
-        assert tool_obj.args_schema is expected, (
-            f"{tool_name} args_schema is {tool_obj.args_schema!r}; expected {expected!r}"
-        )
+        assert_tool_wires_explicit_schema(MEMBER, tool_name)
 
     @pytest.mark.parametrize(
         ("tool_name", "schema_cls"),
-        sorted(_TA_SCHEMAS.items()),
-        ids=sorted(_TA_SCHEMAS),
+        sorted(MEMBER.schemas.items()),
+        ids=sorted(MEMBER.schemas),
     )
     def test_every_field_has_description(self, tool_name: str, schema_cls: type[BaseModel]) -> None:
-        """Every field on every TA typed-tool schema carries a description."""
-        for field_name, field_info in schema_cls.model_fields.items():
-            desc = field_info.description
-            assert desc, f"{tool_name}::{field_name} missing Field(description=...)"
-            assert isinstance(desc, str) and desc.strip(), (
-                f"{tool_name}::{field_name} description is blank"
-            )
+        assert_field_descriptions_present(tool_name, schema_cls)
 
-    def test_every_ta_cyber_tool_has_schema_mapping(self) -> None:
-        """The mapping above must cover every TA ``@cyber_tool`` wrapper.
-
-        Closed-world structural check: every TA tool whose Tool exposes a
-        private (``_*``) args_schema class name is in ``_TA_SCHEMAS``;
-        every entry in ``_TA_SCHEMAS`` resolves to a registered tool.
-        A new typed tool added without a mapping entry fires this test
-        before reviewers see the PR.
-        """
-        tools = _tools_by_name()
-        private_schema_tools = {
-            name
-            for name, t in tools.items()
-            if getattr(getattr(t, "args_schema", None), "__name__", "").startswith("_")
-        }
-        assert private_schema_tools == set(_TA_SCHEMAS), (
-            "Mismatch between TA typed-tool wrappers and _TA_SCHEMAS: "
-            f"in registry but not mapping = {private_schema_tools - set(_TA_SCHEMAS)}; "
-            f"in mapping but not registry = {set(_TA_SCHEMAS) - private_schema_tools}"
-        )
+    def test_closed_world_mapping(self) -> None:
+        assert_closed_world_mapping(MEMBER)
 
     def test_calculate_cvss_description_names_vector_format(self) -> None:
         """The CVSS vector format is documented in the field description.
