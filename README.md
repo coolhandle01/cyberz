@@ -25,6 +25,16 @@ With `CYBERSQUAD_HUMAN_INPUT=true` (the default) the pipeline pauses after progr
 
 Agents do not pass artefacts inline. Each stage writes a typed JSON file to the run directory (`programme.json`, `sweep.json`, `recon.json`, `findings.json`, `verified.json`, `reports.json`) and the next agent reads it back through a Pydantic model. Mis-shaped values reject at the reader, not silently mid-pipeline. The in-flight programme handle is workspace state too - bound once at run start by `runtime.bind_programme(...)` and read by every tool that needs scope context. Every agent-picked target field is typed (`TargetHostnames` / `TargetEndpoints` / `TargetHostname` / `TargetEndpoint` from `tools/recon/scope.py`); Pydantic's `AfterValidator` runs the scope filter during `args_schema.model_validate(...)`, so an LLM that picks an out-of-scope target sees its tool call rejected before any HTTP request fires.
 
+### Optional: provisioned MCP servers
+
+Beyond the per-agent tool surface above, the squad can be provisioned with [Model Context Protocol](https://modelcontextprotocol.io/) servers at `build_crew()` time. These add crew-wide capabilities visible to every agent; the contributor discipline (build-time-only attach, exact version pins, explicit tool allowlists, two-line audit log) lives in [`.claude/skills/cybersquad-mcp/SKILL.md`](./.claude/skills/cybersquad-mcp/SKILL.md), which auto-loads on any edit to `mcp_servers/` or `crew.py`.
+
+| MCP | Provides | Enable via |
+|---|---|---|
+| [`mcp-server-time`](https://github.com/modelcontextprotocol/servers/tree/main/src/time) | `get_current_time`, `convert_time` - date-aware reasoning across the pipeline | `pip install -e ".[mcp]"` + `CYBERSQUAD_MCP_TIME_ENABLED=true` |
+
+Defaults are off so a fresh checkout starts without subprocess dependencies. Adding a new MCP follows the runbook in the skill (vet vendor; pin `==`; declare allowlist; two-line audit log; mock-adapter wiring test). Future MCPs (Playwright via #23, MISP) land here as they ship.
+
 ---
 
 ## Requirements
@@ -63,6 +73,9 @@ python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 
 pip install -e ".[dev]"
+
+# Optional - provisioned MCP servers (off by default; see "Optional: provisioned MCP servers" above)
+pip install -e ".[mcp]"
 ```
 
 ---
@@ -96,6 +109,9 @@ CYBERSQUAD_CONTACT_EMAIL=you@example.com
 | `SCAN_MODE` | `normal` | Rate-limit profile: `stealth` (2s delay, low rate), `normal` (0.5s), `raid` (0.05s + 429-adaptive backoff). Individual vars (`SCAN_DELAY`, `NUCLEI_RATE_LIMIT`, etc.) override the profile when set. |
 | `REPORTS_DIR` | `./reports` | Directory for generated report files |
 | `CYBERSQUAD_HUMAN_INPUT` | `true` | Pause for operator approval between stages; set `false` for automated runs |
+| `CYBERSQUAD_MCP_TIME_ENABLED` | `false` | Provision the time MCP server. Requires `pip install -e ".[mcp]"`. |
+| `CYBERSQUAD_MCP_TIME_TIMEZONE` | `UTC` | IANA timezone the time MCP assumes when the agent omits one |
+| `CYBERSQUAD_MCP_CONNECT_TIMEOUT` | `10` | Per-adapter connection timeout in seconds (CrewAI default is 30) |
 
 ---
 
@@ -127,6 +143,10 @@ cybersquad/
 +-- crew.py            # Assembles LLM, agents, tasks, and approval gates
 +-- tasks.py           # Pipeline wiring - context chaining and approval gates
 +-- runtime.py         # Pipeline-scoped context (run_id, programme_handle)
++-- mcp_servers/       # Provisioned MCP servers (build_crew()-time only; see cybersquad-mcp skill)
+|   +-- __init__.py    # provisioned_mcp_tools() orchestrator + ProvisionedMCPTools registry
+|   +-- _common.py     # Shared utilities (adapter-stack pre-flight)
+|   +-- _time.py       # The time MCP (one submodule per provisioned MCP)
 +-- config.py          # Env-var-backed configuration (singleton: config.*)
 |
 +-- models/            # Pydantic data contracts between agents
@@ -275,6 +295,8 @@ Load-bearing structural decisions in cybersquad cite a canonical external spec a
 
 - [CrewAI - LLMs concept](https://docs.crewai.com/en/concepts/llms) and [Agents concept](https://docs.crewai.com/en/concepts/agents) - the `LLM(...)` / `Agent(llm=...)` contract that `crew.py` relies on; the "bare model string silently ignores temperature and max_tokens" footgun is documented here.
 - [CrewAI - Create Custom Tools](https://docs.crewai.com/en/learn/create-custom-tools) - the `BaseTool.description` and `args_schema: Type[BaseModel]` surfaces our `@cyber_tool` wrapper makes mandatory.
+- [Model Context Protocol specification](https://modelcontextprotocol.io/) - the MCP spec the `cybersquad-mcp` contributor skill codifies. The 2025-06-18 *Security and Trust & Safety* section ("tool annotations should be considered untrusted, unless obtained from a trusted server") is the canonical source for the rules `mcp_servers.py` implements: build-time-only provisioning, exact vendor version pins, explicit tool allowlists, two-line audit log.
+- [CrewAI - MCP integration overview](https://docs.crewai.com/en/mcp/overview) and [security](https://docs.crewai.com/en/mcp/security) - the framework wrappers we provision through (`MCPServerAdapter`, `StdioServerParameters`). CrewAI's security page carries the timing observation we design around: the risk "materializes simply by connecting and listing tools" - so provisioning, not just calling, is the attack surface.
 - [Alexis King, "Parse, don't validate" (2019)](https://lexi-lambda.github.io/blog/2019/11/05/parse-don-t-validate/) - the canonical reference for our boundary-typed-validation discipline. Pydantic v2 is the runtime: [docs.pydantic.dev/2.12/concepts/models/](https://docs.pydantic.dev/2.12/concepts/models/).
 
 **Transport and tokenisation**
