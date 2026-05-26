@@ -125,6 +125,66 @@ class TestFilterInScope:
         )
         assert filter_in_scope(["example.com"], bare_programme) == []
 
+    def test_non_url_wildcard_scope_items_are_skipped(self, target_apex):
+        """``filter_in_scope`` only consults URL / WILDCARD scope items.
+        A programme whose in-scope catalogue mixes other ``ScopeType``
+        members (``IP_ADDRESS``, ``CIDR``, ``OTHER``, mobile-app IDs)
+        skips those entries entirely - they do not match hostnames.
+        Pins the branch that would otherwise silently treat a CIDR
+        ``asset_identifier`` as a hostname pattern."""
+        from models.h1 import ScopeItem, ScopeType
+
+        prog = Programme(
+            handle="mixed",
+            name="Mixed Scope",
+            url="https://hackerone.com/mixed",
+            bounty_table={},
+            in_scope=[
+                ScopeItem(asset_identifier="10.0.0.0/8", asset_type=ScopeType.CIDR),
+                ScopeItem(asset_identifier="192.0.2.1", asset_type=ScopeType.IP_ADDRESS),
+                ScopeItem(asset_identifier="com.example.app", asset_type=ScopeType.OTHER),
+                ScopeItem(asset_identifier=f"*.{target_apex}", asset_type=ScopeType.WILDCARD),
+            ],
+            out_of_scope=[],
+        )
+        # Only the WILDCARD entry matches; the IP / CIDR / OTHER entries
+        # are skipped per the ``continue`` branch.
+        assert filter_in_scope([f"api.{target_apex}"], prog) == [f"api.{target_apex}"]
+        assert filter_in_scope(["10.0.0.5"], prog) == []
+        assert filter_in_scope(["com.example.app"], prog) == []
+
+
+class TestFilterEndpointsInScope:
+    """Endpoint-shaped sibling of ``filter_in_scope``. Accepts both
+    ``Endpoint`` instances and mapping shapes (CrewAI hands the wrapper
+    ``list[dict]`` at runtime; direct test invocations pass instances).
+    """
+
+    def test_accepts_endpoint_instances(self, programme, endpoint):
+        """The instance branch (``return ep.url``) of the both-shapes
+        adapter - direct test invocations and any consumer that
+        constructs ``Endpoint`` objects hit this path."""
+        from tools.recon.scope import filter_endpoints_in_scope
+
+        result = filter_endpoints_in_scope([endpoint], programme)
+        assert result == [endpoint]
+
+    def test_accepts_mapping_shapes(self, programme, target_apex):
+        """The mapping branch (``ep['url']``) - the runtime shape CrewAI
+        produces after ``args_schema.model_validate(...).model_dump()``
+        turns the typed value back into a dict."""
+        from tools.recon.scope import filter_endpoints_in_scope
+
+        endpoints = [{"url": f"https://api.{target_apex}", "status_code": 200}]
+        result = filter_endpoints_in_scope(endpoints, programme)
+        assert result == endpoints
+
+    def test_drops_out_of_scope_endpoints(self, programme, bystander_url):
+        from tools.recon.scope import filter_endpoints_in_scope
+
+        oos = {"url": bystander_url, "status_code": 200}
+        assert filter_endpoints_in_scope([oos], programme) == []
+
 
 # enumerate_subdomains
 class TestEnumerateSubdomains:

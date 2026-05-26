@@ -104,6 +104,7 @@ select = [
     "UP",   # pyupgrade (modernise syntax)
     "S",    # flake8-bandit (security - basic layer)
     "ANN",  # flake8-annotations (type hints)
+    "RUF",  # ruff-specific (catches stale noqa, unsorted __all__, mutable defaults)
 ]
 ignore = [
     "S101",    # use of assert (fine in tests)

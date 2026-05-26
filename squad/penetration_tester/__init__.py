@@ -211,7 +211,7 @@ MEMBER = SquadMember(
     ],
 )
 
-__all__ = [
+__all__ = [  # noqa: RUF022 - grouped by purpose (Public API / Probes / Cloud / ...), not alphabetised
     # Public API
     "MEMBER",
     # Decorator surface (re-exported so test imports stay stable)

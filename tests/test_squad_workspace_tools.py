@@ -43,7 +43,7 @@ class TestSharedWorkspaceTools:
     def test_read_run_file_tool_refuses_escape(self, run_dir) -> None:
         from squad import read_run_file_tool
 
-        with pytest.raises(ValueError, match="must not contain '..'"):
+        with pytest.raises(ValueError, match=r"must not contain '\.\.'"):
             read_run_file_tool.func("../etc/passwd")
 
     def test_read_attack_plan_tool_returns_typed_plan(self, attack_plan, run_dir) -> None:
@@ -96,8 +96,9 @@ class TestCurrentProgramme:
 # A class defined inside a test method has no module namespace
 # ``Hostname`` lives in, so model_rebuild fails. Defining them here -
 # alongside the canonical ``Hostname`` import - keeps the resolver
-# happy and lets the test bodies stay narrow.
-from models import Hostname  # noqa: E402
+# happy and lets the test bodies stay narrow. Deferred-import context
+# documented at https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file/
+from models import Hostname  # noqa: E402 - deferred so the stub args_schemas resolve forward refs
 
 
 class _StubHostnamesArgs(BaseModel):

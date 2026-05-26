@@ -81,7 +81,7 @@ MEMBER = SquadMember(
     ],
 )
 
-__all__ = [
+__all__ = [  # noqa: RUF022 - grouped by purpose, not alphabetised
     # Public API
     "MEMBER",
     # Wrappers - discovery

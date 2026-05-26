@@ -199,8 +199,9 @@ def _apply_scope_filter(
 # Shared workspace wrappers are imported after ``cyber_tool`` is defined,
 # because ``squad/workspace_tools.py`` decorates with ``@cyber_tool`` and
 # would hit a circular import if pulled in alongside the top-of-module
-# imports.
-from squad.workspace_tools import (  # noqa: E402
+# imports. The deferred-import pattern is explicitly endorsed by ruff for
+# this case: https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file/
+from squad.workspace_tools import (  # noqa: E402 - deferred to break import cycle (see comment above)
     read_attack_plan_tool,
     read_run_file_tool,
     read_run_filelist_tool,
@@ -281,12 +282,12 @@ def build_task(
 
 
 __all__ = [
-    "SquadTool",
     "SquadMember",
+    "SquadTool",
     "build_agent",
     "build_task",
-    "read_attack_plan_tool",
-    "read_run_filelist_tool",
-    "read_run_file_tool",
     "cyber_tool",
+    "read_attack_plan_tool",
+    "read_run_file_tool",
+    "read_run_filelist_tool",
 ]

@@ -271,7 +271,7 @@ class TestFinaliseRecon:
 
     def test_refuses_without_sweep(self, programme, run_dir):
         save_insight(_good_insight())
-        with pytest.raises(FileNotFoundError, match="sweep.json"):
+        with pytest.raises(FileNotFoundError, match=r"sweep\.json"):
             finalise_recon(programme)
 
     def test_carries_sweep_fields_through(self, sweep, programme, run_dir):

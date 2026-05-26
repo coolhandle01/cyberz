@@ -24,6 +24,15 @@ H1_API_USERNAME=ci-user H1_API_TOKEN=ci-token CYBERSQUAD_CONTACT_EMAIL=ci@exampl
 .venv/bin/bandit -c pyproject.toml -r . -q
 ```
 
+Advisory (not CI-gated): periodically run `vulture` to surface dead code that the import graph cannot see. Pydantic model fields trigger false positives at lower confidence, so 80% is the gospel floor:
+
+```bash
+.venv/bin/pip install vulture       # one-off, not in [dev]
+.venv/bin/vulture --min-confidence 80 squad/ tools/ models/ runtime.py crew.py
+```
+
+Treat findings as candidates for removal, not removal mandates - check the import graph (re-exports, conditional consumers) before deleting.
+
 `pytest --cov` runs with **branch coverage on** by default - it is wired in `pyproject.toml`'s `[tool.coverage.run] branch = true`. The 90% `fail_under` gate applies to combined line + branch coverage. A green run means every conditional you touched has both its True and False path exercised.
 
 Never push a change you haven't actually executed. A passing `mypy` run after removing a `# type: ignore` means nothing if the file wasn't reachable.

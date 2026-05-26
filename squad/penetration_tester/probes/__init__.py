@@ -89,7 +89,7 @@ from squad.penetration_tester.probes.network import (
     ssrf_probe_tool,
 )
 
-__all__ = [
+__all__ = [  # noqa: RUF022 - grouped by probe-family sub-module, not alphabetised
     # auth
     "_IdorArgs",
     "_JwtCheckArgs",

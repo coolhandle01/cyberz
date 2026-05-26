@@ -88,7 +88,7 @@ from squad.penetration_tester.cloud.web_content import (
     sensitive_files_tool,
 )
 
-__all__ = [
+__all__ = [  # noqa: RUF022 - grouped by cloud-family sub-module, not alphabetised
     # dashboards
     "_GrafanaPathArgs",
     "_GrafanaPortArgs",

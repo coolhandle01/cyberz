@@ -55,7 +55,7 @@ class TestReadRunFile:
         assert result["name"] == "recon.json"
 
     def test_rejects_parent_traversal(self, run_dir: Path) -> None:
-        with pytest.raises(ValueError, match="must not contain '..'"):
+        with pytest.raises(ValueError, match=r"must not contain '\.\.'"):
             workspace.read_run_file("../secret.txt")
 
     def test_rejects_absolute_path(self, run_dir: Path) -> None:

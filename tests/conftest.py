@@ -13,19 +13,19 @@ os.environ.setdefault("H1_API_USERNAME", "ci-user")
 os.environ.setdefault("H1_API_TOKEN", "ci-token")
 os.environ.setdefault("CYBERSQUAD_CONTACT_EMAIL", "ci@example.invalid")
 
-from collections.abc import Callable  # noqa: E402
+from collections.abc import Callable
 
-import pytest  # noqa: E402
+import pytest
 
-from models import (  # noqa: E402
+from models import (
     Endpoint,
     RawFinding,
     ReconResult,
     Severity,
     VerifiedVulnerability,
 )
-from models.attack import AttackPlan, AttackPlanItem  # noqa: E402
-from models.h1 import (  # noqa: E402
+from models.attack import AttackPlan, AttackPlanItem
+from models.h1 import (
     DisclosureReport,
     Programme,
     ScopeItem,

@@ -254,7 +254,7 @@ class TestKidInjection:
         assert nosqli[0].severity_hint == Severity.CRITICAL
 
     def test_nosql_operators_cover_gt_and_ne(self) -> None:
-        operators = [list(op.keys())[0] for op in _KID_NOSQLI_OPERATORS]
+        operators = [next(iter(op.keys())) for op in _KID_NOSQLI_OPERATORS]
         assert "$gt" in operators
         assert "$ne" in operators
 
