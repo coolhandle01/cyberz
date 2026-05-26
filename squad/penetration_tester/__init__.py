@@ -17,7 +17,7 @@ file owns one cohesive responsibility:
 This module imports each wrapper, assembles ``MEMBER.tools``, and re-
 exports both the wrappers and their args_schema classes so existing
 consumers (tests, ``crew.py``, the contract tests in
-``tests/test_pt_args_schemas.py``) keep importing from
+``tests/squad/penetration_tester/test_args_schemas.py``) keep importing from
 ``squad.penetration_tester`` directly.
 """
 
@@ -342,7 +342,7 @@ __all__ = [  # noqa: RUF022 - grouped by purpose (Public API / Probes / Cloud / 
     "recon_subdomains_tool",
     "save_findings_tool",
     # args_schema classes (per-tool contracts) - re-exported so
-    # tests/test_pt_args_schemas.py and any future consumer can keep
+    # tests/squad/penetration_tester/test_args_schemas.py and any future consumer can keep
     # importing from squad.penetration_tester directly.
     "_AdminPanelsArgs",
     "_AzureBlobContainerArgs",

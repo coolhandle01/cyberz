@@ -10,6 +10,19 @@ Tests that reload modules for config isolation use `importlib.reload()` - this i
 
 Coverage floor is 90%. Every new public function in `tools/` needs a test. Every bug fix needs a regression test.
 
+## Layout
+
+Tests mirror the source tree:
+
+- `tests/tools/test_<module>.py` for files at the `tools/` top level (`h1_api.py`, `html.py`, `http.py`, ...).
+- `tests/tools/pentest/test_<probe>.py` for `tools/pentest/<probe>.py`.
+- `tests/tools/cloud/test_<module>.py` for `tools/cloud/`.
+- `tests/tools/recon/test_<module>.py` for `tools/recon/`.
+- `tests/squad/<agent>/test_<surface>.py` for per-agent tests (tools, args_schemas, ...).
+- `tests/test_<name>.py` at the root for project-level files that don't live under `tools/` or `squad/` (`config.py`, `models/`, `runtime.py`, `tasks.py`).
+
+Pytest is configured for `--import-mode=importlib`, so subdirs do not require `__init__.py`. Test files may share basenames across subdirs (e.g. `tests/squad/programme_manager/test_tools.py` and `tests/squad/disclosure_coordinator/test_tools.py`).
+
 ## Shared fixtures
 
 `tests/conftest.py` provides fixtures for all tests. Use them instead of defining local equivalents.
@@ -18,7 +31,7 @@ The `cybersquad-test-fixtures` skill at `.claude/skills/cybersquad-test-fixtures
 
 ## Args-schema contract tests
 
-Per-agent contract tests under `tests/squad/<agent>/test_args_schemas.py` (plus `tests/test_pt_args_schemas.py` and `tests/test_osint_args_schemas.py` at the root, pending the AC2 file-layout reorganisation) parametrise over `MEMBER.schemas` and call the shared assertions in `tests/squad/_contract_assertions.py`:
+Per-agent contract tests under `tests/squad/<agent>/test_args_schemas.py` parametrise over `MEMBER.schemas` and call the shared assertions in `tests/squad/_contract_assertions.py`:
 
 - `assert_tool_wires_explicit_schema(member, tool_name)` - the live tool's `args_schema` is the class named in the registry.
 - `assert_field_descriptions_present(tool_name, schema_cls)` - every field on every schema carries a non-empty `Field(description=...)`.

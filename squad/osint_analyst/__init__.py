@@ -18,7 +18,7 @@ cohesive responsibility:
 This module imports each wrapper, assembles ``MEMBER.tools``, and re-
 exports both the wrappers and their args_schema classes so existing
 consumers (tests, ``crew.py``, the contract tests in
-``tests/test_osint_args_schemas.py``) keep importing from
+``tests/squad/osint_analyst/test_args_schemas.py``) keep importing from
 ``squad.osint_analyst`` directly.
 """
 
