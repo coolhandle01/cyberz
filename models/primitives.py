@@ -72,54 +72,61 @@ def _validate_hostname(value: str) -> str:
 Hostname = Annotated[str, AfterValidator(_validate_hostname)]
 
 
-# ``HttpUrl`` validator - light flavour. Parses with ``urlparse``, enforces
-# http / https scheme + a Hostname-valid host underneath. Keeps the runtime
-# type as ``str`` so every call site that does ``endpoint.url.startswith(...)``
-# or compares against a string literal keeps working. The agent sees "this
-# is a string" in the JSON schema but mis-shaped URLs still reject at
-# model_validate time.
+# ``HttpUrl`` - URL validation delegated to Pydantic's built-in
+# ``pydantic.HttpUrl`` (the canonical RFC-3986 parser); runtime type
+# stays ``str`` so every call site that does
+# ``endpoint.url.startswith(...)`` / ``.lower()`` / ``urlparse(ep.url)``
+# / f-string interpolation keeps working without an audit-and-migrate
+# sweep across every consumer.
 #
-# Deliberate: Pydantic's built-in ``HttpUrl`` would expose structured
-# ``.host`` / ``.scheme`` / ``.port`` accessors, but the runtime type would
-# stop being ``str``. Every ``urlparse(ep.url)`` / f-string / dict-key
-# consumer would have to switch in lockstep, and that audit-and-migrate
-# cost is intentionally not paid here - the light validator catches the
-# mis-shaped-URL risk class at args_schema time, which is what the typed
-# primitive layer exists to do.
+# Pydantic's HttpUrl reference:
+# https://docs.pydantic.dev/2.12/api/networks/#pydantic.networks.HttpUrl
+#
+# Deliberate departure from upstream: ``pydantic.HttpUrl``'s runtime
+# type is ``Url`` (a wrapper exposing ``.host`` / ``.scheme`` / ``.port``
+# properties), not ``str``. The full migration to that shape is a
+# separate piece of work tracked in FIXME(#163) - it requires auditing
+# every ``ep.url.xxx`` / ``urlparse(ep.url)`` / ``ep.url`` set-membership
+# call site (~50 across ``tools/pentest/*``) so each switches to
+# ``str(ep.url)`` or to Url's structured accessors. Until then we get
+# upstream-blessed URL validation here while consumers stay string-
+# typed.
 
 
 def _validate_endpoint_url(value: str) -> str:
-    """Validate that ``value`` is a parseable HTTP / HTTPS URL with a valid
-    ``Hostname`` underneath.
+    """Validate that ``value`` is a parseable HTTP / HTTPS URL.
 
-    Keeps the input as ``str`` (no canonicalisation - the caller already
-    constructed the URL deliberately and we do not want to silently rewrite
-    it). The hostname component runs through ``_validate_hostname`` so the
-    RFC 1123 contract is enforced at the URL layer too: a malformed
-    hostname inside the URL rejects the same as a bare malformed hostname.
-
-    IPv6-bound URLs (``https://[2001:db8::1]/...``) reject: ``urlparse``
-    returns the bare ``2001:db8::1`` from ``.hostname`` (brackets dropped),
-    and the ``:`` in the address fails the ``Hostname`` per-label regex.
-    HackerOne programmes name DNS-bound assets in structured scope, so the
-    rejection is acceptable; a future contributor seeing an IPv6 reject
-    here should not be surprised by it.
+    URL shape (scheme / authority / RFC-3986 well-formedness) delegates
+    to ``pydantic.HttpUrl``; the host component runs through
+    ``_validate_hostname`` so RFC 1123 hostname strictness (no leading
+    hyphens, no oversized labels) holds inside URLs too - Pydantic's
+    URL parser is RFC-3986-permissive on the host, which is broader
+    than the bounty surface should be probing. Keeps the input as
+    ``str`` so every downstream consumer that uses string methods on
+    ``ep.url`` keeps working; see the module docstring for the
+    runtime-type migration plan in FIXME(#163).
     """
-    from urllib.parse import urlparse  # local import: only fires at validation time
+    from urllib.parse import urlparse
+
+    from pydantic import HttpUrl as _PydanticHttpUrl
 
     if not isinstance(value, str):
         raise ValueError(f"url must be a string, got {type(value).__name__}")
     cleaned = value.strip()
     if not cleaned:
         raise ValueError("url cannot be empty")
-    parsed = urlparse(cleaned)
-    if parsed.scheme not in ("http", "https"):
-        raise ValueError(f"url must use http or https scheme: {value!r}")
-    if not parsed.hostname:
-        raise ValueError(f"url must include a hostname: {value!r}")
-    # Validate the hostname through the same RFC 1123 contract Hostname uses;
-    # this catches mis-shaped hosts inside an otherwise URL-shaped string.
-    _validate_hostname(parsed.hostname)
+    # Pydantic interprets ``https:///path`` as ``https://path/`` (treats
+    # the path segment as the host); check the stdlib parse for an
+    # empty authority before handing off so the empty-host case rejects
+    # the way the LLM-facing contract expects.
+    if not urlparse(cleaned).netloc:
+        raise ValueError(f"url must include an authority component: {value!r}")
+    # Pydantic raises ``ValidationError`` on RFC-3986 violations; the
+    # AfterValidator chain propagates it to the calling model as a
+    # field-level error.
+    parsed = _PydanticHttpUrl(cleaned)
+    if parsed.host:
+        _validate_hostname(parsed.host)
     return cleaned
 
 

@@ -26,11 +26,12 @@ from models.primitives import Hostname, HttpUrl
 class Endpoint(BaseModel):
     """A discovered HTTP/S endpoint.
 
-    ``url`` is validated as a parseable HTTP / HTTPS URL with a valid
-    ``Hostname`` underneath; the runtime type stays ``str`` so existing
-    consumers that ``.startswith(...)`` / compare against literals keep
-    working. FIXME(#152 follow-up): migrate to Pydantic ``HttpUrl`` once
-    every call site is ready for the ``Url`` runtime type.
+    ``url`` is validated through Pydantic's built-in ``HttpUrl``
+    (canonical RFC-3986 parser); the runtime type stays ``str`` so
+    existing consumers that ``.startswith(...)`` / compare against
+    literals keep working. FIXME(#163): migrate to Pydantic's
+    ``Url`` runtime type once every ``ep.url.xxx`` / ``urlparse(ep.url)``
+    site in ``tools/pentest/*`` is audited.
     """
 
     url: HttpUrl
