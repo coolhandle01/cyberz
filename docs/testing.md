@@ -8,7 +8,7 @@ H1_API_USERNAME=test H1_API_TOKEN=test pytest -m unit
 
 Tests that reload modules for config isolation use `importlib.reload()` - this is the correct pattern for testing env-var-backed dataclasses.
 
-Coverage floor is 90%. Every new public function in `tools/` needs a test. Every bug fix needs a regression test.
+Coverage gates stack: an **absolute floor** of 90% (whole-codebase, set via `fail_under = 90` in `pyproject.toml`) catches large regressions, and a **per-PR ratchet** (`diff-cover` with `--fail-under=100` against the base branch) catches slow drift one line at a time - every line added or modified by a PR must be covered by tests. See `docs/ci.md` for how to read a diff-cover failure and how to run the per-PR gate locally before pushing. Every new public function in `tools/` needs a test. Every bug fix needs a regression test.
 
 ## Layout
 

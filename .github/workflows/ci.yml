@@ -49,6 +49,13 @@ jobs:
       CYBERSQUAD_CONTACT_EMAIL: ci@example.invalid
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+        with:
+          # diff-cover compares PR HEAD against the base branch; without
+          # the base ref in the local clone the gate cannot compute a
+          # diff. fetch-depth: 0 grabs full history once - the repo is
+          # small and this is simpler than a separate ``git fetch
+          # origin <base-ref>`` step that has to handle every base.
+          fetch-depth: 0
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
         with:
@@ -59,6 +66,16 @@ jobs:
 
       - name: pytest (unit only)
         run: pytest -m unit --cov --cov-report=term-missing --cov-report=xml:coverage.xml --cov-report=html --junit-xml=junit.xml
+
+      - name: Diff coverage (per-PR ratchet)
+        # Fails when a line added or modified by the PR is not covered by
+        # tests (--fail-under=100 on the diff, not the whole codebase).
+        # Stacked on top of the absolute fail_under floor in pyproject.toml:
+        # the floor catches large drops, this catches slow drift on touched
+        # lines. PR-only - on push-to-branch events there is no base ref
+        # to diff against and the gate would always trivially pass.
+        if: github.event_name == 'pull_request'
+        run: diff-cover coverage.xml --compare-branch=origin/${{ github.base_ref }} --fail-under=100
 
       - name: Publish test results
         uses: dorny/test-reporter@31a54ee7ebcacc03a09ea97a7e5465a47b84aea5  # v1.9.1

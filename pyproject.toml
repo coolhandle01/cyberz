@@ -26,6 +26,7 @@ dev = [
     "pytest-mock>=3.14",
     "pytest-bdd>=7.2",
     "respx>=0.21",          # mock httpx/requests at transport level
+    "diff-cover>=9.0",      # per-PR coverage ratchet on top of fail_under (#98)
 
     # Linting & formatting
     "ruff>=0.4",
