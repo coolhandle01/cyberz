@@ -10,6 +10,7 @@ requires-python = ">=3.12"
 dependencies = [
     "crewai[anthropic]>=1.14.0",
     "crewai-tools>=0.15.0",
+    "mcp>=1.0.0",
     "pydantic>=2.7.0",
     "requests>=2.32.0",
     "beautifulsoup4>=4.12,<5.0",
@@ -19,6 +20,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Provisioned MCP servers - see the cybersquad-mcp contributor skill and
+# `mcp_servers.py`. Each server is gated by its own `CYBERSQUAD_MCP_*_ENABLED`
+# env var defaulting `false`, so installing the extra is a separate decision
+# from turning the server on.
+mcp = [
+    "mcp-server-time>=0.6.2",
+]
 dev = [
     # Testing
     "pytest>=8.2",

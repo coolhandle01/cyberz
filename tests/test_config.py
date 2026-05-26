@@ -111,6 +111,36 @@ class TestLLMConfig:
             LLMConfig()
 
 
+class TestMCPConfig:
+    def test_time_disabled_by_default(self, monkeypatch):
+        monkeypatch.delenv("CYBERSQUAD_MCP_TIME_ENABLED", raising=False)
+        from config import MCPConfig
+
+        c = MCPConfig()
+        assert c.time_enabled is False
+
+    def test_time_enabled_via_env(self, monkeypatch):
+        monkeypatch.setenv("CYBERSQUAD_MCP_TIME_ENABLED", "true")
+        from config import MCPConfig
+
+        c = MCPConfig()
+        assert c.time_enabled is True
+
+    def test_time_timezone_defaults_to_utc(self, monkeypatch):
+        monkeypatch.delenv("CYBERSQUAD_MCP_TIME_TIMEZONE", raising=False)
+        from config import MCPConfig
+
+        c = MCPConfig()
+        assert c.time_timezone == "UTC"
+
+    def test_time_timezone_overridable(self, monkeypatch):
+        monkeypatch.setenv("CYBERSQUAD_MCP_TIME_TIMEZONE", "Europe/London")
+        from config import MCPConfig
+
+        c = MCPConfig()
+        assert c.time_timezone == "Europe/London"
+
+
 class TestScanConfig:
     def test_defaults(self, monkeypatch):
         for var in [

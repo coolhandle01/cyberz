@@ -26,10 +26,10 @@ Assembly (LLM wiring, pipeline order, approval gates) lives in crew.py / tasks.p
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Protocol, cast, runtime_checkable
+from typing import Any, Protocol, cast, runtime_checkable
 
 from crewai import Agent, Task
 from crewai.tools import tool
@@ -155,7 +155,12 @@ class SquadMember:
         return self.dir / "skills"
 
 
-def build_agent(member: SquadMember, llm: object, verbose: bool = False) -> Agent:
+def build_agent(
+    member: SquadMember,
+    llm: object,
+    verbose: bool = False,
+    extra_tools: Sequence[Any] = (),
+) -> Agent:
     """Construct a CrewAI Agent from the member's role/goal/backstory files.
 
     Member-specialist skills are passed as a directory path; crewai.skills
@@ -163,13 +168,21 @@ def build_agent(member: SquadMember, llm: object, verbose: bool = False) -> Agen
     (frontmatter only) so the agent sees a cheap menu of what is available
     and pays the body cost only on activation. Squad-wide skills are merged
     in at Crew construction (crew.py) so they are discovered once per run.
+
+    ``extra_tools`` is the crew-wide tool injection point - today it
+    carries the provisioned-MCP tool list from ``mcp_servers.py`` (per
+    the ``cybersquad-mcp`` skill, MCPs are attached at construction
+    time). The list is appended to ``member.tools`` so the per-member
+    typed registry stays authoritative for cybersquad-side contract
+    tests; MCP tools come from a third-party adapter and live outside
+    the ``SquadTool`` Protocol surface by design.
     """
     skills: list[Path] = [member.skills_dir] if member.skills_dir.is_dir() else []
     return Agent(
         role=member.read("role"),
         goal=member.read("goal"),
         backstory=member.read("backstory"),
-        tools=member.tools,
+        tools=[*member.tools, *extra_tools],
         skills=skills,
         allow_delegation=False,
         llm=llm,

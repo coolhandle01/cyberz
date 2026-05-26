@@ -93,6 +93,28 @@ class MemoryConfig:
 
 
 @dataclass
+class MCPConfig:
+    """Provisioned MCP servers - the disjoint set owned by `build_crew()`.
+
+    Per the cybersquad-mcp contributor skill, MCPs are wired in at
+    construction time, never attached at runtime. One boolean per
+    server, default ``false`` so a fresh checkout starts without
+    subprocess dependencies. Flip ``<name>_enabled=true`` once the
+    vendor package is installed (see ``pyproject.toml``'s
+    ``[project.optional-dependencies] mcp``).
+    """
+
+    time_enabled: bool = field(
+        default_factory=lambda: os.getenv("CYBERSQUAD_MCP_TIME_ENABLED", "false").lower() == "true"
+    )
+    # IANA tz name the server assumes when the agent omits one. UTC is the
+    # conservative default so cross-programme reasoning stays comparable.
+    time_timezone: str = field(
+        default_factory=lambda: os.getenv("CYBERSQUAD_MCP_TIME_TIMEZONE", "UTC")
+    )
+
+
+@dataclass
 class ReconConfig:
     """Tuning parameters for the OSINT & recon phase."""
 
@@ -196,6 +218,7 @@ class AppConfig:
 
     h1: H1Config = field(default_factory=H1Config)
     llm: LLMConfig = field(default_factory=LLMConfig)
+    mcp: MCPConfig = field(default_factory=MCPConfig)
     memory: MemoryConfig = field(default_factory=MemoryConfig)
     recon: ReconConfig = field(default_factory=ReconConfig)
     scan: ScanConfig = field(default_factory=ScanConfig)

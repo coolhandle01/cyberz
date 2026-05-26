@@ -13,6 +13,7 @@ from crewai.agents.agent_builder.base_agent import BaseAgent
 from crewai.memory.memory import Memory
 
 from config import config
+from mcp_servers import ProvisionedMCPTools
 from squad import SQUAD_SKILLS_DIR, SquadMember, build_agent
 from squad.disclosure_coordinator import MEMBER as DISCLOSURE_COORDINATOR
 from squad.osint_analyst import MEMBER as OSINT_ANALYST
@@ -67,18 +68,31 @@ def _build_long_term_memory() -> Memory | None:
     return Memory(storage="lancedb", root_scope="/long_term")
 
 
-def build_crew(verbose: bool | None = None) -> Crew:
+def build_crew(
+    verbose: bool | None = None,
+    mcp_tools: ProvisionedMCPTools | None = None,
+) -> Crew:
     """
     Instantiate agents and tasks, then wire them into a sequential Crew.
 
     Args:
         verbose: Override config.verbose for this run.
                  Defaults to the value in config.py.
+        mcp_tools: The provisioned-MCP tool registry produced by
+                 ``mcp_servers.provisioned_mcp_tools()``. ``None`` means
+                 no MCP tools (the dry-run path, and the default for tests
+                 that do not exercise MCP wiring). Per the
+                 ``cybersquad-mcp`` skill, this is the only injection
+                 point for MCP-sourced tools - agents cannot attach an
+                 ``MCPServerAdapter`` at runtime.
     """
     be_verbose = verbose if verbose is not None else config.verbose
+    crew_wide_extra = mcp_tools.crew_wide if mcp_tools is not None else ()
 
     llm: LLM = _build_llm()
-    agents_by_slug: dict[str, Agent] = {m.slug: build_agent(m, llm, be_verbose) for m in _SQUAD}
+    agents_by_slug: dict[str, Agent] = {
+        m.slug: build_agent(m, llm, be_verbose, extra_tools=crew_wide_extra) for m in _SQUAD
+    }
     # Crew(agents=...) wants list[BaseAgent]; list[Agent] is invariant
     # against it, so widen on construction.
     agents: list[BaseAgent] = list(agents_by_slug.values())
