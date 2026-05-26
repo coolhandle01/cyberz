@@ -76,21 +76,18 @@ Hostname = Annotated[str, AfterValidator(_validate_hostname)]
 # ``pydantic.HttpUrl`` (the canonical RFC-3986 parser); runtime type
 # stays ``str`` so every call site that does
 # ``endpoint.url.startswith(...)`` / ``.lower()`` / ``urlparse(ep.url)``
-# / f-string interpolation keeps working without an audit-and-migrate
-# sweep across every consumer.
+# / f-string interpolation keeps working with no audit tax.
 #
 # Pydantic's HttpUrl reference:
 # https://docs.pydantic.dev/2.12/api/networks/#pydantic.networks.HttpUrl
 #
 # Deliberate departure from upstream: ``pydantic.HttpUrl``'s runtime
 # type is ``Url`` (a wrapper exposing ``.host`` / ``.scheme`` / ``.port``
-# properties), not ``str``. The full migration to that shape is a
-# separate piece of work tracked in FIXME(#163) - it requires auditing
-# every ``ep.url.xxx`` / ``urlparse(ep.url)`` / ``ep.url`` set-membership
-# call site (~50 across ``tools/pentest/*``) so each switches to
-# ``str(ep.url)`` or to Url's structured accessors. Until then we get
-# upstream-blessed URL validation here while consumers stay string-
-# typed.
+# properties), not ``str``. We keep the ``str`` runtime intentionally:
+# the structured accessors are mostly cosmetic wins, and migrating
+# would force ``str(ep.url)`` at every f-string / dict-key / comparison
+# site (~50 across ``tools/pentest/*``) plus a cascade through
+# ``RawFinding.target`` and siblings. Cite: #163 closed as not-planned.
 
 
 def _validate_endpoint_url(value: str) -> str:
@@ -108,7 +105,7 @@ def _validate_endpoint_url(value: str) -> str:
 
     Keeps the input as ``str`` so every downstream consumer that uses
     string methods on ``ep.url`` keeps working; see the module
-    docstring for the runtime-type migration plan in FIXME(#163).
+    docstring above for why the ``str`` runtime is intentional.
 
     One workaround sits in front of the upstream call: stdlib
     ``urlparse`` reports an empty netloc for ``https:///path``, but
