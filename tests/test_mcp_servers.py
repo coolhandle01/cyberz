@@ -236,8 +236,11 @@ class TestProvisionedMCPToolsPlaywrightEnabled:
         monkeypatch.setenv("CYBERSQUAD_MCP_TIME_ENABLED", "false")
         mcp_servers = _reload_mcp_servers()
 
+        # Non-navigate fake (the navigate wrapper is exercised by
+        # TestPlaywrightScopeWrapper). Pass-through tools land in the
+        # registry unchanged.
         fake_tool = MagicMock()
-        fake_tool.name = "browser_navigate"
+        fake_tool.name = "browser_snapshot"
         adapter_factory, fake_adapter_cm = self._wire_fake_adapter(
             monkeypatch, mcp_servers, fake_tool
         )
@@ -306,7 +309,7 @@ class TestProvisionedMCPToolsPlaywrightEnabled:
         mcp_servers = _reload_mcp_servers()
 
         fake_tool = MagicMock()
-        fake_tool.name = "browser_navigate"
+        fake_tool.name = "browser_snapshot"
         self._wire_fake_adapter(monkeypatch, mcp_servers, fake_tool)
 
         with caplog.at_level("INFO", logger="mcp_servers._playwright"):
@@ -315,7 +318,7 @@ class TestProvisionedMCPToolsPlaywrightEnabled:
 
         messages = [r.message for r in caplog.records]
         assert any("starting" in m and "allowed_tools" in m for m in messages)
-        assert any("started" in m and "browser_navigate" in m for m in messages)
+        assert any("started" in m and "browser_snapshot" in m for m in messages)
 
     def test_skips_with_warning_when_npx_missing(self, monkeypatch, caplog):
         """mcpadapt available but npx is not on PATH.
@@ -416,6 +419,19 @@ class TestProvisionedMCPToolsPlaywrightEnabled:
         pkg_arg = next(a for a in params.args if a.startswith("@playwright/mcp@"))
         assert pkg_arg == f"@playwright/mcp@{mcp_servers._playwright._PLAYWRIGHT_MCP_VERSION}"
 
+    def test_block_service_workers_flag_always_present(self, monkeypatch):
+        """``--block-service-workers`` is hardcoded for the same reason
+        ``--isolated`` is: SWs issue background fetches that would bypass
+        the agent-side scope discipline on ``browser_navigate``. The vendor
+        warns that ``--allowed-origins`` is not a security boundary; blocking
+        SWs closes the most obvious circumvention path."""
+        monkeypatch.setenv("CYBERSQUAD_MCP_PLAYWRIGHT_ENABLED", "true")
+        mcp_servers = _reload_mcp_servers()
+
+        params = mcp_servers._playwright._server_params()
+
+        assert "--block-service-workers" in params.args
+
     def test_disabled_means_adapter_not_constructed(self, monkeypatch):
         monkeypatch.setenv("CYBERSQUAD_MCP_PLAYWRIGHT_ENABLED", "false")
         mcp_servers = _reload_mcp_servers()
@@ -427,6 +443,194 @@ class TestProvisionedMCPToolsPlaywrightEnabled:
             assert registry.penetration_tester == ()
 
         adapter_factory.assert_not_called()
+
+
+class TestPlaywrightScopeWrapper:
+    """The Playwright MCP layer ships its tools unwrapped from mcpadapt -
+    they do not pass through ``@cyber_tool``'s typed ``TargetHostname``
+    boundary. ``_ScopedBrowserNavigate`` restores the input-edge symmetry
+    on the one tool that takes a URL arg directly. These tests pin the
+    enforcement and the pass-through behaviour for everything else."""
+
+    @pytest.fixture()
+    def fake_navigate(self):
+        """A real ``BaseTool`` standing in for the mcpadapt-shipped
+        ``browser_navigate``. Records the kwargs the wrapper forwarded
+        on a successful in-scope call."""
+        from crewai.tools import BaseTool
+        from pydantic import BaseModel, Field
+
+        captured: dict[str, object] = {}
+
+        class _NavArgs(BaseModel):
+            url: str = Field(description="URL to navigate to.")
+
+        class _FakeNavigate(BaseTool):
+            name: str = "browser_navigate"
+            description: str = "Navigate the browser to a URL."
+            args_schema: type[BaseModel] = _NavArgs
+
+            def _run(self, **kwargs):
+                captured.update(kwargs)
+                return "navigated"
+
+        return _FakeNavigate(), captured
+
+    def test_in_scope_url_delegates_to_inner(self, programme_in_workspace, fake_navigate):
+        """``BaseTool.run`` validates kwargs against ``args_schema`` then
+        calls ``_run``; the agent invocation path always goes through
+        ``run`` so the args-schema validation is what we test against."""
+        from mcp_servers._playwright import _ScopedBrowserNavigate
+
+        inner, captured = fake_navigate
+        wrapper = _ScopedBrowserNavigate(inner)
+
+        # programme_in_workspace's in_scope includes "*.example.com".
+        result = wrapper.run(url="https://victim.example.com/login")
+
+        assert result == "navigated"
+        assert captured == {"url": "https://victim.example.com/login"}
+
+    def test_out_of_scope_url_raises_without_calling_inner(
+        self, programme_in_workspace, fake_navigate
+    ):
+        from mcp_servers._playwright import _ScopedBrowserNavigate
+
+        inner, captured = fake_navigate
+        wrapper = _ScopedBrowserNavigate(inner)
+
+        # BaseTool.run wraps Pydantic's ValidationError in a ValueError
+        # prefixed "Tool '<name>' arguments validation failed: ...".
+        with pytest.raises(ValueError, match="not in the selected programme's scope"):
+            wrapper.run(url="https://bystander.example.org/anything")
+
+        assert captured == {}
+
+    def test_unparseable_url_raises_without_calling_inner(
+        self, programme_in_workspace, fake_navigate
+    ):
+        """A URL whose host cannot be parsed is refused: the scope filter
+        cannot vouch for it. The agent gets a loud error - silently
+        defaulting to allow would defeat the wrapper's purpose."""
+        from mcp_servers._playwright import _ScopedBrowserNavigate
+
+        inner, captured = fake_navigate
+        wrapper = _ScopedBrowserNavigate(inner)
+
+        with pytest.raises(ValueError, match="cannot parse a host"):
+            wrapper.run(url="not-a-real-url")
+
+        assert captured == {}
+
+    def test_missing_url_arg_raises(self, programme_in_workspace, fake_navigate):
+        """Pydantic surfaces the missing-required-field error through
+        ``BaseTool.run``'s validation envelope."""
+        from mcp_servers._playwright import _ScopedBrowserNavigate
+
+        inner, _ = fake_navigate
+        wrapper = _ScopedBrowserNavigate(inner)
+
+        with pytest.raises(ValueError, match="arguments validation failed"):
+            wrapper.run()
+
+    def test_wrapper_forwards_inner_name_and_description(self, fake_navigate):
+        """The agent menu and CrewAI description-generation read these
+        fields from the wrapper. ``args_schema`` is intentionally NOT
+        forwarded - the wrapper substitutes a scope-typed schema so the
+        LLM sees the scope constraint in the URL field's description."""
+        from mcp_servers._playwright import (
+            _ScopedBrowserNavigate,
+            _ScopedBrowserNavigateArgs,
+        )
+
+        inner, _ = fake_navigate
+        wrapper = _ScopedBrowserNavigate(inner)
+
+        assert wrapper.name == inner.name == "browser_navigate"
+        assert wrapper.description == inner.description
+        # The scoped args_schema replaces the inner's so the URL field
+        # carries the TargetUrl AfterValidator.
+        assert wrapper.args_schema is _ScopedBrowserNavigateArgs
+
+    def test_wrap_scope_enforcement_only_wraps_browser_navigate(self, fake_navigate):
+        """Every other allowlisted tool reaches the agent unchanged - they
+        either take no URL or operate on the already-loaded page, so
+        adding a wrapper would be code without enforcement."""
+        from crewai.tools import BaseTool
+        from pydantic import BaseModel
+
+        from mcp_servers._playwright import _ScopedBrowserNavigate, _wrap_scope_enforcement
+
+        navigate, _ = fake_navigate
+
+        class _NoArgs(BaseModel):
+            pass
+
+        class _FakeSnapshot(BaseTool):
+            name: str = "browser_snapshot"
+            description: str = "Snapshot the current page."
+            args_schema: type[BaseModel] = _NoArgs
+
+            def _run(self, **kwargs):
+                return "snap"
+
+        class _FakeEvaluate(BaseTool):
+            name: str = "browser_evaluate"
+            description: str = "Evaluate JS in the page."
+            args_schema: type[BaseModel] = _NoArgs
+
+            def _run(self, **kwargs):
+                return "eval"
+
+        snapshot = _FakeSnapshot()
+        evaluate = _FakeEvaluate()
+
+        wrapped = _wrap_scope_enforcement([navigate, snapshot, evaluate])
+
+        assert isinstance(wrapped[0], _ScopedBrowserNavigate)
+        # Snapshot and evaluate are returned by identity - no wrapping.
+        assert wrapped[1] is snapshot
+        assert wrapped[2] is evaluate
+
+    def test_enter_returns_wrapped_browser_navigate(self, monkeypatch):
+        """End-to-end through ``enter(stack)``: the tool list the
+        orchestrator hands to ``ProvisionedMCPTools.penetration_tester``
+        carries the scoped variant, not the raw mcpadapt tool."""
+        monkeypatch.setenv("CYBERSQUAD_MCP_PLAYWRIGHT_ENABLED", "true")
+        monkeypatch.setenv("CYBERSQUAD_MCP_TIME_ENABLED", "false")
+        mcp_servers = _reload_mcp_servers()
+
+        from crewai.tools import BaseTool
+        from pydantic import BaseModel, Field
+
+        class _NavArgs(BaseModel):
+            url: str = Field(description="URL to navigate to.")
+
+        class _FakeNavigate(BaseTool):
+            name: str = "browser_navigate"
+            description: str = "navigate"
+            args_schema: type[BaseModel] = _NavArgs
+
+            def _run(self, **kwargs):
+                return "fake"
+
+        fake_tool = _FakeNavigate()
+        fake_adapter_cm = MagicMock()
+        fake_adapter_cm.__enter__ = MagicMock(return_value=[fake_tool])
+        fake_adapter_cm.__exit__ = MagicMock(return_value=None)
+        monkeypatch.setattr(
+            mcp_servers._playwright, "MCPServerAdapter", MagicMock(return_value=fake_adapter_cm)
+        )
+        monkeypatch.setattr(mcp_servers._playwright, "available", lambda: True)
+
+        with mcp_servers.provisioned_mcp_tools() as registry:
+            assert len(registry.penetration_tester) == 1
+            assert isinstance(
+                registry.penetration_tester[0], mcp_servers._playwright._ScopedBrowserNavigate
+            )
+            # The wrapper preserves the inner tool's name so the agent
+            # menu and CrewAI description-generation see the same surface.
+            assert registry.penetration_tester[0].name == "browser_navigate"
 
 
 class TestAvailabilityChecks:
