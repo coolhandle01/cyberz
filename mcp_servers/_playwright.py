@@ -155,20 +155,24 @@ def _server_params() -> StdioServerParameters:
 class _ScopedBrowserNavigateArgs(BaseModel):
     """Args schema for the scoped ``browser_navigate`` wrapper.
 
-    ``TargetUrl`` is the same family of scope-typed primitive every
-    ``@cyber_tool`` URL-taking wrapper uses (sibling of ``TargetHostname``
-    / ``TargetEndpoint``). Pydantic runs the scope ``AfterValidator``
-    during ``args_schema.model_validate(...)`` - which CrewAI does inside
-    ``BaseTool.run`` before ``_run`` fires - so an out-of-scope URL is
-    rejected at the same boundary every other tool enforces at.
+    ``TargetUrl`` is the scope-typed primitive in the ``Hostname`` /
+    ``HttpUrl`` family every ``@cyber_tool`` URL/host-taking wrapper
+    uses. The Annotated chain runs two validators in order: the inner
+    ``HttpUrl`` (RFC-3986 URL shape + RFC 1123 host strictness +
+    empty-authority rejection) catches malformed URLs first; the outer
+    scope ``AfterValidator`` then refuses an out-of-scope host. Both
+    fire during ``args_schema.model_validate(...)`` - which CrewAI does
+    inside ``BaseTool.run`` before ``_run`` fires - so an out-of-scope
+    or malformed URL is rejected at the same boundary every other tool
+    enforces at.
     """
 
     url: TargetUrl = Field(
         description=(
             "URL to navigate to. Must be a fully-qualified http(s) URL whose"
             " host appears in the selected programme's in_scope (validated"
-            " against the workspace's programme.json). An out-of-scope or"
-            " unparseable URL is refused before the browser receives it."
+            " against the workspace's programme.json). A malformed URL or an"
+            " out-of-scope host is refused before the browser receives it."
         )
     )
 

@@ -247,8 +247,10 @@ class TestInScopeTypedAliases:
             _Args.model_validate({"url": bystander_url})
 
     def test_single_url_rejects_unparseable(self, programme_in_workspace):
-        """A URL string with no parseable host is refused: the filter
-        cannot vouch for what it cannot parse."""
+        """``TargetUrl`` stacks on ``HttpUrl`` (URL shape + host
+        strictness + empty-authority rejection) before the scope check
+        ever runs - a string with no parseable authority is refused by
+        the inner validator, the scope check never fires."""
         from pydantic import BaseModel, ValidationError
 
         from tools.recon.scope import TargetUrl
@@ -256,8 +258,23 @@ class TestInScopeTypedAliases:
         class _Args(BaseModel):
             url: TargetUrl
 
-        with pytest.raises(ValidationError, match="cannot parse a host"):
+        with pytest.raises(ValidationError, match="must include an authority"):
             _Args.model_validate({"url": "not-a-real-url"})
+
+    def test_single_url_rejects_strict_host_bypass(self, programme_in_workspace):
+        """The HttpUrl primitive applies RFC 1123 host strictness inside
+        URLs so an attacker cannot bypass the hostname guard by wrapping
+        ``-evil.example.com`` in ``https://-evil.example.com``. The same
+        protection holds for ``TargetUrl``."""
+        from pydantic import BaseModel, ValidationError
+
+        from tools.recon.scope import TargetUrl
+
+        class _Args(BaseModel):
+            url: TargetUrl
+
+        with pytest.raises(ValidationError):
+            _Args.model_validate({"url": "https://-evil.example.com/"})
 
     def test_empty_list_skips_programme_lookup(self):
         """An empty list short-circuits the validator - no

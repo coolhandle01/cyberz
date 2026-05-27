@@ -509,15 +509,17 @@ class TestPlaywrightScopeWrapper:
     def test_unparseable_url_raises_without_calling_inner(
         self, programme_in_workspace, fake_navigate
     ):
-        """A URL whose host cannot be parsed is refused: the scope filter
-        cannot vouch for it. The agent gets a loud error - silently
-        defaulting to allow would defeat the wrapper's purpose."""
+        """``TargetUrl`` stacks on ``HttpUrl`` (URL shape + host
+        strictness + empty-authority rejection) so a malformed URL is
+        refused by the inner validator before the scope check ever runs.
+        ``BaseTool.run`` wraps the ValidationError in a ValueError
+        prefixed 'Tool ... arguments validation failed:'."""
         from mcp_servers._playwright import _ScopedBrowserNavigate
 
         inner, captured = fake_navigate
         wrapper = _ScopedBrowserNavigate(inner)
 
-        with pytest.raises(ValueError, match="cannot parse a host"):
+        with pytest.raises(ValueError, match="arguments validation failed"):
             wrapper.run(url="not-a-real-url")
 
         assert captured == {}
