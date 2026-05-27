@@ -42,3 +42,4 @@ coverage.xml
 .DS_Store
 Thumbs.db
 .coverage
+uv.lock
