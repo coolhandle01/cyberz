@@ -13,10 +13,12 @@ across every consumer.
 | ``models.asset`` | ``Endpoint``, ``EndpointPage``, ``HostRole``, ``HostPriority``, |
 |                  | ``HostInsight``, ``OpenPortsMap``, ``LlmEndpoint``, ``ReconResult`` |
 | ``models.workspace`` | ``RunFile``, ``RunFileContent`` |
+| ``models.cloud`` | ``Cloud`` |
 | ``models.cve`` | ``CveEntry`` |
 | ``models.cwe`` | ``CWEEntry`` |
-| ``models.owasp`` | ``OWASPEntry`` |
 | ``models.dns`` | ``TakeoverCandidate`` |
+| ``models.framework`` | ``Framework`` |
+| ``models.owasp`` | ``OWASPEntry`` |
 | ``models.insight`` | ``HostAnnotation``, ``InsightValidationIssue``, |
 |                    | ``InsightValidationReport``, ``ReconFinalisationError`` |
 | ``models.metrics`` | ``RunMetrics`` |
@@ -52,10 +54,12 @@ from models.attack import (
     AttackPlanValidationIssue,
     AttackPlanValidationReport,
 )
+from models.cloud import Cloud
 from models.cve import CveEntry
 from models.cwe import CWEEntry
 from models.dns import TakeoverCandidate
 from models.finding import RawFinding, RawFindingSummary, VerifiedVulnerability
+from models.framework import Framework
 from models.h1 import ProgrammeReportSummary
 from models.insight import (
     HostAnnotation,
@@ -79,9 +83,11 @@ __all__ = [
     "AuthoredAssessment",
     "AuthoredDraft",
     "CWEEntry",
+    "Cloud",
     "CveEntry",
     "Endpoint",
     "EndpointPage",
+    "Framework",
     "HostAnnotation",
     "HostInsight",
     "HostPriority",

@@ -34,12 +34,17 @@ def make_response():
         headers: dict | None = None,
         cookies: dict | None = None,
         json: object = None,
+        url: str = "https://mock.invalid/",
     ) -> MagicMock:
         resp = MagicMock()
         resp.status_code = status
         resp.text = body
         resp.headers = headers or {}
         resp.cookies = cookies or {}
+        # ``resp.url`` is a real string by default so ``urljoin(resp.url, ...)``
+        # in Webpage form-action resolution does not trip on the MagicMock
+        # auto-attribute. Tests that need a specific page URL pass ``url=``.
+        resp.url = url
         if json is not None:
             resp.json.return_value = json
         return resp
