@@ -118,6 +118,24 @@ class MCPConfig:
     connect_timeout_s: int = field(
         default_factory=lambda: int(os.getenv("CYBERSQUAD_MCP_CONNECT_TIMEOUT", "10"))
     )
+    # Playwright MCP (Microsoft's @playwright/mcp, npm-launched via npx).
+    # Headless by default; the operator can flip for interactive debugging.
+    playwright_enabled: bool = field(
+        default_factory=lambda: (
+            os.getenv("CYBERSQUAD_MCP_PLAYWRIGHT_ENABLED", "false").lower() == "true"
+        )
+    )
+    playwright_headless: bool = field(
+        default_factory=lambda: (
+            os.getenv("CYBERSQUAD_MCP_PLAYWRIGHT_HEADLESS", "true").lower() == "true"
+        )
+    )
+    # Generous timeout: first launch downloads ~200MB of Chromium binaries
+    # under ~/.cache/ms-playwright; subsequent runs reuse the cache and the
+    # adapter comes up in a second or two.
+    playwright_connect_timeout_s: int = field(
+        default_factory=lambda: int(os.getenv("CYBERSQUAD_MCP_PLAYWRIGHT_CONNECT_TIMEOUT", "60"))
+    )
 
 
 @dataclass

@@ -71,3 +71,37 @@ class TestBuildAgentMCPSplice:
         agent = build_agent(PROGRAMME_MANAGER, _TEST_LLM)
 
         assert len(agent.tools) == len(PROGRAMME_MANAGER.tools)
+
+    def test_member_specific_mcp_tools_splice_after_crew_wide(self):
+        """The full splice is ``[*member.tools, *crew_wide_mcp_tools,
+        *member_specific_mcp_tools]``. Order: static tools, then crew-wide
+        MCPs, then role-specific MCPs at the end."""
+        crew_wide = _make_fake_mcp_tool("get_current_time")
+        member_specific_a = _make_fake_mcp_tool("browser_navigate")
+        member_specific_b = _make_fake_mcp_tool("browser_snapshot")
+
+        agent = build_agent(
+            PROGRAMME_MANAGER,
+            _TEST_LLM,
+            crew_wide_mcp_tools=[crew_wide],
+            member_specific_mcp_tools=[member_specific_a, member_specific_b],
+        )
+
+        assert len(agent.tools) == len(PROGRAMME_MANAGER.tools) + 3
+        assert agent.tools[-3].name == "get_current_time"
+        assert agent.tools[-2].name == "browser_navigate"
+        assert agent.tools[-1].name == "browser_snapshot"
+
+    def test_default_member_specific_mcp_tools_is_empty(self):
+        """Omitting ``member_specific_mcp_tools`` keeps the tool list at
+        member.tools + crew_wide only - every non-PT member's regular path."""
+        crew_wide = _make_fake_mcp_tool("get_current_time")
+
+        agent = build_agent(
+            PROGRAMME_MANAGER,
+            _TEST_LLM,
+            crew_wide_mcp_tools=[crew_wide],
+        )
+
+        assert len(agent.tools) == len(PROGRAMME_MANAGER.tools) + 1
+        assert agent.tools[-1].name == "get_current_time"

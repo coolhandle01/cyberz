@@ -29,11 +29,12 @@ Agents do not pass artefacts inline. Each stage writes a typed JSON file to the 
 
 Beyond the per-agent tool surface above, the squad can be provisioned with [Model Context Protocol](https://modelcontextprotocol.io/) servers at `build_crew()` time. These add crew-wide capabilities visible to every agent; the contributor discipline (build-time-only attach, exact version pins, explicit tool allowlists, two-line audit log) lives in [`.claude/skills/cybersquad-mcp/SKILL.md`](./.claude/skills/cybersquad-mcp/SKILL.md), which auto-loads on any edit to `mcp_servers/` or `crew.py`.
 
-| MCP | Provides | Enable via |
-|---|---|---|
-| [`mcp-server-time`](https://github.com/modelcontextprotocol/servers/tree/main/src/time) | `get_current_time`, `convert_time` - date-aware reasoning across the pipeline | `pip install -e ".[mcp]"` + `CYBERSQUAD_MCP_TIME_ENABLED=true` |
+| MCP | Scope | Provides | Enable via |
+|---|---|---|---|
+| [`mcp-server-time`](https://github.com/modelcontextprotocol/servers/tree/main/src/time) | crew-wide | `get_current_time`, `convert_time` - date-aware reasoning across the pipeline | `pip install -e ".[mcp]"` + `CYBERSQUAD_MCP_TIME_ENABLED=true` |
+| [`@playwright/mcp`](https://github.com/microsoft/playwright-mcp) | Penetration Tester | 14 `browser_*` tools - DOM-level recon (navigate, snapshot, click, type, evaluate, network capture, console messages) for client-side bug finding (#23) | `pip install -e ".[mcp]"` + Node.js 18+ on `PATH` + `CYBERSQUAD_MCP_PLAYWRIGHT_ENABLED=true` |
 
-Defaults are off so a fresh checkout starts without subprocess dependencies. Adding a new MCP follows the runbook in the skill (vet vendor; pin `==`; declare allowlist; two-line audit log; mock-adapter wiring test). Future MCPs (Playwright via #23, MISP) land here as they ship.
+Defaults are off so a fresh checkout starts without subprocess dependencies. The Playwright MCP launches via `npx` (no Python package); first run downloads ~200MB of Chromium binaries under `~/.cache/ms-playwright`. Adding a new MCP follows the runbook in the skill (vet vendor; pin exactly; declare allowlist; two-line audit log; mock-adapter wiring test).
 
 ---
 
@@ -56,6 +57,7 @@ Defaults are off so a fresh checkout starts without subprocess dependencies. Add
 | [ffuf](https://github.com/ffuf/ffuf) | Directory and path fuzzing |
 | [waybackurls](https://github.com/tomnomnom/waybackurls) | Historical URL discovery via Wayback Machine |
 | tracepath / traceroute | Network path tracing for CDN/WAF bypass detection |
+| [Node.js](https://nodejs.org) 18+ | Only required if `CYBERSQUAD_MCP_PLAYWRIGHT_ENABLED=true` - the Playwright MCP launches via `npx`. |
 
 **API credentials:**
 - A [HackerOne](https://hackerone.com) account with API access
@@ -112,6 +114,9 @@ CYBERSQUAD_CONTACT_EMAIL=you@example.com
 | `CYBERSQUAD_MCP_TIME_ENABLED` | `false` | Provision the time MCP server. Requires `pip install -e ".[mcp]"`. |
 | `CYBERSQUAD_MCP_TIME_TIMEZONE` | `UTC` | IANA timezone the time MCP assumes when the agent omits one |
 | `CYBERSQUAD_MCP_CONNECT_TIMEOUT` | `10` | Per-adapter connection timeout in seconds (CrewAI default is 30) |
+| `CYBERSQUAD_MCP_PLAYWRIGHT_ENABLED` | `false` | Provision the Playwright MCP on the Penetration Tester. Requires `pip install -e ".[mcp]"` and Node.js 18+ (`npx` on `PATH`). |
+| `CYBERSQUAD_MCP_PLAYWRIGHT_HEADLESS` | `true` | Run Chromium headless. Set `false` to see the browser pop up - useful for interactive debugging. |
+| `CYBERSQUAD_MCP_PLAYWRIGHT_CONNECT_TIMEOUT` | `60` | Connect timeout for the Playwright adapter. First launch downloads ~200MB of Chromium; subsequent runs reuse the cache. |
 
 ---
 
@@ -146,7 +151,8 @@ cybersquad/
 +-- mcp_servers/       # Provisioned MCP servers (build_crew()-time only; see cybersquad-mcp skill)
 |   +-- __init__.py    # provisioned_mcp_tools() orchestrator + ProvisionedMCPTools registry
 |   +-- _common.py     # Shared utilities (adapter-stack pre-flight)
-|   +-- _time.py       # The time MCP (one submodule per provisioned MCP)
+|   +-- _time.py       # The time MCP (crew-wide; date-aware reasoning)
+|   +-- _playwright.py # The Playwright MCP (Penetration Tester only; DOM-level recon)
 +-- config.py          # Env-var-backed configuration (singleton: config.*)
 |
 +-- models/            # Pydantic data contracts between agents

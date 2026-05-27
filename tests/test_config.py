@@ -155,6 +155,49 @@ class TestMCPConfig:
         c = MCPConfig()
         assert c.connect_timeout_s == 45
 
+    def test_playwright_disabled_by_default(self, monkeypatch):
+        monkeypatch.delenv("CYBERSQUAD_MCP_PLAYWRIGHT_ENABLED", raising=False)
+        from config import MCPConfig
+
+        c = MCPConfig()
+        assert c.playwright_enabled is False
+
+    def test_playwright_enabled_via_env(self, monkeypatch):
+        monkeypatch.setenv("CYBERSQUAD_MCP_PLAYWRIGHT_ENABLED", "true")
+        from config import MCPConfig
+
+        c = MCPConfig()
+        assert c.playwright_enabled is True
+
+    def test_playwright_headless_default_on(self, monkeypatch):
+        monkeypatch.delenv("CYBERSQUAD_MCP_PLAYWRIGHT_HEADLESS", raising=False)
+        from config import MCPConfig
+
+        c = MCPConfig()
+        assert c.playwright_headless is True
+
+    def test_playwright_headless_overridable(self, monkeypatch):
+        monkeypatch.setenv("CYBERSQUAD_MCP_PLAYWRIGHT_HEADLESS", "false")
+        from config import MCPConfig
+
+        c = MCPConfig()
+        assert c.playwright_headless is False
+
+    def test_playwright_connect_timeout_default_is_generous(self, monkeypatch):
+        """60s default - first launch downloads ~200MB of Chromium binaries."""
+        monkeypatch.delenv("CYBERSQUAD_MCP_PLAYWRIGHT_CONNECT_TIMEOUT", raising=False)
+        from config import MCPConfig
+
+        c = MCPConfig()
+        assert c.playwright_connect_timeout_s == 60
+
+    def test_playwright_connect_timeout_overridable(self, monkeypatch):
+        monkeypatch.setenv("CYBERSQUAD_MCP_PLAYWRIGHT_CONNECT_TIMEOUT", "180")
+        from config import MCPConfig
+
+        c = MCPConfig()
+        assert c.playwright_connect_timeout_s == 180
+
 
 class TestScanConfig:
     def test_defaults(self, monkeypatch):

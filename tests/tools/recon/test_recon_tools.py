@@ -219,6 +219,63 @@ class TestInScopeTypedAliases:
         with pytest.raises(ValidationError, match="not in the selected programme's scope"):
             _Args.model_validate({"endpoint": {"url": bystander_url, "status_code": 200}})
 
+    def test_single_url_accepts_in_scope(self, programme_in_workspace, target_apex):
+        """``TargetUrl`` parses the host out of a URL string and rejects
+        out-of-scope hosts loudly. Sibling of ``TargetEndpoint`` for
+        callers that have a bare URL string rather than an ``Endpoint``
+        (the MCP-shipped tools that take URLs as plain strings are the
+        canonical case)."""
+        from pydantic import BaseModel
+
+        from tools.recon.scope import TargetUrl
+
+        class _Args(BaseModel):
+            url: TargetUrl
+
+        parsed = _Args.model_validate({"url": f"https://api.{target_apex}/login"})
+        assert parsed.url == f"https://api.{target_apex}/login"
+
+    def test_single_url_rejects_oos(self, programme_in_workspace, bystander_url):
+        from pydantic import BaseModel, ValidationError
+
+        from tools.recon.scope import TargetUrl
+
+        class _Args(BaseModel):
+            url: TargetUrl
+
+        with pytest.raises(ValidationError, match="not in the selected programme's scope"):
+            _Args.model_validate({"url": bystander_url})
+
+    def test_single_url_rejects_unparseable(self, programme_in_workspace):
+        """``TargetUrl`` stacks on ``HttpUrl`` (URL shape + host
+        strictness + empty-authority rejection) before the scope check
+        ever runs - a string with no parseable authority is refused by
+        the inner validator, the scope check never fires."""
+        from pydantic import BaseModel, ValidationError
+
+        from tools.recon.scope import TargetUrl
+
+        class _Args(BaseModel):
+            url: TargetUrl
+
+        with pytest.raises(ValidationError, match="must include an authority"):
+            _Args.model_validate({"url": "not-a-real-url"})
+
+    def test_single_url_rejects_strict_host_bypass(self, programme_in_workspace):
+        """The HttpUrl primitive applies RFC 1123 host strictness inside
+        URLs so an attacker cannot bypass the hostname guard by wrapping
+        ``-evil.example.com`` in ``https://-evil.example.com``. The same
+        protection holds for ``TargetUrl``."""
+        from pydantic import BaseModel, ValidationError
+
+        from tools.recon.scope import TargetUrl
+
+        class _Args(BaseModel):
+            url: TargetUrl
+
+        with pytest.raises(ValidationError):
+            _Args.model_validate({"url": "https://-evil.example.com/"})
+
     def test_empty_list_skips_programme_lookup(self):
         """An empty list short-circuits the validator - no
         ``current_programme()`` lookup. No ``programme_in_workspace``

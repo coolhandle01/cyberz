@@ -38,7 +38,7 @@ from urllib.parse import urlparse
 
 from pydantic import AfterValidator
 
-from models import Endpoint, Hostname
+from models import Endpoint, Hostname, HttpUrl
 from models.h1 import Programme, ScopeType
 
 logger = logging.getLogger(__name__)
@@ -144,6 +144,25 @@ def _require_endpoint_in_scope(endpoint: Endpoint) -> Endpoint:
     return endpoint
 
 
+def _require_url_in_scope(url: str) -> str:
+    """Pydantic ``AfterValidator`` for single ``TargetUrl`` fields.
+
+    Extracts the host from an already-shape-validated URL string (the
+    ``HttpUrl`` primitive runs first in the Annotated chain, so an empty
+    or unparseable authority has already been rejected) and raises
+    ``ValueError`` if the host is not in the selected programme's scope.
+    Sibling of ``_require_endpoint_in_scope`` for callers that have a
+    bare URL string rather than an ``Endpoint`` (the MCP-shipped tools
+    that take URLs as plain strings are the canonical case).
+    """
+    from squad.workspace_tools import current_programme
+
+    host = host_of(url)
+    if not filter_in_scope([host], current_programme()):
+        raise ValueError(f"URL host {host!r} is not in the selected programme's scope")
+    return url
+
+
 # Public agent-facing typed aliases. The LLM picks targets; Pydantic's
 # args_schema validation drops out-of-scope picks (lists) or rejects
 # them (singles) before any wrapper body runs. The cybersquad-tool
@@ -152,3 +171,8 @@ TargetHostnames = Annotated[list[Hostname], AfterValidator(_filter_hostnames)]
 TargetEndpoints = Annotated[list[Endpoint], AfterValidator(_filter_endpoints)]
 TargetHostname = Annotated[Hostname, AfterValidator(_require_hostname_in_scope)]
 TargetEndpoint = Annotated[Endpoint, AfterValidator(_require_endpoint_in_scope)]
+# Stacks on ``HttpUrl`` (URL shape + RFC 1123 host strictness + empty-
+# authority rejection) so a malformed URL fails fast before the scope
+# check ever runs - the chain matches ``TargetEndpoint`` (which stacks
+# on ``Endpoint``) for the URL-string family.
+TargetUrl = Annotated[HttpUrl, AfterValidator(_require_url_in_scope)]

@@ -160,6 +160,7 @@ def build_agent(
     llm: LLM,
     verbose: bool = False,
     crew_wide_mcp_tools: Sequence[BaseTool] = (),
+    member_specific_mcp_tools: Sequence[BaseTool] = (),
 ) -> Agent:
     """Construct a CrewAI Agent from the member's role/goal/backstory files.
 
@@ -169,29 +170,31 @@ def build_agent(
     and pays the body cost only on activation. Squad-wide skills are merged
     in at Crew construction (crew.py) so they are discovered once per run.
 
-    ``crew_wide_mcp_tools`` is the *only* injection point for
-    provisioned-MCP tools. Per the ``cybersquad-mcp`` skill (Rule 2 - no
-    runtime MCP attach), MCP tools come exclusively from
-    ``mcp_servers.provisioned_mcp_tools()`` and are wired in here at
-    ``build_crew()`` time. The list is appended to ``member.tools`` so
-    the per-member typed registry stays authoritative for the
-    cybersquad-side contract tests; MCP tools come from a third-party
-    adapter and live outside the ``SquadTool`` Protocol surface by
-    design.
+    ``crew_wide_mcp_tools`` and ``member_specific_mcp_tools`` are the
+    *only* injection points for provisioned-MCP tools. Per the
+    ``cybersquad-mcp`` skill (Rule 2 - no runtime MCP attach), MCP tools
+    come exclusively from ``mcp_servers.provisioned_mcp_tools()`` and
+    are wired in here at ``build_crew()`` time. ``crew_wide_mcp_tools``
+    is the cross-cutting bucket (time MCP for date-aware reasoning);
+    ``member_specific_mcp_tools`` is the per-role bucket (Playwright MCP
+    on PT for DOM-level recon, #23) - the same MCP server is not added
+    to both buckets by ``build_crew()``. MCP tools come from a third-party
+    adapter and live outside the ``SquadTool`` Protocol surface by design.
     """
     skills: list[Path] = [member.skills_dir] if member.skills_dir.is_dir() else []
-    # Static, contract-tested tools first; provisioned-MCP tools spliced
-    # on the end. The order is observable in the LLM-visible tool menu -
-    # the agent's canonical typed surface opens the menu, MCP-sourced
-    # tools sit after as opaque BaseTool instances (per the discipline
-    # in the cybersquad-mcp skill, see also #144 and #141).
+    # Static, contract-tested tools first; crew-wide MCP tools next;
+    # member-specific MCP tools last. The order is observable in the
+    # LLM-visible tool menu - the agent's canonical typed surface opens
+    # the menu, crew-wide MCPs sit in the middle, role-specific MCPs at
+    # the end (per the discipline in the cybersquad-mcp skill, see also
+    # #144 / #141 / #23).
     #
     # No explicit `list[BaseTool]` annotation here: `member.tools` is
     # `list[SquadTool]` - a Protocol that BaseTool satisfies structurally
     # - but `list[...]` is invariant so mypy cannot reconcile the splat
     # against a concrete `list[BaseTool]` literal. The runtime contract
     # (Agent(tools=...) accepts BaseTool) is the same either way.
-    agent_tools = [*member.tools, *crew_wide_mcp_tools]
+    agent_tools = [*member.tools, *crew_wide_mcp_tools, *member_specific_mcp_tools]
     return Agent(
         role=member.read("role"),
         goal=member.read("goal"),
