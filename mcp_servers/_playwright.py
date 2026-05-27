@@ -233,7 +233,7 @@ def _wrap_scope_enforcement(tools: Sequence[BaseTool]) -> list[BaseTool]:
 
 
 def available() -> bool:
-    """True iff the Playwright MCP can actually be started.
+    """True if the Playwright MCP can actually be started.
 
     Requires both the CrewAI MCP adapter stack (``mcpadapt`` via
     ``crewai-tools[mcp]``) and ``npx`` on PATH (Node.js 18+ ships it).

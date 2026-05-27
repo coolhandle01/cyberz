@@ -37,6 +37,30 @@ and produce structured evidence that flows straight into
 ``findings.json``. A browser session is your last-mile tool, not your
 first reach.
 
+## Footprint - the browser is louder than your HTTP probes
+
+Your HTTP probes carry a deliberate, traceable User-Agent that names
+the platform, the programme, the researcher, and a contact email -
+a SOC operator who sees it can reach the operator instead of banning
+the IP. They also slow themselves down when a target starts
+rate-limiting (HTTP 429), so a noisy sweep stays well-behaved on
+contact.
+
+The headless browser carries neither of those courtesies. The
+outbound User-Agent is the browser's own default; there is no
+back-off loop wrapping clicks or navigations. That has two
+consequences you have to think about before you reach for it:
+
+- A browser session that hammers a target with rapid clicks /
+  navigations / parallel ``browser_evaluate`` fetches looks like
+  scraping or worse to a SOC. Pace yourself. One navigation, read
+  the snapshot, decide the next move - not a burst.
+- The browser cannot be attributed to the operator the way an HTTP
+  probe can. If the target's defender wants to talk to whoever is
+  driving the traffic, the browser session does not carry that
+  invitation. Prefer an HTTP probe when the answer is in the wire
+  response; reserve the browser for the JavaScript-only cases above.
+
 ## Scope is non-negotiable, exactly the same as everywhere else
 
 Every URL you pass to ``browser_navigate`` must have a host that
@@ -50,7 +74,12 @@ in-scope URL takes you to a host that is not in scope, call
 ``browser_close`` immediately and surface what you saw - a redirect
 chain is itself a finding worth noting.
 
-Two soft circumvention paths you have to discipline yourself around:
+The loud refusal only fires on ``browser_navigate`` - the one tool
+where the URL is a direct argument. Once the page is loaded, the
+browser will follow a click, a redirect, or a ``fetch`` from
+``browser_evaluate`` to wherever the page or your own script tells
+it to. Two soft circumvention paths you have to discipline yourself
+around:
 
 - A ``browser_click`` on a link whose ``href`` is cross-origin will
   navigate. Read each link's destination from the prior
@@ -58,6 +87,12 @@ Two soft circumvention paths you have to discipline yourself around:
 - A ``browser_evaluate`` script that calls ``fetch('https://elsewhere/')``
   will issue the request. Only use ``browser_evaluate`` to read DOM
   state and page state - never to perform cross-origin requests.
+
+The scope rule applies the same way it does for every HTTP probe -
+the browser does not get a relaxed version of it just because a
+click or a script is technically the proximate cause of the
+request. If you would not type a URL into ``browser_navigate``, do
+not arrange for the browser to reach it some other way.
 
 ## Evidence flow - your context is not the record
 

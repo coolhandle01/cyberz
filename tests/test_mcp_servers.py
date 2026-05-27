@@ -476,7 +476,9 @@ class TestPlaywrightScopeWrapper:
 
         return _FakeNavigate(), captured
 
-    def test_in_scope_url_delegates_to_inner(self, programme_in_workspace, fake_navigate):
+    def test_in_scope_url_delegates_to_inner(
+        self, programme_in_workspace, fake_navigate, target_url
+    ):
         """``BaseTool.run`` validates kwargs against ``args_schema`` then
         calls ``_run``; the agent invocation path always goes through
         ``run`` so the args-schema validation is what we test against."""
@@ -485,14 +487,13 @@ class TestPlaywrightScopeWrapper:
         inner, captured = fake_navigate
         wrapper = _ScopedBrowserNavigate(inner)
 
-        # programme_in_workspace's in_scope includes "*.example.com".
-        result = wrapper.run(url="https://victim.example.com/login")
+        result = wrapper.run(url=target_url)
 
         assert result == "navigated"
-        assert captured == {"url": "https://victim.example.com/login"}
+        assert captured == {"url": target_url}
 
     def test_out_of_scope_url_raises_without_calling_inner(
-        self, programme_in_workspace, fake_navigate
+        self, programme_in_workspace, fake_navigate, bystander_url
     ):
         from mcp_servers._playwright import _ScopedBrowserNavigate
 
@@ -502,7 +503,7 @@ class TestPlaywrightScopeWrapper:
         # BaseTool.run wraps Pydantic's ValidationError in a ValueError
         # prefixed "Tool '<name>' arguments validation failed: ...".
         with pytest.raises(ValueError, match="not in the selected programme's scope"):
-            wrapper.run(url="https://bystander.example.org/anything")
+            wrapper.run(url=bystander_url)
 
         assert captured == {}
 
