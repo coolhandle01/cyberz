@@ -8,7 +8,7 @@ across every consumer.
 
 | Module | Contents |
 |---|---|
-| ``models.primitives`` | ``Severity``, ``Hostname``, ``HttpUrl`` |
+| ``models.primitives`` | ``Severity``, ``Hostname``, ``HttpUrl``, ``IPAddress`` |
 | ``models.finding`` | ``RawFinding``, ``VerifiedVulnerability``, ``RawFindingSummary`` |
 | ``models.asset`` | ``Endpoint``, ``EndpointPage``, ``HostRole``, ``HostPriority``, |
 |                  | ``HostInsight``, ``OpenPortsMap``, ``LlmEndpoint``, ``ReconResult`` |
@@ -20,6 +20,7 @@ across every consumer.
 | ``models.insight`` | ``HostAnnotation``, ``InsightValidationIssue``, |
 |                    | ``InsightValidationReport``, ``ReconFinalisationError`` |
 | ``models.metrics`` | ``RunMetrics`` |
+| ``models.network`` | ``AsnRecord`` |
 | ``models.h1`` | HackerOne shapes incl. ``ProgrammeReportSummary`` |
 | ``models.attack`` | ``AttackPlan``, ``AttackPlanItem``, |
 |                   | ``AttackPlanValidationIssue``, ``AttackPlanValidationReport``, |
@@ -65,14 +66,16 @@ from models.insight import (
     ReconFinalisationError,
 )
 from models.metrics import RunMetrics
+from models.network import AsnRecord
 from models.owasp import OWASPEntry
-from models.primitives import Hostname, HttpUrl, Severity
+from models.primitives import Hostname, HttpUrl, IPAddress, Severity
 from models.report import AuthoredDraft
 from models.technology import Technology, TechnologyCategory
 from models.triage import AuthoredAssessment, SeverityDecision
 from models.workspace import RunFile, RunFileContent
 
 __all__ = [
+    "AsnRecord",
     "AttackPlan",
     "AttackPlanFinalisationError",
     "AttackPlanItem",
@@ -90,6 +93,7 @@ __all__ = [
     "HostRole",
     "Hostname",
     "HttpUrl",
+    "IPAddress",
     "InsightValidationIssue",
     "InsightValidationReport",
     "LlmEndpoint",
