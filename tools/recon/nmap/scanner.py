@@ -23,7 +23,7 @@ from pathlib import Path
 
 import runtime
 from config import config
-from models.network import NmapBanner, NmapMode, NmapScanResult, NmapScripts
+from models.scanner import NmapBanner, NmapMode, NmapScanResult, NmapScripts
 from tools._helpers import _require_binary, _run
 from tools.recon.nmap.flags import _assemble_flags
 from tools.recon.nmap.parser import _parse_xml

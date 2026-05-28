@@ -35,7 +35,7 @@ import logging
 
 from config import config
 from models import Endpoint
-from models.network import HttpxMode
+from models.scanner import HttpxMode
 from tools._helpers import _require_binary, _run
 from tools.recon.technology import coerce_technologies
 

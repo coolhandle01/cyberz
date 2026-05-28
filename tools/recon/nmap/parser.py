@@ -21,7 +21,7 @@ import logging
 
 from defusedxml import ElementTree as ET
 
-from models.network import NmapHostResult, NmapService
+from models.scanner import NmapHostResult, NmapService
 from tools.recon.technology import coerce_technologies
 
 logger = logging.getLogger(__name__)

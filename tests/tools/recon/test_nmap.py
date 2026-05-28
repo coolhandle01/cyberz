@@ -16,7 +16,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from config import ScanMode as ConfigScanMode
-from models.network import (
+from models.scanner import (
     NmapBanner,
     NmapHostResult,
     NmapMode,

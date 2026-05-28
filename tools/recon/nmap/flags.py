@@ -14,7 +14,7 @@ nmap surface them mid-scan:
 from __future__ import annotations
 
 from config import ScanMode as ConfigScanMode
-from models.network import NmapBanner, NmapMode, NmapScripts
+from models.scanner import NmapBanner, NmapMode, NmapScripts
 
 # Per-mode base flags. Banner / scripts / scan_mode layer on top.
 _MODE_FLAGS: dict[NmapMode, list[str]] = {

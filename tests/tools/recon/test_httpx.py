@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from models import Endpoint
-from models.network import HttpxMode
+from models.scanner import HttpxMode
 from tools.recon.httpx import _assemble_flags, httpx_scan, probe_endpoints
 
 pytestmark = pytest.mark.unit
