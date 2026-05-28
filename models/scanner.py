@@ -21,6 +21,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
+from models.asset import Endpoint
 from models.primitives import FQDN, IPAddress
 from models.technology import Technology
 
@@ -148,8 +149,34 @@ class HttpxMode(StrEnum):
     WEB_INVENTORY = "web-inventory"  # + -favicon / -tls-grab / -content-type / -method
 
 
+class HttpxScanResult(BaseModel):
+    """Typed result of one ``httpx_scan(...)`` invocation.
+
+    Mirrors ``NmapScanResult`` - structured signal + optional evidence
+    pointer. The agent reads ``endpoints`` for the per-host data and
+    ``evidence_dir`` for a relative path under ``runtime.run_dir()``
+    pointing at the directory httpx wrote screenshot PNGs / stored
+    response bodies to. The VR / Technical Author cite files in that
+    directory in the report.
+
+    ``evidence_dir`` is ``None`` when neither ``with_screenshots`` nor
+    ``with_responses`` was requested or when no pipeline run was bound
+    (tests, library usage). When set, the directory exists and contains
+    at minimum one PNG (screenshots) or one stored-response file per
+    live endpoint.
+    """
+
+    mode: HttpxMode
+    endpoints: list[Endpoint] = Field(default_factory=list)
+    # Relative path under runtime.run_dir() pointing at the directory
+    # httpx wrote evidence files to (screenshot PNGs and / or response
+    # bodies). None when neither was requested or no run was bound.
+    evidence_dir: str | None = Field(default=None, max_length=255)
+
+
 __all__ = [
     "HttpxMode",
+    "HttpxScanResult",
     "NmapBanner",
     "NmapHostResult",
     "NmapMode",
