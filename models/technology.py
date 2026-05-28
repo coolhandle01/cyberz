@@ -125,11 +125,24 @@ class Technology(BaseModel):
     # name / category are known (the VR's CVE lookup can still fuzzy-
     # match by name + version when CPE is absent).
     #
-    # FIXME(amass-integration): promote to a typed ``Cpe`` primitive in
-    # ``models/primitives.py`` once the CVE-lookup workflow lands - same
-    # rationale as the deferred ``CvssVector`` / ``CweId`` primitives in
-    # ``models/report.py``. Until then, the ``max_length`` + ``pattern``
-    # below shape the value at the boundary.
+    # FIXME(#45 / amass-integration): when amass lands, Technology
+    # instances persist as amass Property values attached to the FQDN /
+    # IPAddress asset they describe. Upstream amass's Open Asset Model
+    # plans a typed tech-stack PropertyType
+    # (https://github.com/owasp-amass/open-asset-model - README
+    # "Additional types are planned, including certificates and tech
+    # stacks"); until then cybersquad-side coercion emits
+    # SimpleProperty{Name: "technology", Value: "<name>:<version>"} for
+    # detection rows and a sibling VulnProperty for CVE-bearing
+    # entries. The Wappalyzer-canonical slug IS the join key - there is
+    # no separate Wappalyzer-rows table in either cybersquad or amass;
+    # reader code (VR's CVE lookup, PT's exploit-filter query) knows the
+    # catalogue out-of-band. This module's ``Technology`` stays the
+    # runtime / in-memory shape; the amass-side Property is the
+    # persisted shape. Drop the standalone ``Cpe`` primitive plan once
+    # amass holds the canonical CVE-keying for us (a VulnProperty
+    # carrying the CVE id alongside the Technology Property suffices;
+    # CPE strings stop earning their keep at our boundary).
     cpe: str | None = Field(
         default=None,
         max_length=255,

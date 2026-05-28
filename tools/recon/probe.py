@@ -12,12 +12,22 @@ import logging
 from config import config
 from models import Endpoint
 from tools._helpers import _require_binary, _run
+from tools.recon.technology import coerce_technologies
 
 logger = logging.getLogger(__name__)
 
 
 def probe_endpoints(hosts: list[str]) -> list[Endpoint]:
-    """Use httpx CLI to probe a list of hostnames/URLs for live services."""
+    """Use httpx CLI to probe a list of hostnames/URLs for live services.
+
+    Populates both ``Endpoint.technologies`` (raw httpx ``-tech-detect``
+    strings) and ``Endpoint.detected_technologies`` (the same signal
+    coerced into typed ``Technology`` values via
+    ``tools.recon.technology.coerce_technologies``). Strings unmapped
+    by the recon-side catalogue stay in ``technologies`` but do not
+    appear in ``detected_technologies`` - that channel is bounded by
+    the Wappalyzer-canonical names we have classified.
+    """
     httpx_bin = _require_binary("httpx")
     input_data = "\n".join(hosts)
     result = _run(
@@ -37,11 +47,13 @@ def probe_endpoints(hosts: list[str]) -> list[Endpoint]:
     for line in result.stdout.splitlines():
         try:
             entry = json.loads(line)
+            raw_tech = entry.get("tech", [])
             endpoints.append(
                 Endpoint(
                     url=entry.get("url", ""),
                     status_code=entry.get("status_code"),
-                    technologies=entry.get("tech", []),
+                    technologies=raw_tech,
+                    detected_technologies=coerce_technologies(raw_tech),
                 )
             )
         except (json.JSONDecodeError, KeyError) as exc:

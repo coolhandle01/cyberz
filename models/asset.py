@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 from models.finding import RawFinding
 from models.h1 import Programme
 from models.primitives import Hostname, HttpUrl
+from models.technology import Technology
 
 
 class Endpoint(BaseModel):
@@ -33,11 +34,29 @@ class Endpoint(BaseModel):
     ``urlparse(ep.url)`` / dict-key / f-string keep working with no
     audit. See ``models/primitives._validate_endpoint_url`` for the
     full contract.
+
+    Two technology channels coexist:
+
+    * ``technologies`` is the **raw** httpx ``-tech-detect`` output
+      (Wappalyzer-shape strings like ``"Django:4.2"``). Free-text; the
+      historical surface every existing consumer already reads.
+    * ``detected_technologies`` is the **typed** channel - the same
+      signal coerced into ``list[Technology]`` via
+      ``tools.recon.technology.coerce_technologies``. The VR / PT
+      should prefer this for pattern-matching; ``technologies`` stays
+      for prose docstring vocabulary and back-compat.
+
+    Both populate at probe time in ``tools.recon.probe.probe_endpoints``.
+    Coverage of the typed channel is bounded by the recon-side
+    catalogue (``tools/recon/technology.py:_CATALOGUE``); unmapped raw
+    strings stay in ``technologies`` but do not appear in
+    ``detected_technologies``.
     """
 
     url: HttpUrl
     status_code: int | None = None
     technologies: list[str] = Field(default_factory=list)
+    detected_technologies: list[Technology] = Field(default_factory=list)
     parameters: list[str] = Field(default_factory=list)
 
 
