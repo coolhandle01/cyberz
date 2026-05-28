@@ -32,7 +32,7 @@ What does **not** belong: a per-parameter section ("Args: items - the typed list
 
 - **Canonical format with example**: `"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"` named in the `vector` field's description, not just in the docstring. The LLM constructing a tool call reads the Field, not the docstring.
 - **Constraint with consequence**: "a `Severity` enum (critical / high / medium / low / informational) - unknown values reject upstream". Naming the rejection mechanism teaches the LLM to self-correct rather than retry-with-noise.
-- **What a mis-shape signals**: from `Hostname` - "the agent occasionally hands us a URL where we asked for a hostname; the strict reject is the signal that surfaces the mismatch". The Field description teaches the agent the boundary, not just the type.
+- **What a mis-shape signals**: from `FQDN` - "the agent occasionally hands us a URL where we asked for a hostname; the strict reject is the signal that surfaces the mismatch". The Field description teaches the agent the boundary, not just the type.
 - **Cross-field guidance**: "must match the handle the OSINT Analyst recon was run against" when fields couple. For workspace-state-sourced values, the right move now is to not take them as parameters at all (see `cybersquad-runtime`).
 
 What does **not** belong: the parameter's name (the field name already says that); markdown formatting (CrewAI passes Field descriptions through plain-text); LLM persona instructions ("you are a careful security researcher" - those belong in the agent's `goal.md`, not on a per-call Field).
@@ -42,7 +42,7 @@ What does **not** belong: the parameter's name (the field name already says that
 The args_schema is the surface the body trusts:
 
 - **Shape** is constrained at Pydantic validation time. A mis-shaped value never reaches the body.
-- **Scope safety** is constrained by typed args_schema field aliases (`TargetHostnames` / `TargetEndpoints` / `TargetHostname` / `TargetEndpoint` from `tools/recon/scope.py`). Each carries a Pydantic `AfterValidator` that runs the scope filter during `args_schema.model_validate(...)` - out-of-scope targets are filtered (lists) or rejected (singles) before any wrapper body sees input. The typed field IS the contract; see `cybersquad-tool` for the picking guidance per shape.
+- **Scope safety** is constrained by typed args_schema field aliases (`TargetFQDNs` / `TargetEndpoints` / `TargetFQDN` / `TargetEndpoint` from `tools/recon/scope.py`). Each carries a Pydantic `AfterValidator` that runs the scope filter during `args_schema.model_validate(...)` - out-of-scope targets are filtered (lists) or rejected (singles) before any wrapper body sees input. The typed field IS the contract; see `cybersquad-tool` for the picking guidance per shape.
 
 That is what lets the wrapper body be small - it does the work, not the re-checking. The "debatably paranoid" framing is exactly right: the boundary is paranoid so the body does not have to be. Inline scope dances in tool bodies are the anti-pattern this architecture exists to delete.
 

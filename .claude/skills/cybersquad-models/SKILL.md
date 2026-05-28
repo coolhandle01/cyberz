@@ -9,7 +9,7 @@ description: Pydantic models in cybersquad carry the LLM-facing contract - typed
 
 ## The contract you are maintaining
 
-1. **Typed primitives reject mis-shaped values at the boundary** rather than letting them flow into a real DNS / HTTP / subprocess call. `Hostname` rejects `"https://x"` / `"x/../.."` / `"x:8080"` upstream of any tool body. `HttpUrl` rejects non-HTTP schemes and mis-shaped hosts.
+1. **Typed primitives reject mis-shaped values at the boundary** rather than letting them flow into a real DNS / HTTP / subprocess call. `FQDN` rejects `"https://x"` / `"x/../.."` / `"x:8080"` upstream of any tool body. `HttpUrl` rejects non-HTTP schemes and mis-shaped hosts.
 
 2. **Workspace JSON artefacts are typed contracts** between agents. The OSINT Analyst writes `recon.json`, the PT reads it through `ReconResult.model_validate_json(...)` - a mis-shaped recon rejects on the *reader* side, not silently corrupts the next stage.
 
@@ -25,7 +25,7 @@ A new constrained string deserves a typed primitive in `models/primitives.py` wh
 - The valid shape is checkable up-front (regex, parse, catalogue lookup), AND
 - A wrong-shape value reaching the tool body would do something silently bad (wrong target probed, wrong CWE attributed, wrong score computed).
 
-The pattern is `Annotated[str, AfterValidator(_validate_...)]` (or `Annotated[int, ...]` for integer primitives). Runtime type stays `str` / `int` so consumers do not have to migrate in lockstep - the validator fires at `model_validate` time. The reference shapes are `Hostname` (RFC 1123 strictness) and `HttpUrl` (delegates URL parsing to `pydantic.HttpUrl`, adds the host strictness on top); the in-line docstrings in `models/primitives.py` carry the full contract for each, including the `str` runtime-type rationale. `CvssVector` and `CweId` are flagged as FIXMEs in `models/report.py` - deferred to the amass-integration work where ID-shape validation is the natural home.
+The pattern is `Annotated[str, AfterValidator(_validate_...)]` (or `Annotated[int, ...]` for integer primitives). Runtime type stays `str` / `int` so consumers do not have to migrate in lockstep - the validator fires at `model_validate` time. The reference shapes are `FQDN` (RFC 1123 strictness) and `HttpUrl` (delegates URL parsing to `pydantic.HttpUrl`, adds the host strictness on top); the in-line docstrings in `models/primitives.py` carry the full contract for each, including the `str` runtime-type rationale. `CvssVector` and `CweId` are flagged as FIXMEs in `models/report.py` - deferred to the amass-integration work where ID-shape validation is the natural home.
 
 Counter-example: a one-off internal field used only inside one model does not need a primitive - inline the validator on the field, or use a `Literal[...]` / `StrEnum` for a closed set.
 

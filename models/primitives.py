@@ -2,7 +2,7 @@
 models.primitives - foundational typed-string and enum primitives shared
 across the model graph.
 
-Both ``Severity`` and ``Hostname`` are leaf dependencies - they have no
+Both ``Severity`` and ``FQDN`` are leaf dependencies - they have no
 forward references into other model modules - so they live in the
 deepest layer of the package. ``models.finding``, ``models.asset``,
 ``models.h1`` and the rest depend on them; nothing here depends on the
@@ -26,7 +26,7 @@ class Severity(StrEnum):
     CRITICAL = "critical"
 
 
-# ``Hostname`` is the typed string every scope-guard input flows through.
+# ``FQDN`` is the typed string every scope-guard input flows through.
 # Using ``Annotated[str, AfterValidator(...)]`` keeps the runtime type as
 # ``str`` (anything expecting ``str`` keeps working) while pydantic applies
 # the validator at model_validate time - so the schema rejects URLs / ports /
@@ -41,7 +41,7 @@ class Severity(StrEnum):
 _HOSTNAME_LABEL_RE = re.compile(r"^[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?$")
 
 
-def _validate_hostname(value: str) -> str:
+def _validate_fqdn(value: str) -> str:
     """Normalise and validate a hostname per RFC 1123.
 
     Lowercases and strips, then enforces: non-empty, no scheme (``://``),
@@ -69,7 +69,7 @@ def _validate_hostname(value: str) -> str:
     return cleaned
 
 
-Hostname = Annotated[str, AfterValidator(_validate_hostname)]
+FQDN = Annotated[str, AfterValidator(_validate_fqdn)]
 
 
 # ``HttpUrl`` - URL validation delegated to Pydantic's built-in
@@ -95,8 +95,8 @@ def _validate_endpoint_url(value: str) -> str:
 
     URL shape (scheme / authority / RFC-3986 well-formedness) delegates
     to ``pydantic.HttpUrl``; the host component then runs through
-    ``_validate_hostname`` so RFC 1123 hostname strictness (no leading
-    hyphens, no oversized labels) holds inside URLs too. The Hostname
+    ``_validate_fqdn`` so RFC 1123 hostname strictness (no leading
+    hyphens, no oversized labels) holds inside URLs too. The FQDN
     primitive guards "the LLM handed us a URL when we asked for a
     hostname" - the same RFC 1123 contract should hold when a hostname
     is wrapped in a URL, otherwise ``-evil.example.com`` rejects but
@@ -130,7 +130,7 @@ def _validate_endpoint_url(value: str) -> str:
     # field-level error.
     parsed = _PydanticHttpUrl(cleaned)
     if parsed.host:
-        _validate_hostname(parsed.host)
+        _validate_fqdn(parsed.host)
     return cleaned
 
 
@@ -140,13 +140,13 @@ HttpUrl = Annotated[str, AfterValidator(_validate_endpoint_url)]
 # ``IPAddress`` - typed string for an IPv4 or IPv6 address. Validates
 # via stdlib ``ipaddress.ip_address`` (handles both versions; rejects
 # malformed strings, CIDR notation, hostnames). Keeps the runtime as
-# ``str`` to match the ``Hostname`` / ``HttpUrl`` convention - every
+# ``str`` to match the ``FQDN`` / ``HttpUrl`` convention - every
 # consumer that does ``f"https://{ip}"`` / ``ip.startswith(...)`` /
 # dict-key works without coercion. The ASN-lookup (`tools/recon/asn.py`
 # via Team Cymru) and the future amass ``IPAddress`` asset type both
 # read this primitive at the boundary.
 #
-# Deliberately separate from `Hostname` even though both end up in
+# Deliberately separate from `FQDN` even though both end up in
 # DNS-resolution paths: the validators are mutually exclusive (a string
 # is either a valid IP literal or a valid hostname, never both), so
 # union-typing them would let one slip past the wrong validator. Two
@@ -159,7 +159,7 @@ def _validate_ip_address(value: str) -> str:
     Delegates to stdlib ``ipaddress.ip_address``. Rejects:
 
     * CIDR notation (``1.2.3.0/24``) - that is a netblock, not an IP
-    * Hostnames (``example.com``) - validator-distinct from ``Hostname``
+    * FQDNs (``example.com``) - validator-distinct from ``FQDN``
     * IPv6 zone identifiers (``fe80::1%eth0``) - link-local scope IDs
       are not stable across hosts and shouldn't appear in recon JSON
     * Empty / whitespace-only input

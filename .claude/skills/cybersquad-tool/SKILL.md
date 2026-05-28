@@ -14,12 +14,12 @@ Every CrewAI `@tool`-wrapped function the agents see follows these rules. They a
 ```python
 from pydantic import BaseModel, Field
 from squad import cyber_tool
-from tools.recon.scope import TargetHostnames
+from tools.recon.scope import TargetFQDNs
 
 class _S3CheckArgs(BaseModel):
     """Explicit args_schema for the S3 Bucket Check tool."""
 
-    hostnames: TargetHostnames = Field(
+    hostnames: TargetFQDNs = Field(
         description=(
             "S3 hostnames the OSINT Analyst surfaced in recon.subdomains"
             " (matching ``*.s3.*.amazonaws.com``) or via cert"
@@ -30,7 +30,7 @@ class _S3CheckArgs(BaseModel):
 
 
 @cyber_tool("S3 Bucket Check", args_schema=_S3CheckArgs)
-def s3_check_tool(hostnames: list[Hostname]) -> list[RawFinding]:
+def s3_check_tool(hostnames: list[FQDN]) -> list[RawFinding]:
     ...
 ```
 
@@ -42,7 +42,7 @@ Rules:
 
 - Class name is underscore-prefixed `_<ToolName>Args`. Every typed tool is registered in `MEMBER.schemas` (a `dict[str, type[BaseModel]]` on the `SquadMember` constant in each agent's `__init__.py`, alongside `tools`). The per-agent contract test under `tests/squad/<agent>/test_args_schemas.py` parametrises over `MEMBER.schemas` and calls the shared assertions in `tests/squad/_contract_assertions.py` - tool wires the explicit schema, every field has a description, closed-world mapping. New typed tools are discovered via the private-prefix class name; a missing `MEMBER.schemas` entry fires the test before reviewers see the PR.
 - Every field carries a `Field(description=...)` phrased as agent-facing targeting guidance ("fire when open_ports shows X", "prioritise endpoints where Y"), not type information the schema already encodes.
-- Field types mirror the wrapper signature exactly. StrEnum filters stay typed (`list[<StrEnum>] | None`), never `list[str]`. Hostname-shaped fields use the `Hostname` typed-string from `models.primitives`, never bare `str` (see "Typed string primitives" below).
+- Field types mirror the wrapper signature exactly. StrEnum filters stay typed (`list[<StrEnum>] | None`), never `list[str]`. FQDN-shaped fields use the `FQDN` typed-string from `models.primitives`, never bare `str` (see "Typed string primitives" below).
 - Schema lives inline in the same module as the wrapper, directly above the decorator. Do not import from a separate file.
 
 Specialist wrappers compose on top of `@cyber_tool`: `@pentest_tool` (pentest probes - layers OWASP categories from `check_fn.owasp_categories` into the docstring) and `@research_brief_tool` (Vulnerability Researcher - layers `PROBE_VOCABULARY` and `RECON_EVIDENCE_KINDS`) both call `cyber_tool` underneath and pass `args_schema=` through.
@@ -55,20 +55,20 @@ Mechanics: four typed aliases in `tools/recon/scope.py` carry the scope guard as
 
 | Alias | Inner | Semantic |
 |---|---|---|
-| `TargetHostnames` | `list[Hostname]` | Filter silently - LLM may pass mixed candidate list, only in-scope survive |
+| `TargetFQDNs` | `list[FQDN]` | Filter silently - LLM may pass mixed candidate list, only in-scope survive |
 | `TargetEndpoints` | `list[Endpoint]` | Same filter semantic, host-extracted from `Endpoint.url` |
-| `TargetHostname` | `Hostname` | Reject loudly - a single target is the LLM committing; OOS raises ValueError |
+| `TargetFQDN` | `FQDN` | Reject loudly - a single target is the LLM committing; OOS raises ValueError |
 | `TargetEndpoint` | `Endpoint` | Same loud-reject semantic |
 
 ```python
 from squad import cyber_tool
-from tools.recon.scope import TargetHostnames
+from tools.recon.scope import TargetFQDNs
 
-class _ProbeHostnamesArgs(BaseModel):
-    hostnames: TargetHostnames = Field(description="...")
+class _ProbeFQDNsArgs(BaseModel):
+    hostnames: TargetFQDNs = Field(description="...")
 
-@cyber_tool("Probe Hostnames", args_schema=_ProbeHostnamesArgs)
-def probe_hostnames_tool(hostnames: list[Hostname]) -> list[Endpoint]:
+@cyber_tool("Probe FQDNs", args_schema=_ProbeFQDNsArgs)
+def probe_hostnames_tool(hostnames: list[FQDN]) -> list[Endpoint]:
     """The args_schema validation has already dropped out-of-scope
     hostnames; the body just runs the probe."""
     if not hostnames:
@@ -76,11 +76,11 @@ def probe_hostnames_tool(hostnames: list[Hostname]) -> list[Endpoint]:
     return list(probe_endpoints_impl(hostnames))
 ```
 
-The args_schema field type IS the opt-in signal. The `Hostname` primitive (composed into each `Target*` alias) lowercases / strips / rejects empty / rejects schemes-ports-paths at validation time, so the filter input is canonical before the filter sees it - no per-wrapper normalisation step needed.
+The args_schema field type IS the opt-in signal. The `FQDN` primitive (composed into each `Target*` alias) lowercases / strips / rejects empty / rejects schemes-ports-paths at validation time, so the filter input is canonical before the filter sees it - no per-wrapper normalisation step needed.
 
 Rules:
 
-- Use `TargetHostnames` / `TargetEndpoints` (list filter, silent drop) on multi-target args_schema fields; use `TargetHostname` / `TargetEndpoint` (single, loud reject) on commit-to-one fields. The matching field type IS the scope-safety signal. A field typed plain `list[Hostname]` / `Endpoint` validates RFC 1123 / URL shape but does *not* scope-check - reach for the `Target*` variant when the agent picks the targets.
+- Use `TargetFQDNs` / `TargetEndpoints` (list filter, silent drop) on multi-target args_schema fields; use `TargetFQDN` / `TargetEndpoint` (single, loud reject) on commit-to-one fields. The matching field type IS the scope-safety signal. A field typed plain `list[FQDN]` / `Endpoint` validates RFC 1123 / URL shape but does *not* scope-check - reach for the `Target*` variant when the agent picks the targets.
 - The body must still handle an empty filtered list. The validator does not short-circuit on empty; it forwards the empty list and the body decides.
 - Tests for a wrapper with an `Target*` field need `programme_in_workspace` (the conftest fixture) so the validator's `current_programme()` lookup resolves. Tests that exercise the OOS-drop path take `bystander_url` and pass its hostname; tests that invoke a wrapper end-to-end use the `invoke_tool` fixture (mirrors CrewAI's `args_schema.model_validate(...).model_dump()` -> `func(**dumped)` path so the validator actually runs - direct `.func(...)` calls bypass args_schema).
 - Do not duplicate the validator inside the body. The whole point of the typed alias is that scope-safety lives in the type signature - the body trusts the validated input.
@@ -89,10 +89,10 @@ Rules:
 
 `models.primitives` carries the typed-string layer every higher-level model composes:
 
-- `Hostname` - `Annotated[str, AfterValidator(...)]`. RFC 1123 hostname check: lowercases, strips, rejects schemes (`://`), ports (`:`), paths (`/`), oversized labels (>63 chars), oversized total (>253 chars), garbage characters. Use it on any field whose value is supposed to be a bare hostname; the agent occasionally hands us a URL and the strict reject is the signal that surfaces the mismatch.
-- `HttpUrl` - same shape, validates a parseable http / https URL with a `Hostname`-valid host underneath. Runtime type stays `str` so `.startswith(...)` and string comparisons keep working. Use on any field whose value is supposed to be an HTTP/S URL.
+- `FQDN` - `Annotated[str, AfterValidator(...)]`. RFC 1123 hostname check: lowercases, strips, rejects schemes (`://`), ports (`:`), paths (`/`), oversized labels (>63 chars), oversized total (>253 chars), garbage characters. Use it on any field whose value is supposed to be a bare hostname; the agent occasionally hands us a URL and the strict reject is the signal that surfaces the mismatch.
+- `HttpUrl` - same shape, validates a parseable http / https URL with a `FQDN`-valid host underneath. Runtime type stays `str` so `.startswith(...)` and string comparisons keep working. Use on any field whose value is supposed to be an HTTP/S URL.
 
-Composition rule: when a higher-level model carries a field that is conceptually a hostname or URL, type it through the primitive. `HostInsight.hostname: Hostname` rather than `: str`; `Endpoint.url: HttpUrl` rather than `: str`; `dict[Hostname, list[int]]` rather than `dict[str, list[int]]` for hostname-keyed dicts. The primitive's validator fires per-field at model construction time, so mis-shaped values reject upstream of every downstream consumer.
+Composition rule: when a higher-level model carries a field that is conceptually a hostname or URL, type it through the primitive. `HostInsight.hostname: FQDN` rather than `: str`; `Endpoint.url: HttpUrl` rather than `: str`; `dict[FQDN, list[int]]` rather than `dict[str, list[int]]` for hostname-keyed dicts. The primitive's validator fires per-field at model construction time, so mis-shaped values reject upstream of every downstream consumer.
 
 FIXME comments in `primitives.py` and `asset.py` flag the eventual move to Pydantic's built-in `HttpUrl` (stronger contract, exposes `.host` / `.scheme` / `.port` properties, but runtime type stops being `str` so every consumer needs auditing first).
 
@@ -167,7 +167,7 @@ The reader returns the typed model; downstream agents work against the schema, n
 
 | Module | Contents |
 |---|---|
-| `models.primitives` | `Severity`, `Hostname`, `HttpUrl` - the typed-string and enum layer |
+| `models.primitives` | `Severity`, `FQDN`, `HttpUrl` - the typed-string and enum layer |
 | `models.finding` | `RawFinding`, `VerifiedVulnerability`, `RawFindingSummary` |
 | `models.asset` | `Endpoint`, `EndpointPage`, `HostRole`, `HostPriority`, `HostInsight`, `OpenPortsMap`, `LlmEndpoint`, `ReconResult` |
 | `models.workspace` | `RunFile`, `RunFileContent` |
@@ -189,8 +189,8 @@ Dependency layers flow `primitives -> finding -> h1 -> asset`; modules import on
 - Bare `list` (no inner type) as a return annotation - either it is `list[str]` for a flat handle list, or it is `list[<Model>]` for structured rows.
 - `@tool("...")` from `crewai.tools` for a new wrapper. Use `@cyber_tool` (or the appropriate specialist wrapper for probes / research briefs) so `args_schema` is enforced.
 - An `args_schema` class with a field that lacks `Field(description=...)`. The whole point of the explicit path is per-field guidance; an empty description is the same gap the inferred path had.
-- A field typed `str` whose value is a hostname (`hostname: str`, `host: str`, `domain: str`) or a URL (`url: str`, `endpoint: str`). Use `Hostname` / `HttpUrl` from `models.primitives` - the typed primitives reject mis-shaped values upstream.
-- A `dict[str, ...]` whose keys are hostnames - type the key as `dict[Hostname, ...]` so the validator fires on the keys too.
+- A field typed `str` whose value is a hostname (`hostname: str`, `host: str`, `domain: str`) or a URL (`url: str`, `endpoint: str`). Use `FQDN` / `HttpUrl` from `models.primitives` - the typed primitives reject mis-shaped values upstream.
+- A `dict[str, ...]` whose keys are hostnames - type the key as `dict[FQDN, ...]` so the validator fires on the keys too.
 - Adding a new model directly to `models/__init__.py`. The package is split per domain; put it in the matching module and let the re-export carry it.
 - New workspace writer with no typed reader.
 - `from squad.workspace_tools import ...` in a consumer instead of `from squad import ...` - the re-export exists so the import path stays stable when shared tools move.
@@ -203,7 +203,7 @@ Dependency layers flow `primitives -> finding -> h1 -> asset`; modules import on
 
 These rules apply to every agent's `@cyber_tool` / `@pentest_tool` / `@research_brief_tool` wrappers, not just the pentester's.
 
-- `squad/penetration_tester/__init__.py` and `squad/osint_analyst/__init__.py` are the largest reference surfaces. Each wrapper carries an explicit `_<ToolName>Args` schema directly above the decorator with `Field(description=...)` on every field. Pentest probes (`ssrf_probe_tool`, `idor_probe_tool`) are the shortest StrEnum examples; cloud / infra wrappers (`s3_check_tool`, `mongodb_tool`, `grafana_port_check_tool`) show `list[Hostname]` typed-target fields (auto-scope-filtered); path-style cloud wrappers (`sensitive_files_tool`, `grafana_path_check_tool`, `azure_sas_token_check_tool`) show `list[Endpoint]` typed-target fields; OSINT (`probe_hostnames_tool`, `annotate_host_tool`) show the same composition on the OSINT side.
+- `squad/penetration_tester/__init__.py` and `squad/osint_analyst/__init__.py` are the largest reference surfaces. Each wrapper carries an explicit `_<ToolName>Args` schema directly above the decorator with `Field(description=...)` on every field. Pentest probes (`ssrf_probe_tool`, `idor_probe_tool`) are the shortest StrEnum examples; cloud / infra wrappers (`s3_check_tool`, `mongodb_tool`, `grafana_port_check_tool`) show `list[FQDN]` typed-target fields (auto-scope-filtered); path-style cloud wrappers (`sensitive_files_tool`, `grafana_path_check_tool`, `azure_sas_token_check_tool`) show `list[Endpoint]` typed-target fields; OSINT (`probe_hostnames_tool`, `annotate_host_tool`) show the same composition on the OSINT side.
 - `squad/penetration_tester/__init__.py` `recon_endpoints_tool` returns `EndpointPage` - the canonical typed-return example. The wrapper lives on PT but reads OSINT's recon output, so the pattern is cross-agent.
 - `squad/workspace_tools.py` `read_attack_plan_tool` returns `AttackPlan` - mirror this shape on any new workspace reader (typed return, no `dict`).
 - The workspace-handle string family demonstrates the `str` exception (writer returns the filename, next agent passes it to a typed reader):

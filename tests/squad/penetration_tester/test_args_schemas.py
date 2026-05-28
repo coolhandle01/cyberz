@@ -93,7 +93,7 @@ pytestmark = pytest.mark.unit
 
 
 # Every schema in this file with a typed-target field
-# (``TargetHostnames`` / ``TargetEndpoints`` / ``TargetHostname`` /
+# (``TargetFQDNs`` / ``TargetEndpoints`` / ``TargetFQDN`` /
 # ``TargetEndpoint``) runs its ``AfterValidator`` during
 # ``model_validate`` - and that validator calls ``current_programme()``.
 # Autousing ``programme_in_workspace`` stages a programme into the
@@ -105,7 +105,7 @@ def _seed_programme(programme_in_workspace):
     return programme_in_workspace
 
 
-# Cloud wrappers that take ``hostnames: list[Hostname]`` and scope-filter
+# Cloud wrappers that take ``hostnames: list[FQDN]`` and scope-filter
 # via ``filter_in_scope``. Used by the missing-required-hostnames
 # parametrize below. Every cloud wrapper now takes a typed target -
 # storage no longer needs an exception now that bucket-name fuzzing
@@ -262,7 +262,7 @@ class TestSchemaAcceptReject:
             (_PtReconOpenPortsArgs, {"recon_path": "recon.json"}),
             # The host-restricted ``Recon Open Ports`` acceptance case lives
             # in a dedicated test method below (``test_recon_open_ports_*``)
-            # because the ``host`` field is now ``Hostname``-typed and the
+            # because the ``host`` field is now ``FQDN``-typed and the
             # fixture-derived hostname makes test intent ("in-scope target")
             # readable at the call site rather than via an opaque literal.
             (_SaveFindingsArgs, {"findings": []}),
@@ -355,13 +355,13 @@ class TestSchemaAcceptReject:
     def test_hostnames_schema_accepts_in_scope(
         self, schema_cls: type[BaseModel], target_apex: str
     ) -> None:
-        """An in-scope hostname validates through the ``Hostname`` primitive.
+        """An in-scope hostname validates through the ``FQDN`` primitive.
 
         Uses ``target_apex`` so test intent ("a real in-scope target
         hostname") is readable at the call site rather than via an
         opaque literal. The wrapper-level scope filter runs at call
         time, not at schema validation, so this exercises only the
-        ``Hostname`` primitive's RFC 1123 contract.
+        ``FQDN`` primitive's RFC 1123 contract.
         """
         instance = schema_cls.model_validate({"hostnames": [f"api.{target_apex}"]})
         assert isinstance(instance, schema_cls)
@@ -370,7 +370,7 @@ class TestSchemaAcceptReject:
     def test_hostnames_schema_rejects_url(
         self, schema_cls: type[BaseModel], target_url: str
     ) -> None:
-        """The ``Hostname`` primitive rejects a URL where a bare hostname
+        """The ``FQDN`` primitive rejects a URL where a bare hostname
         is expected - passing a full URL trips the validator upstream of
         the wrapper, before any scope check or HTTP request."""
         with pytest.raises(ValidationError):
@@ -446,7 +446,7 @@ class TestSchemaAcceptReject:
     def test_recon_open_ports_accepts_victim_host(self, target_url: str) -> None:
         """``Recon Open Ports`` accepts a bare hostname filter.
 
-        The ``host`` field is ``Hostname``-typed; using the ``target_url``
+        The ``host`` field is ``FQDN``-typed; using the ``target_url``
         fixture (the conftest's in-scope-target handle) and stripping the
         scheme keeps the test intent readable at the call site rather than
         via an opaque ``api.example.com`` literal.
@@ -457,7 +457,7 @@ class TestSchemaAcceptReject:
         _PtReconOpenPortsArgs.model_validate({"recon_path": "recon.json", "host": host})
 
     def test_recon_open_ports_rejects_url_in_host(self, target_url: str) -> None:
-        """The ``Hostname`` primitive rejects a URL where a bare hostname
+        """The ``FQDN`` primitive rejects a URL where a bare hostname
         is expected - ``target_url`` carries the ``https://`` scheme, so
         passing it directly trips the validator upstream of the wrapper."""
         with pytest.raises(ValidationError):

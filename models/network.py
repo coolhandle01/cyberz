@@ -33,7 +33,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
-from models.primitives import Hostname, IPAddress
+from models.primitives import FQDN, IPAddress
 from models.technology import Technology
 
 
@@ -112,7 +112,7 @@ class NmapHostResult(BaseModel):
     from the service-version banners via ``coerce_technologies``.
     """
 
-    host: Hostname | IPAddress
+    host: FQDN | IPAddress
     services: list[NmapService] = Field(default_factory=list)
     detected_technologies: list[Technology] = Field(default_factory=list)
 

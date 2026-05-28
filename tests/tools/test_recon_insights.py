@@ -88,7 +88,7 @@ class TestValidateInsight:
         assert all(i.severity != "error" for i in report.issues)
 
     def test_rejects_empty_hostname(self):
-        # Hostname is a typed-string with an upstream validator now, so the
+        # FQDN is a typed-string with an upstream validator now, so the
         # empty-hostname check fires at HostInsight construction time rather
         # than inside validate_insight. The test asserts the contract has
         # moved one layer up rather than re-asserting the (now-redundant)
@@ -172,7 +172,7 @@ class TestPersistence:
         assert loaded.hostname == "api.example.com"
 
     def test_insight_path_sanitises_special_chars(self, run_dir):
-        # HostInsight.hostname is now typed as Hostname so weird chars cannot
+        # HostInsight.hostname is now typed as FQDN so weird chars cannot
         # reach save_insight through the model path - but insight_path itself
         # still takes a bare ``str`` argument (used directly elsewhere), and
         # its filesystem sanitisation contract is what this test guards.

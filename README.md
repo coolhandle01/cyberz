@@ -23,7 +23,7 @@ With `CYBERSQUAD_HUMAN_INPUT=true` (the default) the pipeline pauses after progr
 | Technical Author | Renders complete HackerOne-format Markdown disclosure reports | Sanitise Evidence, Lookup CWE, Lookup OWASP Guidance, Calculate CVSS Score, List Programme Reports, Draft Vulnerability Report, Finalise Reports |
 | Disclosure Coordinator | Submits reports via H1 API and records submission metadata | Submit Report, Check H1 Duplicate (HackerOne API) |
 
-Agents do not pass artefacts inline. Each stage writes a typed JSON file to the run directory (`programme.json`, `sweep.json`, `recon.json`, `findings.json`, `verified.json`, `reports.json`) and the next agent reads it back through a Pydantic model. Mis-shaped values reject at the reader, not silently mid-pipeline. The in-flight programme handle is workspace state too - bound once at run start by `runtime.bind_programme(...)` and read by every tool that needs scope context. Every agent-picked target field is typed (`TargetHostnames` / `TargetEndpoints` / `TargetHostname` / `TargetEndpoint` from `tools/recon/scope.py`); Pydantic's `AfterValidator` runs the scope filter during `args_schema.model_validate(...)`, so an LLM that picks an out-of-scope target sees its tool call rejected before any HTTP request fires.
+Agents do not pass artefacts inline. Each stage writes a typed JSON file to the run directory (`programme.json`, `sweep.json`, `recon.json`, `findings.json`, `verified.json`, `reports.json`) and the next agent reads it back through a Pydantic model. Mis-shaped values reject at the reader, not silently mid-pipeline. The in-flight programme handle is workspace state too - bound once at run start by `runtime.bind_programme(...)` and read by every tool that needs scope context. Every agent-picked target field is typed (`TargetFQDNs` / `TargetEndpoints` / `TargetFQDN` / `TargetEndpoint` from `tools/recon/scope.py`); Pydantic's `AfterValidator` runs the scope filter during `args_schema.model_validate(...)`, so an LLM that picks an out-of-scope target sees its tool call rejected before any HTTP request fires.
 
 ### Optional: provisioned MCP servers
 
@@ -150,7 +150,7 @@ cybersquad/
 +-- config.py          # Env-var-backed configuration (singleton: config.*)
 |
 +-- models/            # Pydantic data contracts between agents
-|   +-- primitives.py  # Typed strings (Hostname, HttpUrl) + Severity StrEnum
+|   +-- primitives.py  # Typed strings (FQDN, HttpUrl) + Severity StrEnum
 |   +-- finding.py     # RawFinding (PT output)
 |   +-- triage.py      # TriageAssessment, VerifiedVulnerability (VR output)
 |   +-- report.py      # AuthoredDraft, DisclosureReport (TA / DC output)
@@ -254,7 +254,7 @@ Edit the Agent prose (`role.md` / `goal.md` / `backstory.md` at the member root)
 - **Branch naming** - `feat/`, `fix/`, `chore/`, or `docs/` prefixes.
 - **One concern per PR** - a new agent, a new tool, a config change - not all three.
 - **No secrets in code** - credentials belong in `.env` (gitignored). New config fields go in `config.py` and must be documented in `.env.example`.
-- **Scope and safety** - changes to scanning behaviour must preserve rate-limiting and the scope guard in `tools/recon/scope.py`. `filter_in_scope()` is a hard safety boundary; every wrapper's agent-input fields are typed as `TargetHostnames` / `TargetEndpoints` (silent-filter lists) or `TargetHostname` / `TargetEndpoint` (loud-reject singles), and Pydantic's `AfterValidator` runs the filter during `args_schema.model_validate(...)` - before the wrapper body sees anything. Do not weaken it or move it body-side.
+- **Scope and safety** - changes to scanning behaviour must preserve rate-limiting and the scope guard in `tools/recon/scope.py`. `filter_in_scope()` is a hard safety boundary; every wrapper's agent-input fields are typed as `TargetFQDNs` / `TargetEndpoints` (silent-filter lists) or `TargetFQDN` / `TargetEndpoint` (loud-reject singles), and Pydantic's `AfterValidator` runs the filter during `args_schema.model_validate(...)` - before the wrapper body sees anything. Do not weaken it or move it body-side.
 
 ### CI jobs
 

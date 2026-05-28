@@ -8,7 +8,7 @@ across every consumer.
 
 | Module | Contents |
 |---|---|
-| ``models.primitives`` | ``Severity``, ``Hostname``, ``HttpUrl``, ``IPAddress`` |
+| ``models.primitives`` | ``Severity``, ``FQDN``, ``HttpUrl``, ``IPAddress`` |
 | ``models.finding`` | ``RawFinding``, ``VerifiedVulnerability``, ``RawFindingSummary`` |
 | ``models.asset`` | ``Endpoint``, ``EndpointPage``, ``HostRole``, ``HostPriority``, |
 |                  | ``HostInsight``, ``OpenPortsMap``, ``LlmEndpoint``, ``ReconResult`` |
@@ -77,13 +77,14 @@ from models.network import (
     NmapService,
 )
 from models.owasp import OWASPEntry
-from models.primitives import Hostname, HttpUrl, IPAddress, Severity
+from models.primitives import FQDN, HttpUrl, IPAddress, Severity
 from models.report import AuthoredDraft
 from models.technology import Technology, TechnologyCategory
 from models.triage import AuthoredAssessment, SeverityDecision
 from models.workspace import RunFile, RunFileContent
 
 __all__ = [
+    "FQDN",
     "AsnRecord",
     "AttackPlan",
     "AttackPlanFinalisationError",
@@ -100,7 +101,6 @@ __all__ = [
     "HostInsight",
     "HostPriority",
     "HostRole",
-    "Hostname",
     "HttpUrl",
     "IPAddress",
     "InsightValidationIssue",

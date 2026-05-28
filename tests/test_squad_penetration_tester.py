@@ -5,7 +5,7 @@ the Penetration Tester.
 Roughly 55 tools live on this agent; the bodies are near-identical thin
 wrappers, so the per-wrapper bespoke tests at the top cover the unique
 shapes (probes that mock specific helpers) and the parametrize tables
-further down (``TestHostnameWrapperPassThrough`` and
+further down (``TestFQDNWrapperPassThrough`` and
 ``TestEndpointWrapperPassThrough``) cover every typed cloud wrapper for
 the wrapper-level scope-filter + helper-forwarding contract at once.
 The underlying helpers are exercised in their own dedicated test files.
@@ -154,8 +154,8 @@ class TestPenetrationTesterTools:
         assert result.hosts == recon_result.open_ports
 
 
-# Hostname-passing cloud wrappers split by body shape: each takes
-# ``list[Hostname]`` and scope-filters at the wrapper, but the body
+# FQDN-passing cloud wrappers split by body shape: each takes
+# ``list[FQDN]`` and scope-filters at the wrapper, but the body
 # differs in how it forwards to ``check_X``.
 #
 # - Iterating: the databases call ``check_X(host)`` per host inside a
@@ -236,13 +236,13 @@ def test_hostname_wrapper_tables_cover_every_hostname_taking_schema() -> None:
         for var_name, _ in _HOSTNAME_PASSING_ITERATING_WRAPPERS + _HOSTNAME_PASSING_LIST_WRAPPERS
     }
     assert hostname_schemas == table_display_names, (
-        "Hostname-passing wrapper tables drifted from MEMBER.schemas: "
+        "FQDN-passing wrapper tables drifted from MEMBER.schemas: "
         f"in schemas but not tables = {hostname_schemas - table_display_names}; "
         f"in tables but not schemas = {table_display_names - hostname_schemas}"
     )
 
 
-class TestHostnameIteratingWrappers:
+class TestFQDNIteratingWrappers:
     """Databases iterate the supplied hostnames and call
     ``check_X(host)`` per host. The wrapper-level scope_filter drops
     OOS hosts before the loop body runs, so on an empty filtered list
@@ -301,7 +301,7 @@ class TestHostnameIteratingWrappers:
         mcheck.assert_not_called()
 
 
-class TestHostnameListPassingWrappers:
+class TestFQDNListPassingWrappers:
     """Panels / dashboards / consul / storage call ``check_X(hostnames)``
     once with the filtered list. When everything filters out, the
     wrapper calls ``check_X([])`` - the helper handles empty internally

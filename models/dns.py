@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from models.primitives import Hostname
+from models.primitives import FQDN
 
 
 class TakeoverCandidate(BaseModel):
@@ -24,7 +24,7 @@ class TakeoverCandidate(BaseModel):
         any A records. The CNAME target may have been deprovisioned.
     """
 
-    hostname: Hostname
+    hostname: FQDN
     cname: str
     reason: str
     service: str | None = None

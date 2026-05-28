@@ -12,7 +12,7 @@ workspace.
 
 from pydantic import BaseModel, Field
 
-from models import EndpointPage, Hostname, OpenPortsMap
+from models import FQDN, EndpointPage, OpenPortsMap
 from squad import cyber_tool
 from tools.recon.query import recon_endpoints, recon_open_ports, recon_subdomains
 
@@ -44,7 +44,7 @@ class _PtReconSubdomainsArgs(BaseModel):
 
 
 @cyber_tool("Recon Subdomains", args_schema=_PtReconSubdomainsArgs)
-def recon_subdomains_tool(recon_path: str, host_filter: str | None = None) -> list[Hostname]:
+def recon_subdomains_tool(recon_path: str, host_filter: str | None = None) -> list[FQDN]:
     """
     Return the in-scope subdomains discovered during recon. Pass the recon.json
     path you received from the OSINT Analyst. ``host_filter`` is a
@@ -54,7 +54,7 @@ def recon_subdomains_tool(recon_path: str, host_filter: str | None = None) -> li
     port-specific probes (``Recon Open Ports``, ``Unauthenticated
     Elasticsearch Check``, etc.) without further normalisation.
     """
-    return [Hostname(h) for h in recon_subdomains(recon_path, host_filter=host_filter)]
+    return [FQDN(h) for h in recon_subdomains(recon_path, host_filter=host_filter)]
 
 
 class _PtReconEndpointsArgs(BaseModel):
@@ -159,7 +159,7 @@ class _PtReconOpenPortsArgs(BaseModel):
             " filtered to a single host or in full."
         ),
     )
-    host: Hostname | None = Field(
+    host: FQDN | None = Field(
         default=None,
         description=(
             "Optional bare hostname to restrict the open-port map to a"

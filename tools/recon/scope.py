@@ -4,14 +4,14 @@ The agent-facing surface is four ``Annotated`` types - the LLM picks
 targets, and these are the field types that constrain what survives
 ``args_schema.model_validate(...)``:
 
-- ``TargetHostnames`` - ``list[Hostname]`` that silently drops any
+- ``TargetFQDNs`` - ``list[FQDN]`` that silently drops any
   hostname outside the in-flight programme's scope. Mixed-input
   semantics: the LLM may pass a wider candidate list and only the
   in-scope subset reaches the wrapper body.
 - ``TargetEndpoints`` - ``list[Endpoint]`` with the same filter
   semantics, host-extracted from ``Endpoint.url`` via stdlib
   ``urllib.parse.urlparse``.
-- ``TargetHostname`` / ``TargetEndpoint`` - single-target variants
+- ``TargetFQDN`` / ``TargetEndpoint`` - single-target variants
   that raise ``ValueError`` on an out-of-scope pick rather than
   silently dropping it. A single target is the LLM committing to one
   address, and a loud reject surfaces the mismatch instead of the run
@@ -38,7 +38,7 @@ from urllib.parse import urlparse
 
 from pydantic import AfterValidator
 
-from models import Endpoint, Hostname
+from models import FQDN, Endpoint
 from models.h1 import Programme, ScopeType
 
 logger = logging.getLogger(__name__)
@@ -82,8 +82,8 @@ def filter_in_scope(hosts: list[str], programme: Programme) -> list[str]:
     return allowed
 
 
-def _filter_hostnames(hosts: list[str]) -> list[str]:
-    """Pydantic ``AfterValidator`` for ``list[Hostname]`` fields.
+def _filter_fqdns(hosts: list[str]) -> list[str]:
+    """Pydantic ``AfterValidator`` for ``list[FQDN]`` fields.
 
     Sources the in-flight Programme via ``current_programme()`` and
     returns the in-scope subset. Lazy-imported to break the
@@ -100,7 +100,7 @@ def _filter_hostnames(hosts: list[str]) -> list[str]:
 def _filter_endpoints(endpoints: list[Endpoint]) -> list[Endpoint]:
     """Pydantic ``AfterValidator`` for ``list[Endpoint]`` fields.
 
-    Same scope source as ``_filter_hostnames``; extracts each
+    Same scope source as ``_filter_fqdns``; extracts each
     endpoint's host via stdlib ``urlparse`` and keeps only the
     endpoints whose host survives the filter. Pydantic has already
     validated each item as an ``Endpoint`` by the time this runs - the
@@ -116,8 +116,8 @@ def _filter_endpoints(endpoints: list[Endpoint]) -> list[Endpoint]:
     return [ep for ep in endpoints if host_of(ep.url) in in_scope]
 
 
-def _require_hostname_in_scope(host: str) -> str:
-    """Pydantic ``AfterValidator`` for single ``Hostname`` fields.
+def _require_fqdn_in_scope(host: str) -> str:
+    """Pydantic ``AfterValidator`` for single ``FQDN`` fields.
 
     A single hostname is the agent committing to one target; an
     out-of-scope value is a loud error, not silent drop. Raises
@@ -133,7 +133,7 @@ def _require_hostname_in_scope(host: str) -> str:
 def _require_endpoint_in_scope(endpoint: Endpoint) -> Endpoint:
     """Pydantic ``AfterValidator`` for single ``Endpoint`` fields.
 
-    Mirror of ``_require_hostname_in_scope`` but pulls the host out of
+    Mirror of ``_require_fqdn_in_scope`` but pulls the host out of
     ``endpoint.url`` first. Raises ``ValueError`` if the host is OOS.
     """
     from squad.workspace_tools import current_programme
@@ -148,7 +148,7 @@ def _require_endpoint_in_scope(endpoint: Endpoint) -> Endpoint:
 # args_schema validation drops out-of-scope picks (lists) or rejects
 # them (singles) before any wrapper body runs. The cybersquad-tool
 # skill carries the picking guidance.
-TargetHostnames = Annotated[list[Hostname], AfterValidator(_filter_hostnames)]
+TargetFQDNs = Annotated[list[FQDN], AfterValidator(_filter_fqdns)]
 TargetEndpoints = Annotated[list[Endpoint], AfterValidator(_filter_endpoints)]
-TargetHostname = Annotated[Hostname, AfterValidator(_require_hostname_in_scope)]
+TargetFQDN = Annotated[FQDN, AfterValidator(_require_fqdn_in_scope)]
 TargetEndpoint = Annotated[Endpoint, AfterValidator(_require_endpoint_in_scope)]

@@ -33,7 +33,7 @@ def current_programme() -> Programme:
     Manager's ``Save Selected Programme`` tool at run start
     (``squad/programme_manager/__init__.py``). Every downstream agent
     and every ``@cyber_tool``-wrapped tool that takes a typed-target
-    field (``Hostname`` / ``Endpoint``) sources its Programme through
+    field (``FQDN`` / ``Endpoint``) sources its Programme through
     this function rather than hitting the H1 API again: the workspace
     snapshot is the contract.
 

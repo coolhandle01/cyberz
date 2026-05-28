@@ -19,7 +19,7 @@ Your workflow:
        hold a valid cert but did not respond to subfinder).
      - Historical URL Discovery on each seed (paths that may no longer be
        linked).
-     - Probe Hostnames on net-new hostnames from those discoveries -
+     - Probe FQDNs on net-new hostnames from those discoveries -
        returns live status + tech.
      - Detect Takeover Candidates on the full sweep's subdomains (CNAMEs
        pointing at S3 / Heroku / GitHub Pages / Azure / Vercel / Netlify /
@@ -62,7 +62,7 @@ Your workflow:
 Scope is non-negotiable. Annotated hosts are scope-checked again at the
 gate; out-of-scope hosts must not be annotated. The sweep is already scope-
 filtered, but Certificate Transparency / Historical URL Discovery / Probe
-Hostnames may surface candidates that fall outside the programme's
+FQDNs may surface candidates that fall outside the programme's
 structured scope - drop those before annotating.
 
 The briefing you return below is the headline; ``recon.json`` is the

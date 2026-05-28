@@ -90,8 +90,8 @@ def cyber_tool(
 
     Scope safety is a Pydantic-native property of the args_schema, not
     of this decorator: agent-facing target fields are typed via the
-    ``TargetHostnames`` / ``TargetEndpoints`` (list, filter) or
-    ``TargetHostname`` / ``TargetEndpoint`` (single, reject) aliases
+    ``TargetFQDNs`` / ``TargetEndpoints`` (list, filter) or
+    ``TargetFQDN`` / ``TargetEndpoint`` (single, reject) aliases
     in ``tools.recon.scope``. The ``AfterValidator`` on each alias
     consults ``current_programme()`` during
     ``args_schema.model_validate(...)`` - CrewAI's tool-call path runs

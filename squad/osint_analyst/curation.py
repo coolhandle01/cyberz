@@ -11,10 +11,10 @@ the typed artefact downstream agents (VR research, PT probes) consume.
 from pydantic import BaseModel, Field
 
 from models import (
+    FQDN,
     CWEEntry,
     HostAnnotation,
     HostInsight,
-    Hostname,
     HostPriority,
     HostRole,
     OWASPEntry,
@@ -24,7 +24,7 @@ from squad import cyber_tool
 from squad.workspace_tools import current_programme
 from tools.cwe_data import lookup as cwe_lookup
 from tools.owasp_data import lookup as owasp_lookup
-from tools.recon.scope import TargetHostname
+from tools.recon.scope import TargetFQDN
 from tools.recon_insights import (
     finalise_recon,
     save_insight,
@@ -91,11 +91,11 @@ def lookup_owasp_tool(query: str) -> list[OWASPEntry]:
 class _AnnotateHostArgs(BaseModel):
     """Explicit args_schema for the Annotate Host tool."""
 
-    hostname: TargetHostname = Field(
+    hostname: TargetFQDN = Field(
         description=(
-            "Hostname to annotate. Must already be in the sweep, or have"
+            "FQDN to annotate. Must already be in the sweep, or have"
             " been surfaced by Certificate Transparency / Historical URL"
-            " Discovery / Probe Hostnames. Validated as an RFC 1123"
+            " Discovery / Probe FQDNs. Validated as an RFC 1123"
             " hostname (URLs / ports / paths reject upstream)."
         ),
     )
@@ -141,7 +141,7 @@ class _AnnotateHostArgs(BaseModel):
 
 @cyber_tool("Annotate Host", args_schema=_AnnotateHostArgs)
 def annotate_host_tool(
-    hostname: Hostname,
+    hostname: FQDN,
     role: HostRole,
     priority: HostPriority,
     notes: str,
@@ -153,7 +153,7 @@ def annotate_host_tool(
 
     Inputs:
       - hostname: a hostname from the sweep, or one newly discovered via
-        Certificate Transparency / Historical URL Discovery / Probe Hostnames
+        Certificate Transparency / Historical URL Discovery / Probe FQDNs
       - role: one of admin, api, auth, app, cdn, static, mail, infra, dev,
         unknown
       - priority: one of high, medium, low, skip - the curation signal the

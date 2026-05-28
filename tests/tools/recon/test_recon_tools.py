@@ -155,11 +155,11 @@ class TestFilterInScope:
 
 
 class TestInScopeTypedAliases:
-    """The ``TargetHostnames`` / ``TargetEndpoints`` typed aliases run
+    """The ``TargetFQDNs`` / ``TargetEndpoints`` typed aliases run
     a Pydantic ``AfterValidator`` at ``args_schema.model_validate(...)``
     time - that is the scope guard. List variants filter silently
     (mixed candidate lists pass survivors); single variants
-    (``TargetHostname`` / ``TargetEndpoint``) raise ``ValueError`` on
+    (``TargetFQDN`` / ``TargetEndpoint``) raise ``ValueError`` on
     an OOS pick. The aliases are exercised end-to-end via a small
     args_schema stub that mirrors what the cloud / probe / OSINT
     wrappers declare in production.
@@ -168,10 +168,10 @@ class TestInScopeTypedAliases:
     def test_list_hostnames_filters_oos(self, programme_in_workspace, target_apex):
         from pydantic import BaseModel
 
-        from tools.recon.scope import TargetHostnames
+        from tools.recon.scope import TargetFQDNs
 
         class _Args(BaseModel):
-            hostnames: TargetHostnames
+            hostnames: TargetFQDNs
 
         parsed = _Args.model_validate(
             {"hostnames": [f"api.{target_apex}", "bystander.example.org"]}
@@ -200,10 +200,10 @@ class TestInScopeTypedAliases:
     def test_single_hostname_rejects_oos(self, programme_in_workspace):
         from pydantic import BaseModel, ValidationError
 
-        from tools.recon.scope import TargetHostname
+        from tools.recon.scope import TargetFQDN
 
         class _Args(BaseModel):
-            hostname: TargetHostname
+            hostname: TargetFQDN
 
         with pytest.raises(ValidationError, match="not in the selected programme's scope"):
             _Args.model_validate({"hostname": "bystander.example.org"})
@@ -225,10 +225,10 @@ class TestInScopeTypedAliases:
         fixture is taken, so the lookup would raise if it ran."""
         from pydantic import BaseModel
 
-        from tools.recon.scope import TargetHostnames
+        from tools.recon.scope import TargetFQDNs
 
         class _Args(BaseModel):
-            hostnames: TargetHostnames
+            hostnames: TargetFQDNs
 
         parsed = _Args.model_validate({"hostnames": []})
         assert parsed.hostnames == []

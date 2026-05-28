@@ -11,19 +11,19 @@ takes a single typed target list and a single ``scope_filter``:
 
 from pydantic import BaseModel, Field
 
-from models import Endpoint, Hostname, RawFinding
+from models import FQDN, Endpoint, RawFinding
 from squad import cyber_tool
 from squad.penetration_tester._decorator import _parse_endpoints
 from tools.cloud import check_consul_vault_paths, check_consul_vault_ports
-from tools.recon.scope import TargetEndpoints, TargetHostnames
+from tools.recon.scope import TargetEndpoints, TargetFQDNs
 
 
 class _ConsulVaultPortArgs(BaseModel):
     """Explicit args_schema for the Consul/Vault Port Check tool."""
 
-    hostnames: TargetHostnames = Field(
+    hostnames: TargetFQDNs = Field(
         description=(
-            "Hostnames showing port 8500 (Consul) or 8200 (Vault) open,"
+            "FQDNs showing port 8500 (Consul) or 8200 (Vault) open,"
             " or hostnames on a cloud-native / microservices target."
             " Probes Consul UI on 8500 and Vault UI on 8200. The"
             " wrapper's scope filter drops out-of-scope hostnames before"
@@ -33,7 +33,7 @@ class _ConsulVaultPortArgs(BaseModel):
 
 
 @cyber_tool("Consul/Vault Port Check", args_schema=_ConsulVaultPortArgs)
-def consul_vault_port_check_tool(hostnames: list[Hostname]) -> list[RawFinding]:
+def consul_vault_port_check_tool(hostnames: list[FQDN]) -> list[RawFinding]:
     """
     Check for an exposed HashiCorp Consul UI (port 8500) or Vault UI
     (port 8200) on each supplied hostname.

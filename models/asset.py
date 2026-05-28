@@ -6,7 +6,7 @@ endpoints discovered, hostnames classified by role and priority, open
 ports per host, LLM-backed endpoint flags, and the bundled ``ReconResult``
 that wraps the lot for downstream agents.
 
-Hostname-typed fields compose the ``Hostname`` primitive so mis-
+FQDN-typed fields compose the ``FQDN`` primitive so mis-
 shaped hostnames reject upstream of any downstream consumer rather
 than silently flowing through the scope filter.
 """
@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 
 from models.finding import RawFinding
 from models.h1 import Programme
-from models.primitives import Hostname, HttpUrl
+from models.primitives import FQDN, HttpUrl
 from models.technology import Technology
 
 
@@ -29,7 +29,7 @@ class Endpoint(BaseModel):
 
     ``url`` is validated through Pydantic's built-in ``HttpUrl``
     (canonical RFC-3986 parser) with the host component running through
-    the ``Hostname`` validator for RFC 1123 strictness; runtime stays
+    the ``FQDN`` validator for RFC 1123 strictness; runtime stays
     ``str`` so consumers that ``.startswith(...)`` / ``.lower()`` /
     ``urlparse(ep.url)`` / dict-key / f-string keep working with no
     audit. See ``models/primitives._validate_endpoint_url`` for the
@@ -112,7 +112,7 @@ class HostInsight(BaseModel):
     WHY.
     """
 
-    hostname: Hostname
+    hostname: FQDN
     role: HostRole
     priority: HostPriority
     notes: str  # agent-authored, >= 30 chars
@@ -123,12 +123,12 @@ class HostInsight(BaseModel):
 class OpenPortsMap(BaseModel):
     """The recon-derived port map keyed by host.
 
-    Lives as its own model rather than ``dict[Hostname, list[int]]`` so the
+    Lives as its own model rather than ``dict[FQDN, list[int]]`` so the
     Penetration Tester sees a documented shape it can pattern-match on
     when deciding which port-specific probes to run.
     """
 
-    hosts: dict[Hostname, list[int]] = Field(default_factory=dict)
+    hosts: dict[FQDN, list[int]] = Field(default_factory=dict)
 
 
 class LlmEndpoint(BaseModel):
@@ -162,9 +162,9 @@ class ReconResult(BaseModel):
     """Everything the OSINT Analyst found about a programme's attack surface."""
 
     programme: Programme
-    subdomains: list[Hostname] = Field(default_factory=list)
+    subdomains: list[FQDN] = Field(default_factory=list)
     endpoints: list[Endpoint] = Field(default_factory=list)
-    open_ports: dict[Hostname, list[int]] = Field(default_factory=dict)
+    open_ports: dict[FQDN, list[int]] = Field(default_factory=dict)
     technologies: list[str] = Field(default_factory=list)
     notes: str = ""
     # Findings collected passively during recon (TLS issues, DNS misconfigs, etc.)
@@ -172,7 +172,7 @@ class ReconResult(BaseModel):
     passive_findings: list[RawFinding] = Field(default_factory=list)
     # hostname -> ordered list of public hop IPs from traceroute.
     # Useful for identifying origin IPs behind CDNs/WAFs (CDN bypass vector).
-    network_hops: dict[Hostname, list[str]] = Field(default_factory=dict)
+    network_hops: dict[FQDN, list[str]] = Field(default_factory=dict)
     # Per-host curation the OSINT Analyst authors via Annotate Host. Empty on
     # the OA's internal sweep.json; populated on the final recon.json.
     host_insights: list[HostInsight] = Field(default_factory=list)

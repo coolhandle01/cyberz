@@ -6,8 +6,8 @@ cohesive responsibility:
 - ``discovery`` - sweep + slicers + passive expansion (cert
   transparency, historical URLs, LLM endpoint detection) + active
   hostname probes + takeover detection. The "what is the surface"
-  half. The two active-probe wrappers (``Probe Hostnames``, ``Detect
-  Takeover Candidates``) take ``list[Hostname]``; ``@cyber_tool``
+  half. The two active-probe wrappers (``Probe FQDNs``, ``Detect
+  Takeover Candidates``) take ``list[FQDN]``; ``@cyber_tool``
   auto-detects the typed-target field and runs the programme scope
   guard in the wrapper rather than inline in the body. The shared
   ``current_programme`` reader lives in ``squad.workspace_tools``.
@@ -42,7 +42,7 @@ from squad.osint_analyst.discovery import (
     _DetectTakeoverCandidatesArgs,
     _HistoricalUrlsArgs,
     _LlmDetectionArgs,
-    _ProbeHostnamesArgs,
+    _ProbeFQDNsArgs,
     _ReconEndpointsArgs,
     _ReconOpenPortsArgs,
     _ReconSubdomainsArgs,
@@ -88,7 +88,7 @@ MEMBER = SquadMember(
         "Certificate Transparency Lookup": _CertTransparencyArgs,
         "Historical URL Discovery": _HistoricalUrlsArgs,
         "LLM Endpoint Detection": _LlmDetectionArgs,
-        "Probe Hostnames": _ProbeHostnamesArgs,
+        "Probe FQDNs": _ProbeFQDNsArgs,
         "Detect Takeover Candidates": _DetectTakeoverCandidatesArgs,
         "Lookup CWE": _OsintLookupCweArgs,
         "Lookup OWASP Guidance": _OsintLookupOwaspArgs,
@@ -129,7 +129,7 @@ __all__ = [  # noqa: RUF022 - grouped by purpose, not alphabetised
     "_LlmDetectionArgs",
     "_OsintLookupCweArgs",
     "_OsintLookupOwaspArgs",
-    "_ProbeHostnamesArgs",
+    "_ProbeFQDNsArgs",
     "_ReconEndpointsArgs",
     "_ReconOpenPortsArgs",
     "_ReconSubdomainsArgs",

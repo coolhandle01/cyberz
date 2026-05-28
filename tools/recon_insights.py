@@ -51,7 +51,7 @@ _INSIGHTS_SUBDIR = "host_insights"
 _SWEEP_FILENAME = "sweep.json"
 _RECON_FILENAME = "recon.json"
 
-# Hostnames must be made filesystem-safe before persisting under
+# FQDNs must be made filesystem-safe before persisting under
 # ``host_insights/<hostname>.json``. The replacement is reversible because we
 # never reverse it - the JSON body carries the original hostname.
 _HOSTNAME_SANITISE = re.compile(r"[^A-Za-z0-9.\-_]")
@@ -203,7 +203,7 @@ def _insights_dir() -> Path:
 def insight_path(hostname: str) -> Path:
     """Return the on-disk path of the insight for ``hostname``.
 
-    Hostnames are used directly as filenames (with a small character
+    FQDNs are used directly as filenames (with a small character
     sanitisation pass). The body carries the original hostname.
     """
     safe = _HOSTNAME_SANITISE.sub("_", hostname.strip().lower())

@@ -2,7 +2,7 @@
 
 Split per-family across sibling sub-modules so each file owns one
 cohesive exposure mechanism. Every wrapper in this package takes a
-typed target the agent explicitly picks (``list[Hostname]`` for port-
+typed target the agent explicitly picks (``list[FQDN]`` for port-
 or container-style probes, ``list[Endpoint]`` for path-style or URL-
 inspection probes) and carries a single ``scope_filter`` so out-of-
 scope targets reject at the wrapper boundary before any HTTP request
@@ -18,7 +18,7 @@ inventories the surface; PT attacks the inventoried surface.
 - ``panels`` - cPanel/WHM, Plesk, DirectAdmin, Webmin (hosting
   control panels).
 - ``dashboards`` - Grafana, Kibana, Portainer; each split into
-  ``Port Check`` (typed ``list[Hostname]``) + ``Path Check`` (typed
+  ``Port Check`` (typed ``list[FQDN]``) + ``Path Check`` (typed
   ``list[Endpoint]``) so each wrapper carries a single
   ``scope_filter``.
 - ``service_discovery`` - Consul / Vault, same split as dashboards.

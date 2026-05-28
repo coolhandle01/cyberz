@@ -8,8 +8,8 @@ import pytest
 from pydantic import BaseModel, ValidationError
 
 from models import (
+    FQDN,
     Endpoint,
-    Hostname,
     HttpUrl,
     IPAddress,
     RawFinding,
@@ -93,55 +93,55 @@ class TestEndpoint:
         assert ep.parameters == []
 
 
-# Hostname is exercised through a throwaway pydantic model so the validator
+# FQDN is exercised through a throwaway pydantic model so the validator
 # fires the same way it does when carried on a real schema field. Stick to
 # pytest.raises(ValidationError) rather than the lower-level ValueError so
 # the test mirrors what schema callers will see.
-class _HostnameProbe(BaseModel):
-    """Thin probe model used to drive the Hostname validator in isolation."""
+class _FQDNProbe(BaseModel):
+    """Thin probe model used to drive the FQDN validator in isolation."""
 
-    value: Hostname
+    value: FQDN
 
 
-class TestHostname:
+class TestFQDN:
     def test_accepts_target_apex(self, target_url):
-        # urlparse hostname is the canonical way to derive a Hostname-shaped
+        # urlparse hostname is the canonical way to derive a FQDN-shaped
         # string from a URL fixture; using the fixture keeps test intent
         # ("the in-scope target") readable at the call site.
         from urllib.parse import urlparse
 
         host = urlparse(target_url).hostname or ""
         apex = host.split(".", 1)[-1]  # "example.com" from "victim.example.com"
-        assert _HostnameProbe(value=apex).value == apex
+        assert _FQDNProbe(value=apex).value == apex
 
     def test_accepts_victim_subdomain(self, target_url):
         from urllib.parse import urlparse
 
         host = urlparse(target_url).hostname or ""
-        assert _HostnameProbe(value=host).value == host
+        assert _FQDNProbe(value=host).value == host
 
     def test_accepts_single_label(self):
         # ``localhost`` is the canonical single-label hostname; no URL fixture
         # exposes one because the rest of the codebase doesn't reach for it.
-        assert _HostnameProbe(value="localhost").value == "localhost"
+        assert _FQDNProbe(value="localhost").value == "localhost"
 
     def test_accepts_numeric_labels(self):
         # 10.0.0.1 looks IP-shaped but parses as a valid hostname per RFC 1123
         # label rules (digits are allowed). The scope filter is the next layer
         # that decides whether to accept it as an in-scope target.
-        assert _HostnameProbe(value="10.0.0.1").value == "10.0.0.1"
+        assert _FQDNProbe(value="10.0.0.1").value == "10.0.0.1"
 
     def test_lowercases_victim_host(self, target_url):
         from urllib.parse import urlparse
 
         host = urlparse(target_url).hostname or ""
-        assert _HostnameProbe(value=host.upper()).value == host
+        assert _FQDNProbe(value=host.upper()).value == host
 
     def test_strips_whitespace_around_victim_host(self, target_url):
         from urllib.parse import urlparse
 
         host = urlparse(target_url).hostname or ""
-        assert _HostnameProbe(value=f"  {host}  ").value == host
+        assert _FQDNProbe(value=f"  {host}  ").value == host
 
     def test_rejects_malformed(self, target_url):
         """Walks the malformed corpus, deriving each case from target_url
@@ -170,14 +170,14 @@ class TestHostname:
         ]
         for value, label in cases:
             with pytest.raises(ValidationError, match=r".*"):
-                _HostnameProbe.model_validate({"value": value})
+                _FQDNProbe.model_validate({"value": value})
             # ``label`` is unused at the assertion level but appears in the
             # case tuple so a future debugger can identify which case failed.
             del label
 
     def test_rejects_non_string(self):
         with pytest.raises(ValidationError):
-            _HostnameProbe.model_validate({"value": 42})
+            _FQDNProbe.model_validate({"value": 42})
 
 
 class _HttpUrlProbe(BaseModel):
@@ -203,7 +203,7 @@ class TestHttpUrl:
         intent ("a deliberately broken URL based on the in-scope target") is
         readable at the call site. Delegates to ``pydantic.HttpUrl`` for the
         URL contract; the host component then runs through the
-        ``Hostname`` validator so RFC 1123 strictness holds inside URLs
+        ``FQDN`` validator so RFC 1123 strictness holds inside URLs
         too - ``-evil.example.com`` rejects bare, and
         ``https://-evil.example.com`` rejects wrapped (the leading-hyphen
         case below pins that defense-in-depth).

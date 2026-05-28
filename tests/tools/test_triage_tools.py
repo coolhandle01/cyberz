@@ -408,7 +408,7 @@ class TestDiscardEntry:
             vuln_class=in_scope_raw.vuln_class,
             severity_hint=in_scope_raw.severity_hint,
             reason=DiscardReason.OUT_OF_SCOPE,
-            rationale="Hostname not in structured scope; test asset belonging to vendor.",
+            rationale="FQDN not in structured scope; test asset belonging to vendor.",
         )
         again = DiscardEntry.model_validate_json(d.model_dump_json())
         assert again.reason == DiscardReason.OUT_OF_SCOPE
