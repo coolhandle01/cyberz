@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field, field_validator
 from models.primitives import Severity
 
 
-class AttackGraphItem(BaseModel):
+class AttackGraphNode(BaseModel):
     """One probe-target hypothesis from the VR's research pass."""
 
     probe: str  # CVE id or vulnerability-class name, e.g. "CVE-2022-22965" or "reflected XSS"
@@ -32,7 +32,7 @@ class AttackGraphItem(BaseModel):
 
         Lives on the model so every constructor (CrewAI args_schema
         validation, ``model_validate_json`` on a re-loaded attack plan,
-        a direct ``AttackGraphItem(...)`` call) sees the same cleaned
+        a direct ``AttackGraphNode(...)`` call) sees the same cleaned
         list. Pairs with ``validate_attack_graph``'s
         ``if not item.recon_evidence:`` hard error - an item that was
         passed whitespace-only entries ends up with an empty list and
@@ -43,11 +43,20 @@ class AttackGraphItem(BaseModel):
 
 
 class AttackGraph(BaseModel):
-    """The VR's attack plan, handed to the PT and re-read at triage time."""
+    """The VR's attack plan, handed to the PT and re-read at triage time.
+
+    Today a flat ``nodes`` list - each node carries ``recon_evidence``
+    references back to the ``AttackSurface`` but no formal edges between
+    nodes. The ``Graph`` name is forward-looking: once the VR starts
+    modelling node dependencies ("CVE-2024-X prerequires shell access via
+    CVE-2024-Y"), the explicit ``edges: list[AttackGraphEdge]`` slot
+    lands here and a kill chain becomes a derived path through the graph
+    rather than free-text in the rationale.
+    """
 
     programme_handle: str
     drafted_at: datetime
-    items: list[AttackGraphItem]
+    nodes: list[AttackGraphNode]
 
 
 class AttackGraphValidationIssue(BaseModel):
@@ -72,7 +81,7 @@ class AttackGraphFinalisationError(RuntimeError):
 __all__ = [
     "AttackGraph",
     "AttackGraphFinalisationError",
-    "AttackGraphItem",
+    "AttackGraphNode",
     "AttackGraphValidationIssue",
     "AttackGraphValidationReport",
 ]

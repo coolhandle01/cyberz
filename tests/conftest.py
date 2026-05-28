@@ -17,7 +17,7 @@ The fixtures themselves live under ``tests/fixtures/`` by concern:
                 make_azure_blob_hostname, azure_blob_hostname,
                 azure_sas_endpoint
   findings.py   raw_finding_*, verified_vuln, disclosure_report,
-                attack_graph_item, attack_graph
+                attack_graph_node, attack_graph
   responses.py  make_response, clean_response_body
   tools.py      invoke_tool, reload_module
 

@@ -23,10 +23,10 @@ They are not redundant. They run on different LLM passes and answer different qu
 - **Purpose**: one sentence naming what the tool does in agent terms.
 - **Side effects**: writes to the run directory, mutates workspace artefacts, fires outbound HTTP, etc. Name the file paths if the next agent reads them.
 - **Return shape**: what the agent will get back. The canonical wire shape, not the Python type.
-- **Refusal conditions**: what makes the tool raise. "Refuses if items is empty, if any item is missing one of probe / target / rationale" - so the LLM avoids the obvious bad calls upstream of the wrapper.
+- **Refusal conditions**: what makes the tool raise. "Refuses if nodes is empty, if any node is missing one of probe / target / rationale" - so the LLM avoids the obvious bad calls upstream of the wrapper.
 - **Vocabulary cross-references**: the probe vocabulary appended to `Finalise Research`, the recon evidence kinds catalogue, the Severity enum values. The agent reads these once on tool selection; they do not need re-stating per call.
 
-What does **not** belong: a per-parameter section ("Args: items - the typed list of attack plan items, programme_handle - the H1 handle..."). That is what `Field(description=...)` is for, and the args_schema is the canonical place. Re-stating drifts as the schema evolves and adds nothing the LLM cannot read from the args_schema itself.
+What does **not** belong: a per-parameter section ("Args: nodes - the typed list of attack-graph nodes, programme_handle - the H1 handle..."). That is what `Field(description=...)` is for, and the args_schema is the canonical place. Re-stating drifts as the schema evolves and adds nothing the LLM cannot read from the args_schema itself.
 
 ## What belongs in Field descriptions
 

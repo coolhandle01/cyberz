@@ -16,7 +16,7 @@ Use these fixtures rather than redefining local equivalents - duplicates drift, 
 | `tests/fixtures/domains.py` | `target_url`, `bystander_url`, `callback_url`, `target_apex`, `target_sld`, `make_html_page` |
 | `tests/fixtures/programme.py` | `scope_item_*`, `programme`, `programme_in_workspace`, `dvwa_programme`, `dvwa_in_workspace`, `run_dir` |
 | `tests/fixtures/recon.py` | `endpoint`, `recon_result`, `make_s3_hostname` / `s3_hostname`, `make_azure_blob_hostname` / `azure_blob_hostname`, `azure_sas_endpoint` |
-| `tests/fixtures/findings.py` | `raw_finding_high` / `raw_finding_low` / `raw_finding_oos`, `verified_vuln`, `disclosure_report`, `attack_graph_item`, `attack_graph` |
+| `tests/fixtures/findings.py` | `raw_finding_high` / `raw_finding_low` / `raw_finding_oos`, `verified_vuln`, `disclosure_report`, `attack_graph_node`, `attack_graph` |
 | `tests/fixtures/responses.py` | `make_response`, `clean_response_body` |
 | `tests/fixtures/tools.py` | `invoke_tool`, `reload_module` |
 
@@ -28,7 +28,7 @@ When adding a new fixture, put it in the matching module rather than re-opening 
 |---|---|
 | `make_response` | Factory for `MagicMock` shaped like `requests.Response`. Accepts `status`, `body`, `headers`, `cookies`, `json`. |
 | `make_html_page` | Factory for minimal HTML pages with `<script>` tags. Default: one script at `{target_url}/app.js`. |
-| `target_url` | `https://victim.example.com` - in-scope target. **Single knob**: every in-scope fixture derives from this via `target_apex`. Flip `target_url` and `scope_item_url`, `scope_item_wildcard`, `programme`, `endpoint`, `recon_result`, `attack_graph_item` all follow. |
+| `target_url` | `https://victim.example.com` - in-scope target. **Single knob**: every in-scope fixture derives from this via `target_apex`. Flip `target_url` and `scope_item_url`, `scope_item_wildcard`, `programme`, `endpoint`, `recon_result`, `attack_graph_node` all follow. |
 | `target_apex` | Apex domain parsed out of `target_url` (e.g. `example.com`). The derivation point every in-scope fixture builds against - use it when authoring a new in-scope fixture rather than embedding a literal. |
 | `bystander_url` | `https://bystander.example.org` - out-of-scope; use whenever a test exercises the scope guard. |
 | `callback_url` | `https://callback.cybersquad.com` - OOB receiver placeholder. |
@@ -46,7 +46,7 @@ When adding a new fixture, put it in the matching module rather than re-opening 
 | `raw_finding_high` / `raw_finding_low` / `raw_finding_oos` | `RawFinding` instances at each severity / scope tier. |
 | `verified_vuln` | A `VerifiedVulnerability` model. |
 | `disclosure_report` | A `DisclosureReport` derived from `verified_vuln`. |
-| `attack_graph_item` / `attack_graph` | The VR's research artefact the PT consumes. |
+| `attack_graph_node` / `attack_graph` | The VR's research artefact the PT consumes. |
 | `clean_response_body` | An HTML body verified at setup time to contain no pentest probe marker - use for "no finding" cases. |
 | `invoke_tool` | Invoke a `@cyber_tool` wrapper through its args_schema (CrewAI's production path). Tests that exercise the `Target*` scope guard take this instead of `.func(...)` so the `AfterValidator` actually fires. |
 | `reload_module` | Wraps `importlib.reload` so tests can pick up env-var changes on module-level singletons. |

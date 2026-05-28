@@ -17,7 +17,7 @@ from models import (
     Severity,
     VerifiedVulnerability,
 )
-from models.attack import AttackGraph, AttackGraphItem
+from models.attack import AttackGraph, AttackGraphNode
 from models.h1 import (
     DisclosureReport,
     Programme,
@@ -325,15 +325,15 @@ class TestAttackGraph:
     def test_serialise_roundtrip(self, attack_graph):
         restored = AttackGraph.model_validate_json(attack_graph.model_dump_json())
         assert restored.programme_handle == attack_graph.programme_handle
-        assert restored.items[0].expected_ceiling == Severity.CRITICAL
+        assert restored.nodes[0].expected_ceiling == Severity.CRITICAL
 
 
-class TestAttackGraphItem:
+class TestAttackGraphNode:
     def test_accepts_vulnerability_class_probe(self, target_url):
         # The fixture covers CVE-id probes; this variant exercises the
         # vulnerability-class name shape (the second canonical probe form)
         # with a recon-evidence list to confirm the model accepts it end to end.
-        item = AttackGraphItem(
+        item = AttackGraphNode(
             probe="reflected XSS",
             target=f"{target_url}/?q=test",
             expected_ceiling=Severity.MEDIUM,
@@ -351,7 +351,7 @@ class TestAttackGraphItem:
         # cleaned list, so the wrapper does not need its
         # own defensive shaping and the persisted artefact never carries
         # whitespace-only entries.
-        item = AttackGraphItem(
+        item = AttackGraphNode(
             probe="reflected XSS",
             target=f"{target_url}/?q=test",
             expected_ceiling=Severity.MEDIUM,

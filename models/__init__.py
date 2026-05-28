@@ -24,7 +24,7 @@ across every consumer.
 | ``models.scanner`` | ``NmapMode``, ``NmapBanner``, ``NmapScripts``, ``NmapService``, |
 |                    | ``NmapHostResult``, ``NmapScanResult``, ``HttpxMode`` |
 | ``models.h1`` | HackerOne shapes incl. ``ProgrammeReportSummary`` |
-| ``models.attack`` | ``AttackGraph``, ``AttackGraphItem``, |
+| ``models.attack`` | ``AttackGraph``, ``AttackGraphNode``, |
 |                   | ``AttackGraphValidationIssue``, ``AttackGraphValidationReport``, |
 |                   | ``AttackGraphFinalisationError`` |
 | ``models.triage`` | ``AuthoredAssessment``, ``SeverityDecision`` |
@@ -52,7 +52,7 @@ from models.asset import (
 from models.attack import (
     AttackGraph,
     AttackGraphFinalisationError,
-    AttackGraphItem,
+    AttackGraphNode,
     AttackGraphValidationIssue,
     AttackGraphValidationReport,
 )
@@ -90,7 +90,7 @@ __all__ = [
     "AsnRecord",
     "AttackGraph",
     "AttackGraphFinalisationError",
-    "AttackGraphItem",
+    "AttackGraphNode",
     "AttackGraphValidationIssue",
     "AttackGraphValidationReport",
     "AttackSurface",

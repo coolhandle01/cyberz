@@ -174,7 +174,7 @@ The reader returns the typed model; downstream agents work against the schema, n
 | `models.cve` | `CveEntry` |
 | `models.metrics` | `RunMetrics` |
 | `models.h1` | HackerOne API shapes (incl. `ProgrammeReportSummary`) |
-| `models.attack` | `AttackGraph`, `AttackGraphItem` |
+| `models.attack` | `AttackGraph`, `AttackGraphNode` |
 
 Dependency layers flow `primitives -> finding -> h1 -> asset`; modules import only from layers below them. Consumers can still `from models import X` (re-exports preserve the public surface) but inside the package, prefer the per-module path so circular-import dances stay out of reach.
 

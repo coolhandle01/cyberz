@@ -7,7 +7,7 @@ attack plan: a list of probe-target hypotheses with expected severity
 ceilings and the recon signals that justified each one. The agent does the
 thinking; this module provides the supporting primitives:
 
-* ``AttackGraph`` / ``AttackGraphItem`` (from ``models.attack``) - the
+* ``AttackGraph`` / ``AttackGraphNode`` (from ``models.attack``) - the
   artefact the agent composes.
 * ``validate_attack_graph(plan)`` - quality gate. Returns the issue list
   (``AttackGraphValidationReport`` from ``models.attack``). Hard errors
@@ -54,24 +54,24 @@ def validate_attack_graph(plan: AttackGraph) -> AttackGraphValidationReport:
     """
     issues: list[AttackGraphValidationIssue] = []
 
-    if not plan.items:
+    if not plan.nodes:
         issues.append(
             AttackGraphValidationIssue(
-                section="items",
+                section="nodes",
                 severity="error",
                 message=(
-                    "attack plan has no items; produce at least one "
+                    "attack plan has no nodes; produce at least one "
                     "probe-target hypothesis or explain in the briefing "
                     "why no probes are warranted"
                 ),
             )
         )
 
-    for n, item in enumerate(plan.items, 1):
+    for n, item in enumerate(plan.nodes, 1):
         if not item.probe.strip():
             issues.append(
                 AttackGraphValidationIssue(
-                    section=f"items[{n}].probe",
+                    section=f"nodes[{n}].probe",
                     severity="error",
                     message="probe is required (CVE id or vulnerability-class name)",
                 )
@@ -79,7 +79,7 @@ def validate_attack_graph(plan: AttackGraph) -> AttackGraphValidationReport:
         if not item.target.strip():
             issues.append(
                 AttackGraphValidationIssue(
-                    section=f"items[{n}].target",
+                    section=f"nodes[{n}].target",
                     severity="error",
                     message="target is required (hostname or URL drawn from recon)",
                 )
@@ -87,7 +87,7 @@ def validate_attack_graph(plan: AttackGraph) -> AttackGraphValidationReport:
         if not item.rationale.strip():
             issues.append(
                 AttackGraphValidationIssue(
-                    section=f"items[{n}].rationale",
+                    section=f"nodes[{n}].rationale",
                     severity="error",
                     message="rationale is required (1-2 sentence why and what to look for)",
                 )
@@ -95,7 +95,7 @@ def validate_attack_graph(plan: AttackGraph) -> AttackGraphValidationReport:
         if not item.recon_evidence:
             issues.append(
                 AttackGraphValidationIssue(
-                    section=f"items[{n}].recon_evidence",
+                    section=f"nodes[{n}].recon_evidence",
                     severity="error",
                     message=(
                         "recon_evidence must not be empty; cite the recon signals "

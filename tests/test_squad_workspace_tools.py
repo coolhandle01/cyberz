@@ -54,9 +54,9 @@ class TestSharedWorkspaceTools:
         result = read_attack_graph_tool.func()
         assert isinstance(result, AttackGraph)
         assert result.programme_handle == attack_graph.programme_handle
-        assert len(result.items) == len(attack_graph.items)
-        assert result.items[0].probe == attack_graph.items[0].probe
-        assert result.items[0].expected_ceiling == attack_graph.items[0].expected_ceiling
+        assert len(result.nodes) == len(attack_graph.nodes)
+        assert result.nodes[0].probe == attack_graph.nodes[0].probe
+        assert result.nodes[0].expected_ceiling == attack_graph.nodes[0].expected_ceiling
 
     def test_read_attack_graph_tool_raises_when_missing(self, run_dir) -> None:
         from squad import read_attack_graph_tool
