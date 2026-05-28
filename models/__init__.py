@@ -26,6 +26,7 @@ across every consumer.
 |                   | ``AttackPlanFinalisationError`` |
 | ``models.triage`` | ``AuthoredAssessment``, ``SeverityDecision`` |
 | ``models.report`` | ``AuthoredDraft`` |
+| ``models.technology`` | ``Technology``, ``TechnologyCategory`` |
 
 The per-domain modules import only from layers below them in the
 dependency graph: primitives -> finding -> h1 -> asset. No module imports
@@ -67,6 +68,7 @@ from models.metrics import RunMetrics
 from models.owasp import OWASPEntry
 from models.primitives import Hostname, HttpUrl, Severity
 from models.report import AuthoredDraft
+from models.technology import Technology, TechnologyCategory
 from models.triage import AuthoredAssessment, SeverityDecision
 from models.workspace import RunFile, RunFileContent
 
@@ -104,5 +106,7 @@ __all__ = [
     "Severity",
     "SeverityDecision",
     "TakeoverCandidate",
+    "Technology",
+    "TechnologyCategory",
     "VerifiedVulnerability",
 ]
