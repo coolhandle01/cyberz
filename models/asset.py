@@ -46,7 +46,7 @@ class Endpoint(BaseModel):
       should prefer this for pattern-matching; ``technologies`` stays
       for prose docstring vocabulary and back-compat.
 
-    Both populate at probe time in ``tools.recon.probe.probe_endpoints``.
+    Both populate at probe time in ``tools.recon.httpx.httpx_scan``.
     Coverage of the typed channel is bounded by the recon-side
     catalogue (``tools/recon/technology.py:_CATALOGUE``); unmapped raw
     strings stay in ``technologies`` but do not appear in
@@ -58,6 +58,23 @@ class Endpoint(BaseModel):
     technologies: list[str] = Field(default_factory=list)
     detected_technologies: list[Technology] = Field(default_factory=list)
     parameters: list[str] = Field(default_factory=list)
+
+    # Favicon hash (MMH3 of the favicon bytes) emitted by httpx's
+    # ``-favicon`` flag when ``HttpxMode.WEB_INVENTORY`` runs. Used as
+    # the join key for Shodan / Censys ``http.favicon.hash:`` searches -
+    # one in-scope asset's favicon pivots into every other host serving
+    # the same icon. Tool-captured: defence is coerce-time normalise +
+    # length cap (MMH3 is a signed 32-bit int rendered as decimal; 12
+    # chars including the sign is the realistic ceiling, capped loose).
+    favicon_hash: str | None = Field(default=None, max_length=32)
+    # TLS Subject Alternative Names extracted from the leaf cert by
+    # httpx's ``-tls-grab`` flag when ``HttpxMode.WEB_INVENTORY`` runs.
+    # Each entry is an FQDN-shaped string (the FQDN primitive validates
+    # at construction). Useful in-scope-FQDN discovery: a multi-SAN cert
+    # leaks every hostname the server is authoritative for, which the
+    # OA's curation pass can promote to net-new in-scope hosts when
+    # the SAN matches the programme's apex.
+    tls_sans: list[FQDN] = Field(default_factory=list)
 
 
 class EndpointPage(BaseModel):

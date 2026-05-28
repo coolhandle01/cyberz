@@ -52,6 +52,30 @@ class NmapMode(StrEnum):
     OS_DETECT = "os-detect"  # -O OS fingerprint; privileged only
 
 
+class HttpxMode(StrEnum):
+    """Coarse profile the OA picks per ``httpx_scan`` invocation.
+
+    Same shape as ``NmapMode`` - escalating bundles of httpx-CLI flags.
+    The OA's broad-then-narrow pattern is: ``LIVE`` against the whole
+    subdomain list to find live HTTP/S endpoints; ``TECH_DETECT`` on
+    that subset for Wappalyzer fingerprints + server / title headers;
+    ``WEB_INVENTORY`` on the HIGH-priority hosts only - the heavyweight
+    pass that grabs the favicon hash (Shodan-pivot) and TLS SAN names
+    (in-scope FQDN-discovery surface).
+
+    Deliberately does NOT expose httpx flags that overlap dedicated
+    recon tools: ``-asn`` defers to ``tools/recon/asn.py`` (Team Cymru,
+    BGP-rooted authoritative source); ``-cname`` defers to
+    ``tools/recon/dnsx.py`` (dedicated DNS tool that already chains
+    CNAMEs into the takeover-fingerprint flow). One way to get each
+    data point.
+    """
+
+    LIVE = "live"  # -status-code only; "is this URL alive?"
+    TECH_DETECT = "tech-detect"  # + -tech-detect / -server / -title
+    WEB_INVENTORY = "web-inventory"  # + -favicon / -tls-grab / -content-type / -method
+
+
 class NmapBanner(StrEnum):
     """Banner-grabbing depth within ``SERVICE_VERSION`` / ``FULL_INVENTORY``.
 

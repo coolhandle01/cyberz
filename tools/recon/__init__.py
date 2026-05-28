@@ -14,9 +14,9 @@ from models.h1 import Programme, ScopeType
 from tools.recon.cert_transparency import cert_transparency
 from tools.recon.dirfuzz import discover_paths
 from tools.recon.dnsx import TakeoverCandidate, detect_takeover_candidates
+from tools.recon.httpx import probe_endpoints
 from tools.recon.llm import detect_llm_endpoints
 from tools.recon.nmap import port_scan
-from tools.recon.probe import probe_endpoints
 from tools.recon.scope import filter_in_scope, host_of
 from tools.recon.subfinder import enumerate_subdomains
 from tools.recon.tls import check_dns_email_security, check_tls

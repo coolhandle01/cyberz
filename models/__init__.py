@@ -69,6 +69,7 @@ from models.insight import (
 from models.metrics import RunMetrics
 from models.network import (
     AsnRecord,
+    HttpxMode,
     NmapBanner,
     NmapHostResult,
     NmapMode,
@@ -102,6 +103,7 @@ __all__ = [
     "HostPriority",
     "HostRole",
     "HttpUrl",
+    "HttpxMode",
     "IPAddress",
     "InsightValidationIssue",
     "InsightValidationReport",
