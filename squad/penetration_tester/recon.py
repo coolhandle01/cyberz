@@ -5,7 +5,7 @@ Analyst's ``recon.json``.
 The PT does not run recon itself - the OA produced ``recon.json`` -
 but it needs narrow views (subdomain list, filtered endpoint page,
 per-host port map) to choose which probes to run without loading the
-whole AttackSurface. These three @cyber_tool wrappers are those typed
+whole AttackGraph. These three @cyber_tool wrappers are those typed
 slicers. They are read-only, idempotent, and write nothing to the
 workspace.
 """
@@ -128,7 +128,7 @@ def recon_endpoints_tool(
 ) -> EndpointPage:
     """
     Query the endpoints discovered during recon without loading the whole
-    AttackSurface. Filters are conjunctive: ``status=200`` and ``tech="wordpress"``
+    AttackGraph. Filters are conjunctive: ``status=200`` and ``tech="wordpress"``
     returns endpoints satisfying both. ``host_contains`` matches the URL
     case-insensitively. Returns an EndpointPage with total, offset, returned,
     and a typed endpoints list - paginate by re-calling with a larger offset.
@@ -178,6 +178,6 @@ def recon_open_ports_tool(recon_path: str, host: str | None = None) -> OpenPorts
     Return the open-port map per host from recon.json. Passing a ``host``
     restricts the result to that single host. Use this to decide which of the
     port-specific probes to run (Elasticsearch on 9200, Redis on 6379, etc.)
-    without loading the whole AttackSurface.
+    without loading the whole AttackGraph.
     """
     return OpenPortsMap(hosts=recon_open_ports(recon_path, host=host))

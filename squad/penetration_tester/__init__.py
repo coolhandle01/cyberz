@@ -25,7 +25,7 @@ from pathlib import Path
 
 from squad import (
     SquadMember,
-    read_attack_graph_tool,
+    read_attack_forest_tool,
     read_run_file_tool,
     read_run_filelist_tool,
 )
@@ -147,7 +147,7 @@ from squad.penetration_tester.recon import (
 )
 from squad.workspace_tools import (
     _ListRunFilesArgs,
-    _ReadAttackGraphArgs,
+    _ReadAttackForestArgs,
     _ReadRunFileArgs,
 )
 
@@ -210,7 +210,7 @@ MEMBER = SquadMember(
         recon_open_ports_tool,
         save_findings_tool,
         # Shared workspace wrappers
-        read_attack_graph_tool,
+        read_attack_forest_tool,
         read_run_filelist_tool,
         read_run_file_tool,
     ],
@@ -273,7 +273,7 @@ MEMBER = SquadMember(
         # Shared workspace wrappers (re-exported via squad.workspace_tools)
         "List Run Files": _ListRunFilesArgs,
         "Read Run File": _ReadRunFileArgs,
-        "Read Attack Plan": _ReadAttackGraphArgs,
+        "Read Attack Plan": _ReadAttackForestArgs,
     },
 )
 

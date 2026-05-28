@@ -32,7 +32,7 @@ from tools.recon_insights import (
     validate_insight,
 )
 from tools.recon_insights import (
-    load_attack_surface as load_attack_surface_impl,
+    load_attack_graph as load_attack_graph_impl,
 )
 from tools.recon_insights import (
     load_insights as load_insights_impl,
@@ -133,9 +133,9 @@ class _AnnotateHostArgs(BaseModel):
             " of what was seen, not an alternate inventory."
         ),
     )
-    attack_surface_path: str = Field(
-        default="attack_surface.json",
-        description="Relative path to the OA's sweep file. Defaults to ``attack_surface.json``.",
+    attack_graph_path: str = Field(
+        default="attack_graph.json",
+        description="Relative path to the OA's sweep file. Defaults to ``attack_graph.json``.",
     )
 
 
@@ -146,7 +146,7 @@ def annotate_host_tool(
     priority: HostPriority,
     notes: str,
     detected_tech: list[str] | None = None,
-    attack_surface_path: str = "attack_surface.json",
+    attack_graph_path: str = "attack_graph.json",
 ) -> HostAnnotation:
     """
     Author one HostInsight for a single hostname and run the quality gate.
@@ -168,7 +168,7 @@ def annotate_host_tool(
     InsightValidationReport. Re-run with the issues addressed when
     validation.ok is false.
     """
-    sweep = load_attack_surface_impl(attack_surface_path)
+    sweep = load_attack_graph_impl(attack_graph_path)
     programme = current_programme()
 
     insight = HostInsight(
@@ -188,11 +188,11 @@ def annotate_host_tool(
 class _UncoveredHostsArgs(BaseModel):
     """Explicit args_schema for the Uncovered Hosts tool."""
 
-    attack_surface_path: str = Field(
-        default="attack_surface.json",
+    attack_graph_path: str = Field(
+        default="attack_graph.json",
         description=(
             "Relative path to the OA's sweep file. Defaults to"
-            " ``attack_surface.json``. Returns interesting-status hostnames (200,"
+            " ``attack_graph.json``. Returns interesting-status hostnames (200,"
             " 301, 302, 401, 403, ...) in the sweep that have no insight"
             " yet - use as a checklist before Finalise Recon."
         ),
@@ -200,14 +200,14 @@ class _UncoveredHostsArgs(BaseModel):
 
 
 @cyber_tool("Uncovered Hosts", args_schema=_UncoveredHostsArgs)
-def uncovered_hosts_tool(attack_surface_path: str = "attack_surface.json") -> list[str]:
+def uncovered_hosts_tool(attack_graph_path: str = "attack_graph.json") -> list[str]:
     """
     Return interesting-status hostnames in the sweep (200, 301, 302, 401,
     403, ...) that have no insight yet. Use as a checklist before calling
     Finalise Recon - hosts you choose to leave uncovered should at least be
     a deliberate decision.
     """
-    sweep = load_attack_surface_impl(attack_surface_path)
+    sweep = load_attack_graph_impl(attack_graph_path)
     insights = load_insights_impl()
     return uncovered_interesting_hosts(sweep, insights)
 
@@ -215,15 +215,15 @@ def uncovered_hosts_tool(attack_surface_path: str = "attack_surface.json") -> li
 class _FinaliseReconArgs(BaseModel):
     """Explicit args_schema for the Finalise Recon tool."""
 
-    attack_surface_path: str = Field(
-        default="attack_surface.json",
-        description="Relative path to the OA's sweep file. Defaults to ``attack_surface.json``.",
+    attack_graph_path: str = Field(
+        default="attack_graph.json",
+        description="Relative path to the OA's sweep file. Defaults to ``attack_graph.json``.",
     )
 
 
 @cyber_tool("Finalise Recon", args_schema=_FinaliseReconArgs)
 def finalise_recon_tool(
-    attack_surface_path: str = "attack_surface.json",
+    attack_graph_path: str = "attack_graph.json",
 ) -> str:
     """
     Consolidate the sweep + every authored HostInsight into recon.json for
@@ -234,7 +234,7 @@ def finalise_recon_tool(
     """
     programme = current_programme()
     try:
-        path = finalise_recon(programme, attack_surface_filename=attack_surface_path)
+        path = finalise_recon(programme, attack_graph_filename=attack_graph_path)
     except ReconFinalisationError as exc:
         raise ValueError(str(exc)) from exc
     return path.name

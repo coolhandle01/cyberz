@@ -20,7 +20,7 @@ cybersquad is a six-agent CrewAI pipeline that autonomously selects HackerOne bu
 | `tools/h1_api.py` | HackerOne REST client. Singleton: `from tools.h1_api import h1`. |
 | `tools/recon/` | Recon tools: subfinder, httpx, dnsx (subdomain-takeover detection), nmap, TLS, DNS, dirfuzz, waybackurls, cert transparency, traceroute, scope guard. |
 | `tools/recon/scope.py` | `filter_in_scope()` - hard scope enforcement boundary. Do not weaken. |
-| `tools/recon_insights.py` | Host-annotation authoring primitives for the OSINT Analyst: HostInsight persistence, quality validation, and final consolidation of attack_surface.json + insights into recon.json. |
+| `tools/recon_insights.py` | Host-annotation authoring primitives for the OSINT Analyst: HostInsight persistence, quality validation, and final consolidation of attack_graph.json + insights into recon.json. |
 | `tools/pentest/` | Pentest tools: nuclei, sqlmap, CORS, SSRF, XSS, SRI, header injection, source maps, error disclosure. |
 | `tools/cloud/` | Cloud/service checks: S3, Azure Blob, per-engine databases, admin panels, branded panels. |
 | `tools/cloud/databases/` | Per-engine unauthenticated database checks: one file per engine. |

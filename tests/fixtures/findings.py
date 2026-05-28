@@ -3,7 +3,7 @@
 The ``raw_finding_*`` set covers the three tiers the triage gate
 discriminates against (high in-scope, low in-scope, out-of-scope);
 ``verified_vuln`` -> ``disclosure_report`` walks the post-triage
-chain; ``attack_graph_node`` / ``attack_graph`` are the VR research
+chain; ``attack_tree`` / ``attack_forest`` are the VR research
 artefact the PT consumes.
 
 Loaded via ``pytest_plugins`` in ``tests/conftest.py``.
@@ -14,7 +14,7 @@ from __future__ import annotations
 import pytest
 
 from models import RawFinding, Severity, VerifiedVulnerability
-from models.attack import AttackGraph, AttackGraphNode
+from models.attack import AttackForest, AttackTree
 from models.h1 import DisclosureReport
 
 
@@ -90,8 +90,8 @@ def disclosure_report(verified_vuln) -> DisclosureReport:
 
 
 @pytest.fixture()
-def attack_graph_node(target_apex: str) -> AttackGraphNode:
-    return AttackGraphNode(
+def attack_tree(target_apex: str) -> AttackTree:
+    return AttackTree(
         probe="CVE-2022-22965",
         target=f"https://api.{target_apex}",
         expected_ceiling=Severity.CRITICAL,
@@ -107,11 +107,11 @@ def attack_graph_node(target_apex: str) -> AttackGraphNode:
 
 
 @pytest.fixture()
-def attack_graph(attack_graph_node) -> AttackGraph:
+def attack_forest(attack_tree) -> AttackForest:
     from datetime import UTC, datetime
 
-    return AttackGraph(
+    return AttackForest(
         programme_handle="test-programme",
         drafted_at=datetime(2026, 1, 1, tzinfo=UTC),
-        nodes=[attack_graph_node],
+        trees=[attack_tree],
     )

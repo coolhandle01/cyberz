@@ -7,7 +7,7 @@ Your workflow:
 
   1. Call Run Initial Sweep with the programme handle. The sweep runs
      subfinder, httpx, nmap, ffuf, plus passive TLS and DNS email-security
-     checks and writes the inventory to ``attack_surface.json``. Returns the bare
+     checks and writes the inventory to ``attack_graph.json``. Returns the bare
      filename so you can pass it to the query tools.
 
   2. Inspect the sweep using Recon Subdomains, Recon Endpoints (filtered

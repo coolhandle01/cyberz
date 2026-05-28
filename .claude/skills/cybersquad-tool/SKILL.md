@@ -102,9 +102,9 @@ For the **producer side** - when to define a new typed primitive, the prompt-inj
 
 ```python
 # correct - the agent sees a schema
-@cyber_tool("Read Attack Plan", args_schema=_ReadAttackGraphArgs)
-def read_attack_graph_tool() -> AttackGraph:
-    return load_attack_graph(attack_graph_path())
+@cyber_tool("Read Attack Plan", args_schema=_ReadAttackForestArgs)
+def read_attack_forest_tool() -> AttackForest:
+    return load_attack_forest(attack_forest_path())
 
 @pentest_tool("Reflected XSS Probe", check_fn=check_reflected_xss, args_schema=_XssArgs)
 def xss_probe_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
@@ -123,7 +123,7 @@ Never `dict`, `list[dict]`, or bare `list` (no inner type). CrewAI serialises py
 
 ### The one exception: workspace-handle strings
 
-`finalise_X` / `save_X` tools return the bare filename of the artifact they wrote (`"findings.json"`, `"attack_graph.json"`, `"verified.json"`). That `str` return is intentional - the filename is a handle the next agent passes to a typed reader. Document it in the docstring; do not invent a `WorkspaceHandle` wrapper model.
+`finalise_X` / `save_X` tools return the bare filename of the artifact they wrote (`"findings.json"`, `"attack_forest.json"`, `"verified.json"`). That `str` return is intentional - the filename is a handle the next agent passes to a typed reader. Document it in the docstring; do not invent a `WorkspaceHandle` wrapper model.
 
 ## Type the parameters too
 
@@ -151,7 +151,7 @@ Any file an agent writes for the next agent to read needs both halves of the con
 | Writer | Reader |
 |---|---|
 | `finalise_recon(recon)` -> `recon.json` | `Recon Endpoints` / `Recon Open Ports` / `Recon Subdomains` slicers |
-| `finalise_research(plan)` -> `attack_graph.json` | `read_attack_graph_tool` -> `AttackGraph` |
+| `finalise_research(plan)` -> `attack_forest.json` | `read_attack_forest_tool` -> `AttackForest` |
 | `finalise_triage(...)` -> `verified.json` | (Technical Author's typed reader) |
 
 The reader returns the typed model; downstream agents work against the schema, not raw bytes. Never land a writer without the matching typed reader.
@@ -159,7 +159,7 @@ The reader returns the typed model; downstream agents work against the schema, n
 ## Where tools live
 
 - **Per-agent**: `squad/<agent>/__init__.py`. Each `@cyber_tool` / `@pentest_tool` is added to that agent's `MEMBER.tools` list.
-- **Shared between agents**: `squad/workspace_tools.py`. Re-export through `squad/__init__.py` (`__all__` and the explicit re-export) so consumers `from squad import read_attack_graph_tool`, not from the deeper path.
+- **Shared between agents**: `squad/workspace_tools.py`. Re-export through `squad/__init__.py` (`__all__` and the explicit re-export) so consumers `from squad import read_attack_forest_tool`, not from the deeper path.
 
 ## Where models live
 
@@ -169,12 +169,12 @@ The reader returns the typed model; downstream agents work against the schema, n
 |---|---|
 | `models.primitives` | `Severity`, `FQDN`, `HttpUrl` - the typed-string and enum layer |
 | `models.finding` | `RawFinding`, `VerifiedVulnerability`, `RawFindingSummary` |
-| `models.asset` | `Endpoint`, `EndpointPage`, `HostRole`, `HostPriority`, `HostInsight`, `OpenPortsMap`, `LlmEndpoint`, `AttackSurface` |
+| `models.asset` | `Endpoint`, `EndpointPage`, `HostRole`, `HostPriority`, `HostInsight`, `OpenPortsMap`, `LlmEndpoint`, `AttackGraph` |
 | `models.workspace` | `RunFile`, `RunFileContent` |
 | `models.cve` | `CveEntry` |
 | `models.metrics` | `RunMetrics` |
 | `models.h1` | HackerOne API shapes (incl. `ProgrammeReportSummary`) |
-| `models.attack` | `AttackGraph`, `AttackGraphNode` |
+| `models.attack` | `AttackForest`, `AttackTree` |
 
 Dependency layers flow `primitives -> finding -> h1 -> asset`; modules import only from layers below them. Consumers can still `from models import X` (re-exports preserve the public surface) but inside the package, prefer the per-module path so circular-import dances stay out of reach.
 
@@ -205,10 +205,10 @@ These rules apply to every agent's `@cyber_tool` / `@pentest_tool` / `@research_
 
 - `squad/penetration_tester/__init__.py` and `squad/osint_analyst/__init__.py` are the largest reference surfaces. Each wrapper carries an explicit `_<ToolName>Args` schema directly above the decorator with `Field(description=...)` on every field. Pentest probes (`ssrf_probe_tool`, `idor_probe_tool`) are the shortest StrEnum examples; cloud / infra wrappers (`s3_check_tool`, `mongodb_tool`, `grafana_port_check_tool`) show `list[FQDN]` typed-target fields (auto-scope-filtered); path-style cloud wrappers (`sensitive_files_tool`, `grafana_path_check_tool`, `azure_sas_token_check_tool`) show `list[Endpoint]` typed-target fields; OSINT (`probe_hostnames_tool`, `annotate_host_tool`) show the same composition on the OSINT side.
 - `squad/penetration_tester/__init__.py` `recon_endpoints_tool` returns `EndpointPage` - the canonical typed-return example. The wrapper lives on PT but reads OSINT's recon output, so the pattern is cross-agent.
-- `squad/workspace_tools.py` `read_attack_graph_tool` returns `AttackGraph` - mirror this shape on any new workspace reader (typed return, no `dict`).
+- `squad/workspace_tools.py` `read_attack_forest_tool` returns `AttackForest` - mirror this shape on any new workspace reader (typed return, no `dict`).
 - The workspace-handle string family demonstrates the `str` exception (writer returns the filename, next agent passes it to a typed reader):
   - `Finalise Recon` (`squad/osint_analyst/__init__.py`) -> `"recon.json"`
-  - `Finalise Research` (`squad/vulnerability_researcher/__init__.py`) -> `"attack_graph.json"`
+  - `Finalise Research` (`squad/vulnerability_researcher/__init__.py`) -> `"attack_forest.json"`
   - `Finalise Triage` (`squad/vulnerability_researcher/__init__.py`) -> `"verified.json"`
   - `Finalise Reports` (`squad/technical_author/__init__.py`) -> the reports manifest filename
 
@@ -224,7 +224,7 @@ Upstream's architectural take is that structured data belongs on the *task* (`ou
 
 - The cross-agent contract test that walks every `MEMBER.tools` entry needs introspectable return annotations to enforce the rule.
 - Tests call `tool.func(...)` directly and want a typed return.
-- `mypy` verifies cross-tool wiring (e.g. that `read_attack_graph_tool` actually returns what `Finalise Research` wrote).
+- `mypy` verifies cross-tool wiring (e.g. that `read_attack_forest_tool` actually returns what `Finalise Research` wrote).
 - Probe tools return small, structured `RawFinding` lists - flattening them to text loses the structure agents reason over.
 
 Wire-format equivalence: CrewAI serialises any return value to JSON-text for the LLM, so the agent sees the same text upstream wants *and* we get the Python-side discipline upstream does not.
@@ -235,7 +235,7 @@ A CrewAI task emits exactly one thing - the agent's text response, parked at `ta
 
 Two reasons we use workspace files for inter-agent structured data instead of `output_pydantic`:
 
-1. **Size (forced).** AttackSurface artefacts run ~115KB / ~30K tokens on real targets. `output_pydantic=AttackSurface` would put that JSON in every downstream `context=` and torch the LLM window. Workspace files + typed slicers (`Recon Endpoints`, `Recon Open Ports`, `Recon Subdomains`) let agents pull narrow views on demand.
+1. **Size (forced).** AttackGraph artefacts run ~115KB / ~30K tokens on real targets. `output_pydantic=AttackGraph` would put that JSON in every downstream `context=` and torch the LLM window. Workspace files + typed slicers (`Recon Endpoints`, `Recon Open Ports`, `Recon Subdomains`) let agents pull narrow views on demand.
 
 2. **The both-and (chosen).** With workspace files, the task's textual output is reasoning-narrative (a freeform briefing the next agent uses to orient) *and* the typed artefact is produced separately by a `Finalise X` tool call. We get narrative reasoning AND schema-enforced structure. `output_pydantic` collapses these into one - the agent must produce JSON-only output, and any reasoning prose it would naturally produce has to be suppressed via non-trivial prompt engineering. Many CrewAI users hit "agent said 'here is my analysis: { ... }' and the JSON parser broke."
 

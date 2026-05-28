@@ -1,7 +1,7 @@
 """
 tests/test_squad_workspace_tools.py - exercise the shared workspace @tool
 wrappers (``read_run_filelist_tool`` / ``read_run_file_tool`` /
-``read_attack_graph_tool``) plus the ``current_programme()`` reader and the
+``read_attack_forest_tool``) plus the ``current_programme()`` reader and the
 ``@cyber_tool`` auto-detected scope-filter mechanism that builds on it.
 
 The wrappers are thin: unmarshal JSON, call into tools/workspace helpers,
@@ -46,23 +46,25 @@ class TestSharedWorkspaceTools:
         with pytest.raises(ValueError, match=r"must not contain '\.\.'"):
             read_run_file_tool.func("../etc/passwd")
 
-    def test_read_attack_graph_tool_returns_typed_plan(self, attack_graph, run_dir) -> None:
-        from models.attack import AttackGraph
-        from squad import read_attack_graph_tool
+    def test_read_attack_forest_tool_returns_typed_plan(self, attack_forest, run_dir) -> None:
+        from models.attack import AttackForest
+        from squad import read_attack_forest_tool
 
-        (run_dir / "attack_graph.json").write_text(attack_graph.model_dump_json(), encoding="utf-8")
-        result = read_attack_graph_tool.func()
-        assert isinstance(result, AttackGraph)
-        assert result.programme_handle == attack_graph.programme_handle
-        assert len(result.nodes) == len(attack_graph.nodes)
-        assert result.nodes[0].probe == attack_graph.nodes[0].probe
-        assert result.nodes[0].expected_ceiling == attack_graph.nodes[0].expected_ceiling
+        (run_dir / "attack_forest.json").write_text(
+            attack_forest.model_dump_json(), encoding="utf-8"
+        )
+        result = read_attack_forest_tool.func()
+        assert isinstance(result, AttackForest)
+        assert result.programme_handle == attack_forest.programme_handle
+        assert len(result.trees) == len(attack_forest.trees)
+        assert result.trees[0].probe == attack_forest.trees[0].probe
+        assert result.trees[0].expected_ceiling == attack_forest.trees[0].expected_ceiling
 
-    def test_read_attack_graph_tool_raises_when_missing(self, run_dir) -> None:
-        from squad import read_attack_graph_tool
+    def test_read_attack_forest_tool_raises_when_missing(self, run_dir) -> None:
+        from squad import read_attack_forest_tool
 
         with pytest.raises(FileNotFoundError, match="attack plan not found"):
-            read_attack_graph_tool.func()
+            read_attack_forest_tool.func()
 
 
 class TestCurrentProgramme:
@@ -105,14 +107,14 @@ def _load_workspace_schemas() -> dict[str, type[BaseModel]]:
     """Resolve the schemas lazily so the module imports without the env vars."""
     from squad.workspace_tools import (
         _ListRunFilesArgs,
-        _ReadAttackGraphArgs,
+        _ReadAttackForestArgs,
         _ReadRunFileArgs,
     )
 
     return {
         "List Run Files": _ListRunFilesArgs,
         "Read Run File": _ReadRunFileArgs,
-        "Read Attack Plan": _ReadAttackGraphArgs,
+        "Read Attack Plan": _ReadAttackForestArgs,
     }
 
 
@@ -149,12 +151,12 @@ class TestWorkspaceArgsSchemas:
         instance = _ListRunFilesArgs.model_validate({})
         assert isinstance(instance, _ListRunFilesArgs)
 
-    def test_read_attack_graph_accepts_empty_payload(self) -> None:
+    def test_read_attack_forest_accepts_empty_payload(self) -> None:
         """``Read Attack Plan`` takes no parameters; the empty payload is canonical."""
-        from squad.workspace_tools import _ReadAttackGraphArgs
+        from squad.workspace_tools import _ReadAttackForestArgs
 
-        instance = _ReadAttackGraphArgs.model_validate({})
-        assert isinstance(instance, _ReadAttackGraphArgs)
+        instance = _ReadAttackForestArgs.model_validate({})
+        assert isinstance(instance, _ReadAttackForestArgs)
 
     def test_read_run_file_accepts_relative_path(self) -> None:
         """``Read Run File`` accepts a bare relative-path string."""

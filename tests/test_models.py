@@ -9,7 +9,7 @@ from pydantic import BaseModel, ValidationError
 
 from models import (
     FQDN,
-    AttackSurface,
+    AttackGraph,
     Endpoint,
     HttpUrl,
     IPAddress,
@@ -17,7 +17,7 @@ from models import (
     Severity,
     VerifiedVulnerability,
 )
-from models.attack import AttackGraph, AttackGraphNode
+from models.attack import AttackForest, AttackTree
 from models.h1 import (
     DisclosureReport,
     Programme,
@@ -306,7 +306,7 @@ class TestIPAddress:
         assert probe.value.startswith("8.")
 
 
-class TestAttackSurface:
+class TestAttackGraph:
     def test_valid_recon_result(self, recon_result):
         assert len(recon_result.subdomains) == 2
         assert len(recon_result.endpoints) == 1
@@ -316,24 +316,24 @@ class TestAttackSurface:
 
     def test_serialise_roundtrip(self, recon_result):
         json_str = recon_result.model_dump_json()
-        restored = AttackSurface.model_validate_json(json_str)
+        restored = AttackGraph.model_validate_json(json_str)
         assert restored.programme.handle == recon_result.programme.handle
         assert len(restored.endpoints) == len(recon_result.endpoints)
 
 
-class TestAttackGraph:
-    def test_serialise_roundtrip(self, attack_graph):
-        restored = AttackGraph.model_validate_json(attack_graph.model_dump_json())
-        assert restored.programme_handle == attack_graph.programme_handle
-        assert restored.nodes[0].expected_ceiling == Severity.CRITICAL
+class TestAttackForest:
+    def test_serialise_roundtrip(self, attack_forest):
+        restored = AttackForest.model_validate_json(attack_forest.model_dump_json())
+        assert restored.programme_handle == attack_forest.programme_handle
+        assert restored.trees[0].expected_ceiling == Severity.CRITICAL
 
 
-class TestAttackGraphNode:
+class TestAttackTree:
     def test_accepts_vulnerability_class_probe(self, target_url):
         # The fixture covers CVE-id probes; this variant exercises the
         # vulnerability-class name shape (the second canonical probe form)
         # with a recon-evidence list to confirm the model accepts it end to end.
-        item = AttackGraphNode(
+        item = AttackTree(
             probe="reflected XSS",
             target=f"{target_url}/?q=test",
             expected_ceiling=Severity.MEDIUM,
@@ -351,7 +351,7 @@ class TestAttackGraphNode:
         # cleaned list, so the wrapper does not need its
         # own defensive shaping and the persisted artefact never carries
         # whitespace-only entries.
-        item = AttackGraphNode(
+        item = AttackTree(
             probe="reflected XSS",
             target=f"{target_url}/?q=test",
             expected_ceiling=Severity.MEDIUM,

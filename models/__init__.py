@@ -11,7 +11,7 @@ across every consumer.
 | ``models.primitives`` | ``Severity``, ``FQDN``, ``HttpUrl``, ``IPAddress`` |
 | ``models.finding`` | ``RawFinding``, ``VerifiedVulnerability``, ``RawFindingSummary`` |
 | ``models.asset`` | ``Endpoint``, ``EndpointPage``, ``HostRole``, ``HostPriority``, |
-|                  | ``HostInsight``, ``OpenPortsMap``, ``LlmEndpoint``, ``AttackSurface`` |
+|                  | ``HostInsight``, ``OpenPortsMap``, ``LlmEndpoint``, ``AttackGraph`` |
 | ``models.workspace`` | ``RunFile``, ``RunFileContent`` |
 | ``models.cve`` | ``CveEntry`` |
 | ``models.cwe`` | ``CWEEntry`` |
@@ -24,9 +24,9 @@ across every consumer.
 | ``models.scanner`` | ``NmapMode``, ``NmapBanner``, ``NmapScripts``, ``NmapService``, |
 |                    | ``NmapHostResult``, ``NmapScanResult``, ``HttpxMode`` |
 | ``models.h1`` | HackerOne shapes incl. ``ProgrammeReportSummary`` |
-| ``models.attack`` | ``AttackGraph``, ``AttackGraphNode``, |
-|                   | ``AttackGraphValidationIssue``, ``AttackGraphValidationReport``, |
-|                   | ``AttackGraphFinalisationError`` |
+| ``models.attack`` | ``AttackForest``, ``AttackTree``, |
+|                   | ``AttackForestValidationIssue``, ``AttackForestValidationReport``, |
+|                   | ``AttackForestFinalisationError`` |
 | ``models.triage`` | ``AuthoredAssessment``, ``SeverityDecision`` |
 | ``models.report`` | ``AuthoredDraft`` |
 | ``models.technology`` | ``Technology``, ``TechnologyCategory`` |
@@ -40,7 +40,7 @@ that the pre-split layout had to dance around.
 from __future__ import annotations
 
 from models.asset import (
-    AttackSurface,
+    AttackGraph,
     Endpoint,
     EndpointPage,
     HostInsight,
@@ -50,11 +50,11 @@ from models.asset import (
     OpenPortsMap,
 )
 from models.attack import (
-    AttackGraph,
-    AttackGraphFinalisationError,
-    AttackGraphNode,
-    AttackGraphValidationIssue,
-    AttackGraphValidationReport,
+    AttackForest,
+    AttackForestFinalisationError,
+    AttackForestValidationIssue,
+    AttackForestValidationReport,
+    AttackTree,
 )
 from models.cve import CveEntry
 from models.cwe import CWEEntry
@@ -88,12 +88,12 @@ from models.workspace import RunFile, RunFileContent
 __all__ = [
     "FQDN",
     "AsnRecord",
+    "AttackForest",
+    "AttackForestFinalisationError",
+    "AttackForestValidationIssue",
+    "AttackForestValidationReport",
     "AttackGraph",
-    "AttackGraphFinalisationError",
-    "AttackGraphNode",
-    "AttackGraphValidationIssue",
-    "AttackGraphValidationReport",
-    "AttackSurface",
+    "AttackTree",
     "AuthoredAssessment",
     "AuthoredDraft",
     "CWEEntry",

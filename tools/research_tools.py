@@ -7,16 +7,16 @@ attack plan: a list of probe-target hypotheses with expected severity
 ceilings and the recon signals that justified each one. The agent does the
 thinking; this module provides the supporting primitives:
 
-* ``AttackGraph`` / ``AttackGraphNode`` (from ``models.attack``) - the
+* ``AttackForest`` / ``AttackTree`` (from ``models.attack``) - the
   artefact the agent composes.
-* ``validate_attack_graph(plan)`` - quality gate. Returns the issue list
-  (``AttackGraphValidationReport`` from ``models.attack``). Hard errors
+* ``validate_attack_forest(plan)`` - quality gate. Returns the issue list
+  (``AttackForestValidationReport`` from ``models.attack``). Hard errors
   block ``finalise_research``.
-* ``finalise_research(plan)`` - validate, persist ``attack_graph.json`` for
+* ``finalise_research(plan)`` - validate, persist ``attack_forest.json`` for
   the Penetration Tester and re-read at triage time. Raises
-  ``AttackGraphFinalisationError`` (from ``models.attack``) on hard errors.
-* ``load_attack_graph(path)`` - reverse direction. Deserialise
-  ``attack_graph.json`` into a typed ``AttackGraph`` so downstream agents
+  ``AttackForestFinalisationError`` (from ``models.attack``) on hard errors.
+* ``load_attack_forest(path)`` - reverse direction. Deserialise
+  ``attack_forest.json`` into a typed ``AttackForest`` so downstream agents
   (PT, VR at triage) consume a Pydantic model rather than a raw blob.
 
 Mirrors the ``finalise_recon`` / ``finalise_triage`` pattern so the VR's
@@ -30,20 +30,20 @@ from pathlib import Path
 
 import runtime
 from models.attack import (
-    AttackGraph,
-    AttackGraphFinalisationError,
-    AttackGraphValidationIssue,
-    AttackGraphValidationReport,
+    AttackForest,
+    AttackForestFinalisationError,
+    AttackForestValidationIssue,
+    AttackForestValidationReport,
 )
 
-_ATTACK_GRAPH_FILENAME = "attack_graph.json"
+_ATTACK_FOREST_FILENAME = "attack_forest.json"
 
 
 # Validation
 
 
-def validate_attack_graph(plan: AttackGraph) -> AttackGraphValidationReport:
-    """Apply quality heuristics to an AttackGraph. Returns the issue list.
+def validate_attack_forest(plan: AttackForest) -> AttackForestValidationReport:
+    """Apply quality heuristics to an AttackForest. Returns the issue list.
 
     Hard errors:
       * empty ``items`` (no plan is not a plan)
@@ -52,50 +52,50 @@ def validate_attack_graph(plan: AttackGraph) -> AttackGraphValidationReport:
         to be grounded in the OSINT Analyst's signals; an unevidenced
         hypothesis is the agent skipping the research pass.
     """
-    issues: list[AttackGraphValidationIssue] = []
+    issues: list[AttackForestValidationIssue] = []
 
-    if not plan.nodes:
+    if not plan.trees:
         issues.append(
-            AttackGraphValidationIssue(
-                section="nodes",
+            AttackForestValidationIssue(
+                section="trees",
                 severity="error",
                 message=(
-                    "attack plan has no nodes; produce at least one "
+                    "attack plan has no trees; produce at least one "
                     "probe-target hypothesis or explain in the briefing "
                     "why no probes are warranted"
                 ),
             )
         )
 
-    for n, item in enumerate(plan.nodes, 1):
+    for n, item in enumerate(plan.trees, 1):
         if not item.probe.strip():
             issues.append(
-                AttackGraphValidationIssue(
-                    section=f"nodes[{n}].probe",
+                AttackForestValidationIssue(
+                    section=f"trees[{n}].probe",
                     severity="error",
                     message="probe is required (CVE id or vulnerability-class name)",
                 )
             )
         if not item.target.strip():
             issues.append(
-                AttackGraphValidationIssue(
-                    section=f"nodes[{n}].target",
+                AttackForestValidationIssue(
+                    section=f"trees[{n}].target",
                     severity="error",
                     message="target is required (hostname or URL drawn from recon)",
                 )
             )
         if not item.rationale.strip():
             issues.append(
-                AttackGraphValidationIssue(
-                    section=f"nodes[{n}].rationale",
+                AttackForestValidationIssue(
+                    section=f"trees[{n}].rationale",
                     severity="error",
                     message="rationale is required (1-2 sentence why and what to look for)",
                 )
             )
         if not item.recon_evidence:
             issues.append(
-                AttackGraphValidationIssue(
-                    section=f"nodes[{n}].recon_evidence",
+                AttackForestValidationIssue(
+                    section=f"trees[{n}].recon_evidence",
                     severity="error",
                     message=(
                         "recon_evidence must not be empty; cite the recon signals "
@@ -105,40 +105,40 @@ def validate_attack_graph(plan: AttackGraph) -> AttackGraphValidationReport:
             )
 
     ok = not any(i.severity == "error" for i in issues)
-    return AttackGraphValidationReport(ok=ok, issues=issues)
+    return AttackForestValidationReport(ok=ok, issues=issues)
 
 
 # Persistence / finalisation
 
 
-def attack_graph_path() -> Path:
-    """Return the on-disk path of attack_graph.json for the current run."""
-    return runtime.run_dir() / _ATTACK_GRAPH_FILENAME
+def attack_forest_path() -> Path:
+    """Return the on-disk path of attack_forest.json for the current run."""
+    return runtime.run_dir() / _ATTACK_FOREST_FILENAME
 
 
-def finalise_research(plan: AttackGraph) -> Path:
-    """Validate ``plan`` and write ``attack_graph.json`` to the run dir.
+def finalise_research(plan: AttackForest) -> Path:
+    """Validate ``plan`` and write ``attack_forest.json`` to the run dir.
 
-    Refuses on any hard validation error (see ``validate_attack_graph``).
+    Refuses on any hard validation error (see ``validate_attack_forest``).
     Returns the path to the written file.
     """
-    report = validate_attack_graph(plan)
+    report = validate_attack_forest(plan)
     if not report.ok:
-        # validate_attack_graph only emits errors today, so no filter; if a
+        # validate_attack_forest only emits errors today, so no filter; if a
         # warning level is added later, surface it the same way.
         lines = ["attack plan has unresolved errors:"]
         for issue in report.issues:
             lines.append(f"  - {issue.section}: {issue.message}")
-        raise AttackGraphFinalisationError("\n".join(lines))
+        raise AttackForestFinalisationError("\n".join(lines))
 
-    out_path = attack_graph_path()
+    out_path = attack_forest_path()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(plan.model_dump_json(indent=2), encoding="utf-8")
     return out_path
 
 
-def load_attack_graph(path: Path) -> AttackGraph:
-    """Deserialise ``attack_graph.json`` from ``path`` into a typed AttackGraph.
+def load_attack_forest(path: Path) -> AttackForest:
+    """Deserialise ``attack_forest.json`` from ``path`` into a typed AttackForest.
 
     The reader half of the ``finalise_research`` contract: PT loads the plan
     before running probes, and the VR re-loads it at triage time to map
@@ -148,12 +148,12 @@ def load_attack_graph(path: Path) -> AttackGraph:
     """
     if not path.is_file():
         raise FileNotFoundError(f"attack plan not found at {path}")
-    return AttackGraph.model_validate_json(path.read_text(encoding="utf-8"))
+    return AttackForest.model_validate_json(path.read_text(encoding="utf-8"))
 
 
 __all__ = [
-    "attack_graph_path",
+    "attack_forest_path",
     "finalise_research",
-    "load_attack_graph",
-    "validate_attack_graph",
+    "load_attack_forest",
+    "validate_attack_forest",
 ]

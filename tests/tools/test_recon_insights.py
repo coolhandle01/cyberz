@@ -8,7 +8,7 @@ import pytest
 from pydantic import ValidationError
 
 from models import (
-    AttackSurface,
+    AttackGraph,
     Endpoint,
     HostInsight,
     HostPriority,
@@ -34,8 +34,8 @@ pytestmark = pytest.mark.unit
 
 
 @pytest.fixture
-def sweep(programme, target_apex) -> AttackSurface:
-    return AttackSurface(
+def sweep(programme, target_apex) -> AttackGraph:
+    return AttackGraph(
         programme=programme,
         subdomains=["api.example.com", "admin.example.com", "cdn.example.com"],
         endpoints=[
@@ -233,8 +233,8 @@ class TestUncoveredInterestingHosts:
 # Finalisation
 
 
-def _write_sweep(run_dir, sweep: AttackSurface) -> None:
-    (run_dir / "attack_surface.json").write_text(sweep.model_dump_json(), encoding="utf-8")
+def _write_sweep(run_dir, sweep: AttackGraph) -> None:
+    (run_dir / "attack_graph.json").write_text(sweep.model_dump_json(), encoding="utf-8")
 
 
 class TestFinaliseRecon:
@@ -271,7 +271,7 @@ class TestFinaliseRecon:
 
     def test_refuses_without_sweep(self, programme, run_dir):
         save_insight(_good_insight())
-        with pytest.raises(FileNotFoundError, match=r"attack_surface\.json"):
+        with pytest.raises(FileNotFoundError, match=r"attack_graph\.json"):
             finalise_recon(programme)
 
     def test_carries_sweep_fields_through(self, sweep, programme, run_dir):

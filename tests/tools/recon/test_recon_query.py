@@ -2,7 +2,7 @@
 tests/tools/recon/test_recon_query.py - tools/recon/query.py slicers.
 
 These let an agent ask "which endpoints serve WordPress and returned 200?"
-without loading the full AttackSurface into context.
+without loading the full AttackGraph into context.
 """
 
 from __future__ import annotations

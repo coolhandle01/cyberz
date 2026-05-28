@@ -3,7 +3,7 @@ models.asset - the recon-output inventory shapes (OSINT Analyst -> PT).
 
 What the OSINT Analyst's sweep / annotation / finalisation produces:
 endpoints discovered, hostnames classified by role and priority, open
-ports per host, LLM-backed endpoint flags, and the bundled ``AttackSurface``
+ports per host, LLM-backed endpoint flags, and the bundled ``AttackGraph``
 that wraps the lot for downstream agents.
 
 FQDN-typed fields compose the ``FQDN`` primitive so mis-
@@ -175,7 +175,7 @@ class LlmEndpoint(BaseModel):
     parameters: list[str] = Field(default_factory=list)
 
 
-class AttackSurface(BaseModel):
+class AttackGraph(BaseModel):
     """Everything the OSINT Analyst found about a programme's attack surface."""
 
     programme: Programme
@@ -191,6 +191,6 @@ class AttackSurface(BaseModel):
     # Useful for identifying origin IPs behind CDNs/WAFs (CDN bypass vector).
     network_hops: dict[FQDN, list[str]] = Field(default_factory=dict)
     # Per-host curation the OSINT Analyst authors via Annotate Host. Empty on
-    # the OA's internal attack_surface.json; populated on the final recon.json.
+    # the OA's internal attack_graph.json; populated on the final recon.json.
     host_insights: list[HostInsight] = Field(default_factory=list)
     completed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

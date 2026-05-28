@@ -119,7 +119,7 @@ class TestSchemaAcceptReject:
             (_ReconSubdomainsArgs, {}),
             (
                 _ReconSubdomainsArgs,
-                {"attack_surface_path": "attack_surface.json", "host_filter": "api"},
+                {"attack_graph_path": "attack_graph.json", "host_filter": "api"},
             ),
             (_ReconEndpointsArgs, {}),
             (

@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from urllib.parse import urlparse
 
-from models import AttackSurface, Endpoint
+from models import AttackGraph, Endpoint
 from models.h1 import Programme, ScopeType
 from tools.recon.cert_transparency import cert_transparency
 from tools.recon.dirfuzz import discover_paths
@@ -94,7 +94,7 @@ __all__ = [
 ]
 
 
-def run_recon(programme: Programme) -> AttackSurface:
+def run_recon(programme: Programme) -> AttackGraph:
     """Full recon pipeline for a single programme."""
     seed_domains: list[str] = []
     for item in programme.in_scope:
@@ -137,7 +137,7 @@ def run_recon(programme: Programme) -> AttackSurface:
 
     network_hops = run_traceroute(in_scope_hosts[:20])
 
-    return AttackSurface(
+    return AttackGraph(
         programme=programme,
         subdomains=in_scope_hosts,
         endpoints=endpoints,

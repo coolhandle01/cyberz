@@ -23,8 +23,8 @@ class TestOsintAnalystTools:
         with patch("squad.osint_analyst.discovery.run_recon", return_value=recon_result) as mrun:
             result = run_initial_sweep_tool.func()
 
-        assert result == "attack_surface.json"
-        assert (tmp_path / "attack_surface.json").exists()
+        assert result == "attack_graph.json"
+        assert (tmp_path / "attack_graph.json").exists()
         mrun.assert_called_once_with(programme_in_workspace)
 
     def test_annotate_host_tool_writes_insight_and_returns_validation(
@@ -32,7 +32,7 @@ class TestOsintAnalystTools:
     ) -> None:
         from squad.osint_analyst import annotate_host_tool
 
-        (tmp_path / "attack_surface.json").write_text(
+        (tmp_path / "attack_graph.json").write_text(
             recon_result.model_dump_json(), encoding="utf-8"
         )
 
@@ -58,7 +58,7 @@ class TestOsintAnalystTools:
     ) -> None:
         from squad.osint_analyst import annotate_host_tool
 
-        (tmp_path / "attack_surface.json").write_text(
+        (tmp_path / "attack_graph.json").write_text(
             recon_result.model_dump_json(), encoding="utf-8"
         )
 
@@ -80,9 +80,7 @@ class TestOsintAnalystTools:
     def test_uncovered_hosts_tool_returns_missing(self, programme, recon_result, run_dir) -> None:
         from squad.osint_analyst import uncovered_hosts_tool
 
-        (run_dir / "attack_surface.json").write_text(
-            recon_result.model_dump_json(), encoding="utf-8"
-        )
+        (run_dir / "attack_graph.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
         result = uncovered_hosts_tool.func()
 
         assert isinstance(result, list)
@@ -94,9 +92,7 @@ class TestOsintAnalystTools:
     ) -> None:
         from squad.osint_analyst import annotate_host_tool, finalise_recon_tool
 
-        (run_dir / "attack_surface.json").write_text(
-            recon_result.model_dump_json(), encoding="utf-8"
-        )
+        (run_dir / "attack_graph.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
 
         annotate_host_tool.func(
             hostname=f"api.{target_apex}",
@@ -118,9 +114,7 @@ class TestOsintAnalystTools:
     ) -> None:
         from squad.osint_analyst import finalise_recon_tool
 
-        (run_dir / "attack_surface.json").write_text(
-            recon_result.model_dump_json(), encoding="utf-8"
-        )
+        (run_dir / "attack_graph.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
 
         with pytest.raises(ValueError, match="no host_insights"):
             finalise_recon_tool.func()

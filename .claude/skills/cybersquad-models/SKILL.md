@@ -11,7 +11,7 @@ description: Pydantic models in cybersquad carry the LLM-facing contract - typed
 
 1. **Typed primitives reject mis-shaped values at the boundary** rather than letting them flow into a real DNS / HTTP / subprocess call. `FQDN` rejects `"https://x"` / `"x/../.."` / `"x:8080"` upstream of any tool body. `HttpUrl` rejects non-HTTP schemes and mis-shaped hosts.
 
-2. **Workspace JSON artefacts are typed contracts** between agents. The OSINT Analyst writes `recon.json`, the PT reads it through `AttackSurface.model_validate_json(...)` - a mis-shaped recon rejects on the *reader* side, not silently corrupts the next stage.
+2. **Workspace JSON artefacts are typed contracts** between agents. The OSINT Analyst writes `recon.json`, the PT reads it through `AttackGraph.model_validate_json(...)` - a mis-shaped recon rejects on the *reader* side, not silently corrupts the next stage.
 
 3. **Args_schemas constrain what the LLM can pass** - a tool's parameter list is the LLM's API surface. Typed fields with `Field(description=...)` give the LLM both shape and intent.
 
