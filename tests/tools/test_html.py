@@ -297,9 +297,26 @@ class TestWebpageJavascripts:
         page = make_page(body='<script src="/app.js"></script>')
         assert len(page.javascripts) == 1
 
+    def test_includes_mjs_extension(self, make_page) -> None:
+        # ES modules - browsers serve these natively in production.
+        page = make_page(body='<script src="/module.mjs"></script>')
+        assert len(page.javascripts) == 1
+
     def test_includes_js_with_query_string(self, make_page) -> None:
         page = make_page(body='<script src="/app.js?v=2"></script>')
         assert len(page.javascripts) == 1
+
+    def test_excludes_source_formats(self, make_page) -> None:
+        # .jsx / .ts / .tsx get transpiled at build time - production
+        # targets do not serve them, so they stay out of the filter.
+        page = make_page(
+            body=(
+                '<script src="/app.jsx"></script>'
+                '<script src="/app.ts"></script>'
+                '<script src="/app.tsx"></script>'
+            ),
+        )
+        assert page.javascripts == []
 
     def test_excludes_non_js(self, make_page) -> None:
         page = make_page(

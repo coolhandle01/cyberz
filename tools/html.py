@@ -53,6 +53,14 @@ _FRAMEWORK_COOKIE_SIGNALS: tuple[tuple[Framework, str], ...] = (
 # tell apart here).
 _FRAMEWORK_META_SIGNALS: tuple[tuple[Framework, str], ...] = ((Framework.rails, "csrf-param"),)
 
+# Extensions that mark a URL as a JavaScript bundle worth probing for
+# source maps / framework signatures. ``.mjs`` is the ES-modules
+# extension served natively to modern browsers. Source-format
+# extensions (.jsx / .ts / .tsx / .coffee) are deliberately excluded -
+# those get transpiled to .js / .mjs at build time and don't appear on
+# a production target.
+_JS_EXTENSIONS = (".js", ".mjs")
+
 
 @dataclass(frozen=True)
 class Form:
@@ -117,15 +125,28 @@ class Webpage:
         self.response = response
 
     @cached_property
+    def mimetype(self) -> str:
+        """The response's MIME type, lower-cased and stripped of parameters.
+
+        ``Content-Type: text/html; charset=utf-8`` returns ``"text/html"``;
+        ``Content-Type: application/json`` returns ``"application/json"``.
+        Empty string when the header is absent. Use this rather than
+        re-parsing the Content-Type at every call site - probes can
+        ``match`` / ``case`` on the return value cleanly.
+        """
+        raw = self.response.headers.get("Content-Type", "")
+        return raw.split(";", 1)[0].strip().lower()
+
+    @cached_property
     def soup(self) -> BeautifulSoup:
         """Parsed soup for the response body.
 
         Returns an empty soup when the Content-Type is not text/html -
         callers can treat an empty soup as a skip condition rather than
-        checking the header themselves.
+        checking the header themselves. For probes that DO want to
+        branch on the MIME type, ``mimetype`` exposes the parsed value.
         """
-        ct = self.response.headers.get("Content-Type", "")
-        body = self.response.text if "text/html" in ct else ""
+        body = self.response.text if self.mimetype == "text/html" else ""
         return BeautifulSoup(body, "html.parser")
 
     @property
@@ -238,14 +259,22 @@ class Webpage:
 
     @cached_property
     def javascripts(self) -> list[SubResource]:
-        """Subset of ``scripts`` whose URL path ends in ``.js``.
+        """Subset of ``scripts`` whose URL path ends in a JS extension.
 
-        Strips the query string before the suffix check (``app.js?v=2``
-        counts). Use this when the probe's logic only makes sense for
-        actual JavaScript files (e.g. fetching the bundle to look for a
-        ``sourceMappingURL`` comment).
+        Matches ``.js`` (classic) and ``.mjs`` (ES modules - browsers
+        serve these natively in production). Strips the query string
+        before the suffix check so ``app.js?v=2`` counts.
+
+        Deliberately does NOT match ``.jsx`` / ``.ts`` / ``.tsx`` /
+        ``.coffee`` - those are source formats that get transpiled to
+        ``.js`` at build time; a production target won't serve them.
+        A dev-mode scan that wanted them would be a separate carve-out.
+
+        Use this when the probe's logic only makes sense for actual
+        JavaScript bundles (e.g. fetching for a ``sourceMappingURL``
+        comment). Use ``scripts`` for any-script SRI / integrity work.
         """
-        return [s for s in self.scripts if s.url.split("?", 1)[0].endswith(".js")]
+        return [s for s in self.scripts if s.url.split("?", 1)[0].endswith(_JS_EXTENSIONS)]
 
     @cached_property
     def stylesheets(self) -> list[SubResource]:
@@ -299,4 +328,9 @@ def fetch(url: str, **kwargs: object) -> Webpage:
     is not text/html the soup is empty and the derived properties return
     their natural empty values.
     """
+    # The ``**kwargs: object`` signature on ``fetch`` is deliberately loose so
+    # callers forward any ``http.get`` keyword (timeout / allow_redirects /
+    # headers / ...) without us mirroring the signature here. Mypy can't
+    # reconcile ``object``-typed values against http.get's typed parameters;
+    # the runtime contract is fine - http.get itself raises on bad kwargs.
     return Webpage(http.get(url, **kwargs))  # type: ignore[arg-type]
