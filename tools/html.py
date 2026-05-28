@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import cached_property
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -52,6 +52,38 @@ _FRAMEWORK_COOKIE_SIGNALS: tuple[tuple[Framework, str], ...] = (
 # tell. Plain `csrf-token` meta stays unmapped (Rails or Spring; cannot
 # tell apart here).
 _FRAMEWORK_META_SIGNALS: tuple[tuple[Framework, str], ...] = ((Framework.rails, "csrf-param"),)
+
+# URL-substring -> Framework. Matched case-insensitively against the
+# raw href / src AND the resolved absolute URL of every <script> and
+# <link rel="stylesheet"> on the page. Order matters: ``@angular/``
+# (modern's scoped npm package) is checked before ``angular.js`` so a
+# build that bundles both does not get classified as AngularJS.
+#
+# Bootstrap is detected here even though it is a CSS framework: per-
+# version XSS / CVE bookkeeping has the same shape as a JS framework's,
+# and SRI on the link does NOT make the underlying version safe.
+_FRAMEWORK_URL_SIGNALS: tuple[tuple[str, Framework], ...] = (
+    # Modern Angular - scoped npm package or zone.js runtime
+    ("@angular/", Framework.angular),
+    ("zone.js", Framework.angular),
+    # Legacy AngularJS - unscoped angular.js / angular.min.js
+    ("angular.js", Framework.angularjs),
+    ("angular.min.js", Framework.angularjs),
+    # React
+    ("/react.", Framework.react),
+    ("react-dom", Framework.react),
+    ("react.production", Framework.react),
+    ("react.development", Framework.react),
+    # Vue
+    ("/vue.", Framework.vue),
+    ("vue.min.js", Framework.vue),
+    ("vuejs", Framework.vue),
+    # Next.js - the underscore-prefixed static dir is unique to Next
+    ("/_next/", Framework.nextjs),
+    ("next/dist", Framework.nextjs),
+    # Bootstrap (CSS + JS bundles)
+    ("bootstrap.", Framework.bootstrap),
+)
 
 # Extensions that mark a URL as a JavaScript bundle worth probing for
 # source maps / framework signatures. ``.mjs`` is the ES-modules
@@ -156,13 +188,53 @@ class Webpage:
 
     @cached_property
     def frameworks(self) -> set[Framework]:
-        """Frameworks detected from cookies + meta tags.
+        """Frameworks detected from cookies, meta tags, and script / link URLs.
 
-        Only high-confidence signals (see ``_FRAMEWORK_COOKIE_SIGNALS``
-        / ``_FRAMEWORK_META_SIGNALS``) emit. Ambiguous signals drive
-        ``page_protected`` but not this typed set.
+        Three signal sources, all high-confidence (one false positive
+        per million pages is the bar):
+
+        * **Response cookies** - ``csrftoken`` (Django), ``_xsrf``
+          (Tornado). See ``_FRAMEWORK_COOKIE_SIGNALS``.
+        * **HTML <meta> tags** - ``csrf-param`` (Rails-specific tell;
+          distinguishes from Spring which only ships ``csrf-token``).
+          See ``_FRAMEWORK_META_SIGNALS``.
+        * **<script> src and <link> href URL substrings** - identifies
+          client-side stacks (React, Vue, AngularJS / Angular, Next.js)
+          and Bootstrap. See ``_FRAMEWORK_URL_SIGNALS``.
+
+        Ambiguous CSRF-pattern signals (``XSRF-TOKEN`` cookie matches
+        both Angular HttpClient and Laravel; plain ``csrf-token`` meta
+        matches Rails or Spring) drive ``page_protected`` but stay out
+        of this typed set.
         """
-        return _detect_frameworks(self.response, self.soup)
+        detected: set[Framework] = set()
+
+        cookie_names = {name.lower() for name in self.response.cookies.keys()}
+        for fw, signal in _FRAMEWORK_COOKIE_SIGNALS:
+            if signal in cookie_names:
+                detected.add(fw)
+
+        meta_names = {(m.get("name") or "").lower() for m in self.soup.find_all("meta")}
+        for fw, signal in _FRAMEWORK_META_SIGNALS:
+            if signal in meta_names:
+                detected.add(fw)
+
+        # URL-pattern detection across scripts + stylesheets. Match both
+        # the raw href / src (relative URLs like ``/static/react.js``)
+        # and the resolved absolute URL (CDN refs that hit a known npm
+        # path even when the relative form doesn't).
+        urls: list[str] = []
+        for r in self.scripts:
+            urls.append(r.url.lower())
+            urls.append(r.resolved_url.lower())
+        for r in self.stylesheets:
+            urls.append(r.url.lower())
+            urls.append(r.resolved_url.lower())
+        for signal, fw in _FRAMEWORK_URL_SIGNALS:
+            if any(signal in url for url in urls):
+                detected.add(fw)
+
+        return detected
 
     def has_csrf_cookie(self) -> bool:
         """True if the response sets a cookie with a CSRF-pattern name.
@@ -292,26 +364,29 @@ class Webpage:
             out.append(SubResource(url=href, resolved_url=resolved, has_integrity=has_integrity))
         return out
 
+    @cached_property
+    def favicon(self) -> str:
+        """The page's favicon URL, resolved absolute.
 
-def _detect_frameworks(response: requests.Response, soup: BeautifulSoup) -> set[Framework]:
-    """Detect frameworks from response cookies and HTML meta tags.
+        Walks ``<link rel="icon">`` and ``<link rel="shortcut icon">``
+        tags first. Falls back to the implicit ``/favicon.ico`` at the
+        page origin when no explicit link is declared - the same fallback
+        the browser performs.
 
-    Only the high-confidence signals in ``_FRAMEWORK_COOKIE_SIGNALS``
-    and ``_FRAMEWORK_META_SIGNALS`` emit. Ambiguous CSRF-pattern
-    signals (XSRF-TOKEN cookie, plain csrf-token meta) drive
-    ``Webpage.page_protected`` but are deliberately not mapped to a
-    specific Framework here - too many candidates per signal.
-    """
-    detected: set[Framework] = set()
-    cookie_names = {name.lower() for name in response.cookies.keys()}
-    for fw, signal in _FRAMEWORK_COOKIE_SIGNALS:
-        if signal in cookie_names:
-            detected.add(fw)
-    meta_names = {(m.get("name") or "").lower() for m in soup.find_all("meta")}
-    for fw, signal in _FRAMEWORK_META_SIGNALS:
-        if signal in meta_names:
-            detected.add(fw)
-    return detected
+        Useful for asset fingerprinting: MurmurHash3 of the favicon
+        bytes is the canonical input to Shodan / Censys "favicon-hash"
+        searches, which find every host serving the same icon. Future
+        OSINT-side recon can fetch and hash this URL to pivot from one
+        in-scope asset to its sibling deployments.
+        """
+        for link in self.soup.find_all("link", rel=True):
+            rels = [str(r).lower() for r in (link.get("rel") or [])]
+            if "icon" in rels:
+                href = str(link.get("href") or "")
+                if href:
+                    return urljoin(self.url, href)
+        parsed = urlparse(self.url)
+        return f"{parsed.scheme}://{parsed.netloc}/favicon.ico"
 
 
 def fetch(url: str, **kwargs: object) -> Webpage:

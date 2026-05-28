@@ -37,18 +37,36 @@ class Framework(StrEnum):
     ``-tech-detect`` and Wappalyzer emit, so the recon string
     ``"django"`` round-trips to ``Framework.django`` cleanly.
 
+    Covers both server-side stacks (Django, Rails, Spring, Laravel,
+    Tornado) and client-side / SPA stacks (React, Vue, Angular,
+    AngularJS, Next.js). Bootstrap is a CSS framework that lives here
+    too because per-version CVE bookkeeping has the same shape: known
+    vulnerable releases warrant the same kind of targeted probe a
+    server framework does, and SRI on a bootstrap link does NOT make
+    the underlying version safe.
+
     Append-only catalogue. New frameworks land as new members; never
     rename an existing one - downstream attack plans, probe stamps,
     and persisted recon JSON cite the literal string value.
     """
 
-    angular = "angular"
+    # Server-side
     django = "django"
     laravel = "laravel"
-    nextjs = "nextjs"
     rails = "rails"
     spring = "spring"
     tornado = "tornado"
+
+    # Client-side / SPA / meta-frameworks
+    angular = "angular"  # Angular 2+ (modern; component-based)
+    angularjs = "angularjs"  # AngularJS 1.x (legacy; ng-* directives, scope.$apply)
+    nextjs = "nextjs"
+    react = "react"
+    vue = "vue"
+
+    # CSS framework - tracked here because per-version CVE / XSS surface
+    # is the same shape as a JS framework's
+    bootstrap = "bootstrap"
 
 
 __all__ = ["Framework"]

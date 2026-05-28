@@ -101,7 +101,7 @@ class TestWebpageCsrfSignals:
 
 
 class TestWebpageFrameworks:
-    """High-confidence Framework detection via cookies + meta tags."""
+    """High-confidence Framework detection via cookies + meta tags + URL patterns."""
 
     @pytest.mark.parametrize(
         ("cookies", "body", "expected"),
@@ -129,6 +129,94 @@ class TestWebpageFrameworks:
         page = make_page(cookies={"XSRF-TOKEN": "abc"})
         assert page.frameworks == set()
         assert page.page_protected
+
+    @pytest.mark.parametrize(
+        ("body_template", "expected"),
+        [
+            # Modern Angular - scoped npm package on a CDN
+            (
+                '<script src="{cdn}/@angular/core@17/main.js"></script>',
+                {Framework.angular},
+            ),
+            # Modern Angular - zone.js runtime (relative path)
+            ('<script src="/zone.js"></script>', {Framework.angular}),
+            # Legacy AngularJS - on a CDN
+            ('<script src="{cdn}/angular.js"></script>', {Framework.angularjs}),
+            ('<script src="{cdn}/angular.min.js"></script>', {Framework.angularjs}),
+            # React
+            ('<script src="/static/react.production.min.js"></script>', {Framework.react}),
+            ('<script src="/static/react-dom.js"></script>', {Framework.react}),
+            # Vue
+            ('<script src="/static/vue.min.js"></script>', {Framework.vue}),
+            # Next.js
+            ('<script src="/_next/static/chunks/main.js"></script>', {Framework.nextjs}),
+            # Bootstrap CSS
+            (
+                '<link rel="stylesheet" href="/static/bootstrap.min.css">',
+                {Framework.bootstrap},
+            ),
+            # Bootstrap JS
+            ('<script src="/static/bootstrap.bundle.js"></script>', {Framework.bootstrap}),
+            # No JS framework signal
+            ('<script src="/app.js"></script>', set()),
+        ],
+    )
+    def test_detection_from_script_and_link_urls(
+        self, make_page, bystander_url, body_template, expected
+    ) -> None:
+        page = make_page(body=body_template.format(cdn=bystander_url))
+        assert page.frameworks == expected
+
+    def test_multiple_frameworks_detected(self, make_page) -> None:
+        # A React + Bootstrap page should report both.
+        page = make_page(
+            body=(
+                '<script src="/static/react.production.min.js"></script>'
+                '<link rel="stylesheet" href="/static/bootstrap.min.css">'
+            ),
+        )
+        assert page.frameworks == {Framework.react, Framework.bootstrap}
+
+    def test_url_detection_is_case_insensitive(self, make_page) -> None:
+        page = make_page(body='<script src="/static/REACT.JS"></script>')
+        # URL substring match is case-insensitive; "/react." matches.
+        assert Framework.react in page.frameworks
+
+
+class TestWebpageFavicon:
+    """Favicon URL extraction (for Shodan / Censys favicon-hash lookup)."""
+
+    def test_explicit_icon_link(self, make_page, target_apex) -> None:
+        page = make_page(body='<link rel="icon" href="/static/icon.png">')
+        assert page.favicon == f"https://{target_apex}/static/icon.png"
+
+    def test_shortcut_icon_rel(self, make_page, target_apex) -> None:
+        # Old "shortcut icon" rel value - BeautifulSoup splits rel into a list,
+        # so both "shortcut" and "icon" appear and we still recognise it.
+        page = make_page(body='<link rel="shortcut icon" href="/old.ico">')
+        assert page.favicon == f"https://{target_apex}/old.ico"
+
+    def test_absolute_href_unchanged(self, make_page, bystander_url) -> None:
+        page = make_page(
+            body=f'<link rel="icon" href="{bystander_url}/favicon.png">',
+        )
+        assert page.favicon == f"{bystander_url}/favicon.png"
+
+    def test_fallback_to_origin_favicon_ico(self, make_page, target_apex) -> None:
+        # No explicit link -> browser falls back to /favicon.ico, we mirror that.
+        page = make_page(body="<html></html>")
+        assert page.favicon == f"https://{target_apex}/favicon.ico"
+
+    def test_ignores_apple_touch_icon(self, make_page, target_apex) -> None:
+        # apple-touch-icon is a sibling but distinct rel - not a favicon.
+        page = make_page(
+            body='<link rel="apple-touch-icon" href="/apple.png">',
+        )
+        assert page.favicon == f"https://{target_apex}/favicon.ico"
+
+    def test_cached(self, make_page) -> None:
+        page = make_page(body='<link rel="icon" href="/icon.png">')
+        assert page.favicon == page.favicon
 
 
 class TestWebpageForms:
@@ -161,24 +249,29 @@ class TestWebpageForms:
         assert page.post_forms == []
 
     @pytest.mark.parametrize(
-        ("action_attr", "expected_resolved_template"),
+        ("action_template", "expected_template"),
         [
             ("/submit", "https://{apex}/submit"),
             ("", "https://{apex}/page"),
-            ("https://other.example.org/x", "https://other.example.org/x"),
+            ("{bystander}/x", "{bystander}/x"),
         ],
     )
     def test_resolved_action(
-        self, make_page, target_apex, action_attr, expected_resolved_template
+        self,
+        make_page,
+        target_apex,
+        bystander_url,
+        action_template,
+        expected_template,
     ) -> None:
+        action_attr = action_template.format(bystander=bystander_url)
         action_html = f' action="{action_attr}"' if action_attr else ""
         page = make_page(
             body=f'<form method="post"{action_html}></form>',
             url=f"https://{target_apex}/page",
         )
-        assert page.post_forms[0].resolved_action == expected_resolved_template.format(
-            apex=target_apex
-        )
+        expected = expected_template.format(apex=target_apex, bystander=bystander_url)
+        assert page.post_forms[0].resolved_action == expected
 
     @pytest.mark.parametrize(
         ("input_html", "expected_has_csrf"),
@@ -217,9 +310,9 @@ class TestWebpageScripts:
         )
         assert page.scripts[0].resolved_url == f"https://{target_apex}/app.js"
 
-    def test_absolute_url_unchanged(self, make_page) -> None:
-        page = make_page(body='<script src="https://cdn.example.org/lib.js"></script>')
-        assert page.scripts[0].resolved_url == "https://cdn.example.org/lib.js"
+    def test_absolute_url_unchanged(self, make_page, bystander_url) -> None:
+        page = make_page(body=f'<script src="{bystander_url}/lib.js"></script>')
+        assert page.scripts[0].resolved_url == f"{bystander_url}/lib.js"
 
     @pytest.mark.parametrize(
         ("integrity_attr", "expected"),
