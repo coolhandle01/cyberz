@@ -6,6 +6,8 @@ import logging
 import socket
 
 from models import RawFinding, Severity
+from models.service import Service
+from tools.pentest.service import service
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +15,7 @@ POSTGRES_PORT = 5432
 MYSQL_PORT = 3306
 
 
+@service(Service.postgresql)
 def check_postgresql(host: str) -> list[RawFinding]:
     """Check PostgreSQL on port 5432.
 
@@ -68,6 +71,7 @@ def check_postgresql(host: str) -> list[RawFinding]:
     return []
 
 
+@service(Service.mysql)
 def check_mysql(host: str) -> list[RawFinding]:
     """Check MySQL/MariaDB on port 3306.
 

@@ -268,6 +268,43 @@ class TestAttackPlanItem:
         assert item.probe == "reflected XSS"
         assert item.expected_ceiling == Severity.MEDIUM
 
+    def test_owasp_category_defaults_to_none(self, target_url):
+        item = AttackPlanItem(
+            probe="reflected XSS",
+            target=f"{target_url}/?q=test",
+            expected_ceiling=Severity.MEDIUM,
+            rationale="parameterised endpoint reflects q into response without escaping",
+            recon_evidence=[f"{target_url} hosts a Vue 2 SPA"],
+        )
+        assert item.owasp_category is None
+
+    def test_owasp_category_typed_assignment(self, target_url):
+        from models.owasp import OWASPCategory
+
+        item = AttackPlanItem(
+            probe="reflected XSS",
+            target=f"{target_url}/?q=test",
+            expected_ceiling=Severity.MEDIUM,
+            rationale="parameterised endpoint reflects q into response without escaping",
+            recon_evidence=[f"{target_url} hosts a Vue 2 SPA"],
+            owasp_category=OWASPCategory.A03_INJECTION,
+        )
+        assert item.owasp_category is OWASPCategory.A03_INJECTION
+
+    def test_owasp_category_string_round_trip(self, target_url):
+        from models.owasp import OWASPCategory
+
+        original = AttackPlanItem(
+            probe="reflected XSS",
+            target=f"{target_url}/?q=test",
+            expected_ceiling=Severity.MEDIUM,
+            rationale="parameterised endpoint reflects q into response without escaping",
+            recon_evidence=[f"{target_url} hosts a Vue 2 SPA"],
+            owasp_category=OWASPCategory.A03_INJECTION,
+        )
+        restored = AttackPlanItem.model_validate_json(original.model_dump_json())
+        assert restored.owasp_category is OWASPCategory.A03_INJECTION
+
     def test_recon_evidence_strips_and_filters_empties(self, target_url):
         # The recon_evidence field carries a Pydantic field_validator:
         # whitespace is trimmed off every entry, and empties are

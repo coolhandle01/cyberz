@@ -13,10 +13,13 @@ across every consumer.
 | ``models.asset`` | ``Endpoint``, ``EndpointPage``, ``HostRole``, ``HostPriority``, |
 |                  | ``HostInsight``, ``OpenPortsMap``, ``LlmEndpoint``, ``ReconResult`` |
 | ``models.workspace`` | ``RunFile``, ``RunFileContent`` |
+| ``models.cloud`` | ``Cloud`` |
 | ``models.cve`` | ``CveEntry`` |
 | ``models.cwe`` | ``CWEEntry`` |
-| ``models.owasp`` | ``OWASPEntry`` |
 | ``models.dns`` | ``TakeoverCandidate`` |
+| ``models.framework`` | ``Framework`` |
+| ``models.owasp`` | ``OWASPEntry`` |
+| ``models.service`` | ``Service`` |
 | ``models.insight`` | ``HostAnnotation``, ``InsightValidationIssue``, |
 |                    | ``InsightValidationReport``, ``ReconFinalisationError`` |
 | ``models.metrics`` | ``RunMetrics`` |
@@ -52,10 +55,12 @@ from models.attack import (
     AttackPlanValidationIssue,
     AttackPlanValidationReport,
 )
+from models.cloud import Cloud
 from models.cve import CveEntry
 from models.cwe import CWEEntry
 from models.dns import TakeoverCandidate
 from models.finding import RawFinding, RawFindingSummary, VerifiedVulnerability
+from models.framework import Framework
 from models.h1 import ProgrammeReportSummary
 from models.insight import (
     HostAnnotation,
@@ -67,6 +72,7 @@ from models.metrics import RunMetrics
 from models.owasp import OWASPEntry
 from models.primitives import Hostname, HttpUrl, Severity
 from models.report import AuthoredDraft
+from models.service import Service
 from models.triage import AuthoredAssessment, SeverityDecision
 from models.workspace import RunFile, RunFileContent
 
@@ -79,9 +85,11 @@ __all__ = [
     "AuthoredAssessment",
     "AuthoredDraft",
     "CWEEntry",
+    "Cloud",
     "CveEntry",
     "Endpoint",
     "EndpointPage",
+    "Framework",
     "HostAnnotation",
     "HostInsight",
     "HostPriority",
@@ -101,6 +109,7 @@ __all__ = [
     "RunFile",
     "RunFileContent",
     "RunMetrics",
+    "Service",
     "Severity",
     "SeverityDecision",
     "TakeoverCandidate",
