@@ -23,12 +23,10 @@ from models.network import (
     NmapScanResult,
     NmapScripts,
 )
-from tools.recon.nmap import (
-    _assemble_flags,
-    _evidence_filename,
-    _parse_xml,
-    nmap_scan,
-)
+from tools.recon.nmap import nmap_scan
+from tools.recon.nmap.flags import _assemble_flags
+from tools.recon.nmap.parser import _parse_xml
+from tools.recon.nmap.scanner import _evidence_filename
 
 pytestmark = pytest.mark.unit
 
@@ -306,8 +304,8 @@ class TestNmapScan:
     def test_returns_typed_result_with_parsed_hosts(self):
         mock_result = self._mock_subprocess_result(_XML_TWO_HOSTS_WITH_BANNERS)
         with (
-            patch("tools.recon.nmap._require_binary", return_value="/usr/bin/nmap"),
-            patch("tools.recon.nmap._run", return_value=mock_result),
+            patch("tools.recon.nmap.scanner._require_binary", return_value="/usr/bin/nmap"),
+            patch("tools.recon.nmap.scanner._run", return_value=mock_result),
         ):
             result = nmap_scan(
                 ["93.184.216.34", "93.184.216.35"],
@@ -323,7 +321,7 @@ class TestNmapScan:
 
     def test_empty_host_list_short_circuits(self):
         # No subprocess invocation for empty input.
-        with patch("tools.recon.nmap._require_binary") as mock_bin:
+        with patch("tools.recon.nmap.scanner._require_binary") as mock_bin:
             result = nmap_scan([], mode=NmapMode.QUICK_PORTS)
         mock_bin.assert_not_called()
         assert result.hosts == []
@@ -332,8 +330,8 @@ class TestNmapScan:
     def test_subprocess_failure_returns_empty_result(self):
         # Network down / nmap missing -> degrade gracefully.
         with (
-            patch("tools.recon.nmap._require_binary", return_value="/usr/bin/nmap"),
-            patch("tools.recon.nmap._run", side_effect=OSError("nmap died")),
+            patch("tools.recon.nmap.scanner._require_binary", return_value="/usr/bin/nmap"),
+            patch("tools.recon.nmap.scanner._run", side_effect=OSError("nmap died")),
         ):
             result = nmap_scan(["x.example"], mode=NmapMode.QUICK_PORTS)
         assert result.hosts == []
@@ -343,8 +341,8 @@ class TestNmapScan:
         # ``run_dir`` fixture points runtime.run_dir() at tmp_path.
         mock_result = self._mock_subprocess_result(_XML_TWO_HOSTS_WITH_BANNERS)
         with (
-            patch("tools.recon.nmap._require_binary", return_value="/usr/bin/nmap"),
-            patch("tools.recon.nmap._run", return_value=mock_result),
+            patch("tools.recon.nmap.scanner._require_binary", return_value="/usr/bin/nmap"),
+            patch("tools.recon.nmap.scanner._run", return_value=mock_result),
         ):
             result = nmap_scan(
                 ["93.184.216.34"],
@@ -360,8 +358,8 @@ class TestNmapScan:
     def test_persist_evidence_false_skips_write(self, run_dir):
         mock_result = self._mock_subprocess_result(_XML_TWO_HOSTS_WITH_BANNERS)
         with (
-            patch("tools.recon.nmap._require_binary", return_value="/usr/bin/nmap"),
-            patch("tools.recon.nmap._run", return_value=mock_result),
+            patch("tools.recon.nmap.scanner._require_binary", return_value="/usr/bin/nmap"),
+            patch("tools.recon.nmap.scanner._run", return_value=mock_result),
         ):
             result = nmap_scan(
                 ["93.184.216.34"],
@@ -377,8 +375,8 @@ class TestNmapScan:
         # write is skipped gracefully, result still typed.
         mock_result = self._mock_subprocess_result(_XML_TWO_HOSTS_WITH_BANNERS)
         with (
-            patch("tools.recon.nmap._require_binary", return_value="/usr/bin/nmap"),
-            patch("tools.recon.nmap._run", return_value=mock_result),
+            patch("tools.recon.nmap.scanner._require_binary", return_value="/usr/bin/nmap"),
+            patch("tools.recon.nmap.scanner._run", return_value=mock_result),
         ):
             result = nmap_scan(["x.example"], persist_evidence=True)
         assert result.evidence_path is None
@@ -389,8 +387,8 @@ class TestNmapScan:
         # not the grep format the old port_scan used.
         mock_result = self._mock_subprocess_result(_XML_NO_HOSTS)
         with (
-            patch("tools.recon.nmap._require_binary", return_value="/usr/bin/nmap"),
-            patch("tools.recon.nmap._run", return_value=mock_result) as mock_run,
+            patch("tools.recon.nmap.scanner._require_binary", return_value="/usr/bin/nmap"),
+            patch("tools.recon.nmap.scanner._run", return_value=mock_result) as mock_run,
         ):
             nmap_scan(["x.example"], persist_evidence=False)
         cmd = mock_run.call_args.args[0]
