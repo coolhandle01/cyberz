@@ -1,9 +1,9 @@
 """HTML fetch-and-parse helper.
 
 Wraps ``http.get`` and returns a ``Webpage`` that bundles the response,
-parsed soup, framework-detection result, and form / cookie recipes
-probes used to inline. Probes get a typed page object and ask it
-questions; the soup mechanics stay here.
+parsed soup, framework-detection result, and form / script / stylesheet
+/ cookie recipes probes used to inline. Probes get a typed page object
+and ask it questions; the soup mechanics stay here.
 
 The framework-detection signals live next to the soup recipes (rather
 than in ``tools/http.py`` or a separate ``tools/framework.py``)
@@ -62,20 +62,49 @@ class Form:
     against the page URL so probes do not have to ``urljoin`` at every
     call site. ``has_csrf_input`` is True when the form contains a
     hidden input whose name matches any CSRF-pattern fragment.
+
+    Only ``get`` and ``post`` ever appear in ``method``: per the HTML
+    spec a form's ``method`` attribute accepts only those two values.
+    Server-side overrides for PUT / PATCH / DELETE (Rails ``_method``
+    hidden field, Laravel ``@method`` directive) are POST-encoded at
+    the wire level - probes that care about override semantics inspect
+    the form's hidden inputs themselves.
     """
 
     action: str  # raw action attribute, may be empty
     resolved_action: str  # action resolved relative to the page URL
-    method: str  # "get" / "post" / ... (lower-cased)
+    method: str  # "get" / "post" (lower-cased)
     has_csrf_input: bool
+
+
+@dataclass(frozen=True)
+class SubResource:
+    """One linked sub-resource observed on a page (script src, stylesheet href).
+
+    Unified shape because ``<script src>`` and ``<link href>`` are
+    structurally identical from the SRI / cross-origin / integrity
+    point of view - the only difference is the HTML attribute name.
+    Which collection the SubResource came from (``scripts`` /
+    ``javascripts`` / ``stylesheets``) is the kind discriminator;
+    SRI's "missing integrity" string formats from there.
+
+    ``resolved_url`` is the absolute URL computed at parse time against
+    the page URL. ``has_integrity`` is True when the tag carries a
+    non-empty ``integrity`` attribute (a Subresource Integrity hash).
+    """
+
+    url: str  # raw src or href attribute
+    resolved_url: str  # url resolved relative to the page URL
+    has_integrity: bool
 
 
 class Webpage:
     """One fetched HTML page wrapping response, soup, and derived recipes.
 
-    Constructed via ``tools.html.fetch(url, ...)``. The underlying
-    ``response`` and ``soup`` are exposed as attributes for probes
-    that need raw access; derived page properties are
+    Constructed via ``tools.html.fetch(url, ...)``; tests can build one
+    directly from a ``requests.Response`` mock via ``Webpage(response)``.
+    The underlying ``response`` is exposed for probes that need raw
+    access; the soup is parsed lazily and derived page properties are
     ``cached_property`` so a probe asking for ``post_forms`` and
     ``frameworks`` only pays the parse cost once.
 
@@ -84,9 +113,20 @@ class Webpage:
     a fresh Webpage per case rather than mutating a shared one.
     """
 
-    def __init__(self, response: requests.Response, soup: BeautifulSoup) -> None:
+    def __init__(self, response: requests.Response) -> None:
         self.response = response
-        self.soup = soup
+
+    @cached_property
+    def soup(self) -> BeautifulSoup:
+        """Parsed soup for the response body.
+
+        Returns an empty soup when the Content-Type is not text/html -
+        callers can treat an empty soup as a skip condition rather than
+        checking the header themselves.
+        """
+        ct = self.response.headers.get("Content-Type", "")
+        body = self.response.text if "text/html" in ct else ""
+        return BeautifulSoup(body, "html.parser")
 
     @property
     def url(self) -> str:
@@ -178,6 +218,51 @@ class Webpage:
         """All <form method="get"> elements on the page."""
         return [f for f in self.forms if f.method == "get"]
 
+    @cached_property
+    def scripts(self) -> list[SubResource]:
+        """All <script src="..."> elements on the page (any URL shape).
+
+        Use this for SRI / cross-origin / integrity checks that apply to
+        every script tag regardless of file extension. Use
+        ``javascripts`` for ``.js``-specific work (source map probes,
+        bundle analysis) so the extension filter lives at the boundary
+        rather than at every call site.
+        """
+        out: list[SubResource] = []
+        for tag in self.soup.find_all("script", src=True):
+            src = str(tag["src"])
+            resolved = urljoin(self.url, src) if src else self.url
+            has_integrity = bool(tag.get("integrity"))
+            out.append(SubResource(url=src, resolved_url=resolved, has_integrity=has_integrity))
+        return out
+
+    @cached_property
+    def javascripts(self) -> list[SubResource]:
+        """Subset of ``scripts`` whose URL path ends in ``.js``.
+
+        Strips the query string before the suffix check (``app.js?v=2``
+        counts). Use this when the probe's logic only makes sense for
+        actual JavaScript files (e.g. fetching the bundle to look for a
+        ``sourceMappingURL`` comment).
+        """
+        return [s for s in self.scripts if s.url.split("?", 1)[0].endswith(".js")]
+
+    @cached_property
+    def stylesheets(self) -> list[SubResource]:
+        """All <link rel="stylesheet" href="..."> elements on the page."""
+        out: list[SubResource] = []
+        for tag in self.soup.find_all("link"):
+            rel = " ".join(tag.get("rel") or []).lower()
+            if "stylesheet" not in rel:
+                continue
+            href = str(tag.get("href") or "")
+            if not href:
+                continue
+            resolved = urljoin(self.url, href)
+            has_integrity = bool(tag.get("integrity"))
+            out.append(SubResource(url=href, resolved_url=resolved, has_integrity=has_integrity))
+        return out
+
 
 def _detect_frameworks(response: requests.Response, soup: BeautifulSoup) -> set[Framework]:
     """Detect frameworks from response cookies and HTML meta tags.
@@ -201,19 +286,17 @@ def _detect_frameworks(response: requests.Response, soup: BeautifulSoup) -> set[
 
 
 def fetch(url: str, **kwargs: object) -> Webpage:
-    """GET url and parse the response body as HTML, returning a Webpage.
+    """GET url and return a Webpage wrapping the response.
 
-    Use this instead of calling http.get + BeautifulSoup separately.
-    Pass any http.get kwargs (timeout, allow_redirects, headers, etc.)
+    Use this instead of calling ``http.get`` + ``BeautifulSoup`` separately.
+    Pass any ``http.get`` kwargs (timeout, allow_redirects, headers, etc.)
     through.
 
-    The returned Webpage exposes ``response``, ``soup``, plus
-    cached_property accessors for derived page properties
-    (``frameworks``, ``page_protected``, ``forms``, ``post_forms``,
-    ``get_forms``). When the Content-Type is not text/html the soup is
-    empty and the derived properties return their natural empty values.
+    The returned ``Webpage`` exposes ``response``, lazily-parsed ``soup``,
+    and cached_property accessors for derived page properties
+    (``frameworks``, ``page_protected``, ``forms`` / ``post_forms`` /
+    ``get_forms``, ``scripts``, ``stylesheets``). When the Content-Type
+    is not text/html the soup is empty and the derived properties return
+    their natural empty values.
     """
-    resp = http.get(url, **kwargs)  # type: ignore[arg-type]
-    ct = resp.headers.get("Content-Type", "")
-    body = resp.text if "text/html" in ct else ""
-    return Webpage(response=resp, soup=BeautifulSoup(body, "html.parser"))
+    return Webpage(http.get(url, **kwargs))  # type: ignore[arg-type]
