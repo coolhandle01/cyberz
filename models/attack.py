@@ -13,6 +13,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
 
+from models.owasp import OWASPCategory
 from models.primitives import Severity
 
 
@@ -24,6 +25,12 @@ class AttackPlanItem(BaseModel):
     expected_ceiling: Severity  # CRITICAL / HIGH / MEDIUM / LOW the probe could reach
     rationale: str  # 1-2 sentence "why and what to look for"
     recon_evidence: list[str]  # references to recon signals that justified this hypothesis
+    # Optional typed OWASP Top 10 categorisation - the VR cites it when the
+    # probe class maps cleanly to a single OWASP code, and the PT pattern-
+    # matches plan items against probe tools' ``@owasp(...)`` stamps to
+    # pick the closest tool. Default ``None`` so existing plans validate
+    # and the VR is not forced to over-categorise speculative items.
+    owasp_category: OWASPCategory | None = None
 
     @field_validator("recon_evidence")
     @classmethod

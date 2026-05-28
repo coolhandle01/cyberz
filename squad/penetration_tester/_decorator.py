@@ -40,27 +40,20 @@ def pentest_tool(
     """Pentest-specialised wrapper. Composes ``cyber_tool`` plus classification injection.
 
     ``cyber_tool`` handles the schema override (and the auto-detected
-    typed-target scope guard); ``pentest_tool`` layers three categorisation
-    streams from the underlying check function into the agent-facing
-    docstring:
+    typed-target scope guard); ``pentest_tool`` layers four
+    categorisation streams from the underlying check function into the
+    agent-facing docstring:
 
     * ``check_fn.owasp_categories`` (from ``@owasp(...)``)
     * ``check_fn.frameworks`` (from ``@framework(...)``)
     * ``check_fn.clouds`` (from ``@cloud(...)``)
+    * ``check_fn.services`` (from ``@service(...)``)
 
     Every pentest probe goes through this wrapper, never bare ``@tool``
     and never raw ``@cyber_tool`` - the OWASP framing is what the PT
     agent's role.md teaches it to reason against, with framework /
-    cloud stamps layered on for the probes that target a specific
-    stack.
-
-    FIXME(#88): ``check_fn=`` and the helper-side stamps (``@owasp`` /
-    ``@framework`` / ``@cloud``) are interim plumbing. The redesign in
-    #88 replaces this whole layer with ``@attack(name=, requires={Label.X,
-    ...})`` on typed ``Exploit`` classes - the label catalogue becomes
-    the source of truth, queryable for precondition filtering, and the
-    per-helper docstring stamp goes away. Don't simplify the
-    indirection here in the meantime; #88 rewrites the surface.
+    cloud / service stamps layered on for the probes that target a
+    specific stack, provider, or named product.
     """
 
     def decorator(fn: _PentestFn) -> _PentestTool:
@@ -69,6 +62,7 @@ def pentest_tool(
                 ("owasp_categories", "OWASP Top 10"),
                 ("frameworks", "Frameworks targeted"),
                 ("clouds", "Cloud providers targeted"),
+                ("services", "Services targeted"),
             ):
                 values = getattr(check_fn, attr, ())
                 if values:

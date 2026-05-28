@@ -19,6 +19,7 @@ across every consumer.
 | ``models.dns`` | ``TakeoverCandidate`` |
 | ``models.framework`` | ``Framework`` |
 | ``models.owasp`` | ``OWASPEntry`` |
+| ``models.service`` | ``Service`` |
 | ``models.insight`` | ``HostAnnotation``, ``InsightValidationIssue``, |
 |                    | ``InsightValidationReport``, ``ReconFinalisationError`` |
 | ``models.metrics`` | ``RunMetrics`` |
@@ -71,6 +72,7 @@ from models.metrics import RunMetrics
 from models.owasp import OWASPEntry
 from models.primitives import Hostname, HttpUrl, Severity
 from models.report import AuthoredDraft
+from models.service import Service
 from models.triage import AuthoredAssessment, SeverityDecision
 from models.workspace import RunFile, RunFileContent
 
@@ -107,6 +109,7 @@ __all__ = [
     "RunFile",
     "RunFileContent",
     "RunMetrics",
+    "Service",
     "Severity",
     "SeverityDecision",
     "TakeoverCandidate",
