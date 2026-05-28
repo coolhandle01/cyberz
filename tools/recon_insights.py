@@ -15,11 +15,11 @@ primitives:
   issue list. Hard errors block ``finalise_recon``.
 * ``save_insight`` / ``load_insights`` - persist insights under
   ``<run_dir>/host_insights/<hostname>.json``.
-* ``finalise_recon(programme, sweep_path)`` - load the sweep, validate every
-  insight, build the canonical ``ReconResult`` for downstream agents, and
+* ``finalise_recon(programme, attack_surface_path)`` - load the sweep, validate every
+  insight, build the canonical ``AttackSurface`` for downstream agents, and
   write ``recon.json``. Refuses on hard errors or insufficient curation.
 
-The OA's initial sweep is written to ``sweep.json``; ``finalise_recon``
+The OA's initial sweep is written to ``attack_surface.json``; ``finalise_recon``
 copies the inventory through, attaches insights, and emits the final
 ``recon.json`` that the Vulnerability Researcher and Penetration Tester
 consume.
@@ -31,7 +31,7 @@ import re
 from pathlib import Path
 
 import runtime
-from models import HostInsight, HostPriority, ReconResult
+from models import AttackSurface, HostInsight, HostPriority
 from models.h1 import Programme
 
 # The insight shapes (HostAnnotation, InsightValidationIssue,
@@ -45,10 +45,11 @@ from models.insight import (
     InsightValidationReport,
     ReconFinalisationError,
 )
+from models.primitives import FQDN
 from tools.recon.scope import filter_in_scope
 
 _INSIGHTS_SUBDIR = "host_insights"
-_SWEEP_FILENAME = "sweep.json"
+_ATTACK_SURFACE_FILENAME = "attack_surface.json"
 _RECON_FILENAME = "recon.json"
 
 # FQDNs must be made filesystem-safe before persisting under
@@ -62,7 +63,7 @@ _HOSTNAME_SANITISE = re.compile(r"[^A-Za-z0-9.\-_]")
 
 def validate_insight(
     insight: HostInsight,
-    sweep: ReconResult,
+    sweep: AttackSurface,
     programme: Programme,
 ) -> InsightValidationReport:
     """Apply quality heuristics to a HostInsight. Returns the issue list."""
@@ -171,7 +172,7 @@ def validate_insight(
     return InsightValidationReport(ok=ok, issues=issues)
 
 
-def _sweep_tech_by_host(sweep: ReconResult) -> dict[str, list[str]]:
+def _sweep_tech_by_host(sweep: AttackSurface) -> dict[str, list[str]]:
     """Build a hostname -> tech-list map from the sweep's endpoints."""
     from urllib.parse import urlparse
 
@@ -200,7 +201,7 @@ def _insights_dir() -> Path:
     return runtime.run_dir() / _INSIGHTS_SUBDIR
 
 
-def insight_path(hostname: str) -> Path:
+def insight_path(hostname: FQDN) -> Path:
     """Return the on-disk path of the insight for ``hostname``.
 
     FQDNs are used directly as filenames (with a small character
@@ -234,12 +235,12 @@ def load_insights() -> list[HostInsight]:
     )
 
 
-def load_sweep(sweep_filename: str = _SWEEP_FILENAME) -> ReconResult:
+def load_attack_surface(attack_surface_filename: str = _ATTACK_SURFACE_FILENAME) -> AttackSurface:
     """Load the OA's internal sweep artefact."""
-    path = runtime.run_dir() / sweep_filename
+    path = runtime.run_dir() / attack_surface_filename
     if not path.is_file():
-        raise FileNotFoundError(f"{sweep_filename} not found; run Run Initial Sweep first")
-    return ReconResult.model_validate_json(path.read_text(encoding="utf-8"))
+        raise FileNotFoundError(f"{attack_surface_filename} not found; run Run Initial Sweep first")
+    return AttackSurface.model_validate_json(path.read_text(encoding="utf-8"))
 
 
 # Finalisation
@@ -252,7 +253,7 @@ _INTERESTING_STATUSES = {200, 201, 204, 301, 302, 307, 308, 401, 403}
 
 def finalise_recon(
     programme: Programme,
-    sweep_filename: str = _SWEEP_FILENAME,
+    attack_surface_filename: str = _ATTACK_SURFACE_FILENAME,
     recon_filename: str = _RECON_FILENAME,
 ) -> Path:
     """Validate every host insight, merge them with the sweep, and write the
@@ -269,7 +270,7 @@ def finalise_recon(
       * an interesting-status host in the sweep has no insight
       * a high-priority host is missing detected_tech
     """
-    sweep = load_sweep(sweep_filename)
+    sweep = load_attack_surface(attack_surface_filename)
     insights = load_insights()
 
     if not insights:
@@ -303,7 +304,7 @@ def finalise_recon(
             "needs at least one focus target on a non-empty surface"
         )
 
-    final = ReconResult(
+    final = AttackSurface(
         programme=sweep.programme,
         subdomains=sweep.subdomains,
         endpoints=sweep.endpoints,
@@ -321,7 +322,7 @@ def finalise_recon(
     return out_path
 
 
-def _build_notes(sweep: ReconResult, insights: list[HostInsight]) -> str:
+def _build_notes(sweep: AttackSurface, insights: list[HostInsight]) -> str:
     """Compose the recon-level notes string from sweep stats + insight tally."""
     by_priority: dict[HostPriority, int] = dict.fromkeys(HostPriority, 0)
     for i in insights:
@@ -338,7 +339,7 @@ def _build_notes(sweep: ReconResult, insights: list[HostInsight]) -> str:
 # Coverage check (informational)
 
 
-def uncovered_interesting_hosts(sweep: ReconResult, insights: list[HostInsight]) -> list[str]:
+def uncovered_interesting_hosts(sweep: AttackSurface, insights: list[HostInsight]) -> list[str]:
     """Return interesting-status hostnames in the sweep that have no insight."""
     from urllib.parse import urlparse
 
@@ -358,8 +359,8 @@ __all__ = [
     "ReconFinalisationError",
     "finalise_recon",
     "insight_path",
+    "load_attack_surface",
     "load_insights",
-    "load_sweep",
     "save_insight",
     "uncovered_interesting_hosts",
     "validate_insight",

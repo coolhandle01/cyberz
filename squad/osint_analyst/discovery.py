@@ -55,7 +55,7 @@ def run_initial_sweep_tool() -> str:
     assets: subfinder for subdomain enumeration, httpx for live HTTP/S
     probing and tech detection, nmap for port scanning, ffuf for content
     discovery, plus passive TLS and DNS email-security checks. Writes the
-    serialised inventory to ``sweep.json`` (the OA's internal draft) in the
+    serialised inventory to ``attack_surface.json`` (the OA's internal draft) in the
     run directory and returns the relative filename.
 
     This is the inventory step. Annotate the interesting hosts with
@@ -64,20 +64,20 @@ def run_initial_sweep_tool() -> str:
     """
     programme = current_programme()
     result = run_recon(programme)
-    out_path = runtime.run_dir() / "sweep.json"
+    out_path = runtime.run_dir() / "attack_surface.json"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(result.model_dump_json(), encoding="utf-8")
-    return "sweep.json"
+    return "attack_surface.json"
 
 
 class _ReconSubdomainsArgs(BaseModel):
     """Explicit args_schema for the OSINT Recon Subdomains tool."""
 
-    sweep_path: str = Field(
-        default="sweep.json",
+    attack_surface_path: str = Field(
+        default="attack_surface.json",
         description=(
             "Relative path to the OA's in-progress sweep file. Defaults to"
-            " ``sweep.json`` (the canonical name written by Run Initial"
+            " ``attack_surface.json`` (the canonical name written by Run Initial"
             " Sweep). Override only when re-inspecting a sweep written"
             " under a different name."
         ),
@@ -95,7 +95,7 @@ class _ReconSubdomainsArgs(BaseModel):
 
 @cyber_tool("Recon Subdomains", args_schema=_ReconSubdomainsArgs)
 def recon_subdomains_tool(
-    sweep_path: str = "sweep.json", host_filter: str | None = None
+    attack_surface_path: str = "attack_surface.json", host_filter: str | None = None
 ) -> list[FQDN]:
     """
     Return the in-scope subdomains in the OA's draft sweep. ``host_filter`` is
@@ -105,15 +105,15 @@ def recon_subdomains_tool(
     into ``Annotate Host``, ``Probe FQDNs``, or ``Detect Takeover
     Candidates`` - no further normalisation needed.
     """
-    return [FQDN(h) for h in recon_subdomains(sweep_path, host_filter=host_filter)]
+    return [FQDN(h) for h in recon_subdomains(attack_surface_path, host_filter=host_filter)]
 
 
 class _ReconEndpointsArgs(BaseModel):
     """Explicit args_schema for the OSINT Recon Endpoints tool."""
 
-    sweep_path: str = Field(
-        default="sweep.json",
-        description="Relative path to the OA's sweep file. Defaults to ``sweep.json``.",
+    attack_surface_path: str = Field(
+        default="attack_surface.json",
+        description="Relative path to the OA's sweep file. Defaults to ``attack_surface.json``.",
     )
     status: int | None = Field(
         default=None,
@@ -157,7 +157,7 @@ class _ReconEndpointsArgs(BaseModel):
 
 @cyber_tool("Recon Endpoints", args_schema=_ReconEndpointsArgs)
 def recon_endpoints_tool(
-    sweep_path: str = "sweep.json",
+    attack_surface_path: str = "attack_surface.json",
     status: int | None = None,
     tech: str | None = None,
     host_contains: str | None = None,
@@ -172,7 +172,7 @@ def recon_endpoints_tool(
     before annotating.
     """
     return recon_endpoints(
-        sweep_path,
+        attack_surface_path,
         status=status,
         tech=tech,
         host_contains=host_contains,
@@ -184,9 +184,9 @@ def recon_endpoints_tool(
 class _ReconOpenPortsArgs(BaseModel):
     """Explicit args_schema for the OSINT Recon Open Ports tool."""
 
-    sweep_path: str = Field(
-        default="sweep.json",
-        description="Relative path to the OA's sweep file. Defaults to ``sweep.json``.",
+    attack_surface_path: str = Field(
+        default="attack_surface.json",
+        description="Relative path to the OA's sweep file. Defaults to ``attack_surface.json``.",
     )
     host: FQDN | None = Field(
         default=None,
@@ -200,14 +200,16 @@ class _ReconOpenPortsArgs(BaseModel):
 
 
 @cyber_tool("Recon Open Ports", args_schema=_ReconOpenPortsArgs)
-def recon_open_ports_tool(sweep_path: str = "sweep.json", host: FQDN | None = None) -> OpenPortsMap:
+def recon_open_ports_tool(
+    attack_surface_path: str = "attack_surface.json", host: FQDN | None = None
+) -> OpenPortsMap:
     """
     Return the open-port map per host from the sweep. Passing a ``host``
     restricts the result to that single host. Use to surface non-HTTP
     services (Redis 6379, Elasticsearch 9200, Mongo 27017, etc.) that an
     annotation should call out.
     """
-    return OpenPortsMap(hosts=recon_open_ports(sweep_path, host=host))
+    return OpenPortsMap(hosts=recon_open_ports(attack_surface_path, host=host))
 
 
 class _CertTransparencyArgs(BaseModel):

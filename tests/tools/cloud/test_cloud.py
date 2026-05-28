@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from models import Endpoint, ReconResult, Severity
+from models import AttackSurface, Endpoint, Severity
 from tools.cloud.aws import check_s3_buckets
 from tools.cloud.azure import check_azure_blob_containers, check_azure_sas_tokens
 from tools.cloud.services import (
@@ -181,7 +181,7 @@ class TestCheckAzureSasTokens:
 
 class TestCheckUnauthenticatedDatabases:
     def test_detects_elasticsearch(self, programme):
-        recon = ReconResult(
+        recon = AttackSurface(
             programme=programme,
             subdomains=[],
             endpoints=[],
@@ -199,7 +199,7 @@ class TestCheckUnauthenticatedDatabases:
         assert es[0].vuln_class == "ExposedService"
 
     def test_detects_couchdb(self, programme):
-        recon = ReconResult(
+        recon = AttackSurface(
             programme=programme,
             subdomains=[],
             endpoints=[],
@@ -216,7 +216,7 @@ class TestCheckUnauthenticatedDatabases:
         assert couch[0].severity_hint == Severity.CRITICAL
 
     def test_detects_redis_via_ping(self, programme):
-        recon = ReconResult(
+        recon = AttackSurface(
             programme=programme,
             subdomains=[],
             endpoints=[],
@@ -234,7 +234,7 @@ class TestCheckUnauthenticatedDatabases:
         assert redis[0].severity_hint == Severity.CRITICAL
 
     def test_detects_mongodb_via_ismaster(self, programme):
-        recon = ReconResult(
+        recon = AttackSurface(
             programme=programme,
             subdomains=[],
             endpoints=[],
@@ -254,7 +254,7 @@ class TestCheckUnauthenticatedDatabases:
         assert mongo[0].severity_hint == Severity.CRITICAL
 
     def test_skips_host_without_matching_ports(self, programme):
-        recon = ReconResult(
+        recon = AttackSurface(
             programme=programme,
             subdomains=[],
             endpoints=[],
@@ -267,7 +267,7 @@ class TestCheckUnauthenticatedDatabases:
         assert results == []
 
     def test_exception_is_swallowed(self, programme):
-        recon = ReconResult(
+        recon = AttackSurface(
             programme=programme,
             subdomains=[],
             endpoints=[],
@@ -389,7 +389,7 @@ class TestGranularPanels:
     """Spot-check each branded panel / dashboard tool hits the right
     port (or reverse-proxy path) on the right host. Helpers now take
     typed inputs (``list[str]`` for hostnames, ``list[Endpoint]`` for
-    path probes) rather than ``ReconResult``; the conversion lives at
+    path probes) rather than ``AttackSurface``; the conversion lives at
     the wrapper layer."""
 
     def _hostnames(self, target_apex: str) -> list[str]:

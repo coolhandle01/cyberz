@@ -8,11 +8,11 @@ import pytest
 from pydantic import ValidationError
 
 from models import (
+    AttackSurface,
     Endpoint,
     HostInsight,
     HostPriority,
     HostRole,
-    ReconResult,
 )
 from tools.recon_insights import (
     ReconFinalisationError,
@@ -34,8 +34,8 @@ pytestmark = pytest.mark.unit
 
 
 @pytest.fixture
-def sweep(programme, target_apex) -> ReconResult:
-    return ReconResult(
+def sweep(programme, target_apex) -> AttackSurface:
+    return AttackSurface(
         programme=programme,
         subdomains=["api.example.com", "admin.example.com", "cdn.example.com"],
         endpoints=[
@@ -233,8 +233,8 @@ class TestUncoveredInterestingHosts:
 # Finalisation
 
 
-def _write_sweep(run_dir, sweep: ReconResult) -> None:
-    (run_dir / "sweep.json").write_text(sweep.model_dump_json(), encoding="utf-8")
+def _write_sweep(run_dir, sweep: AttackSurface) -> None:
+    (run_dir / "attack_surface.json").write_text(sweep.model_dump_json(), encoding="utf-8")
 
 
 class TestFinaliseRecon:
@@ -271,7 +271,7 @@ class TestFinaliseRecon:
 
     def test_refuses_without_sweep(self, programme, run_dir):
         save_insight(_good_insight())
-        with pytest.raises(FileNotFoundError, match=r"sweep\.json"):
+        with pytest.raises(FileNotFoundError, match=r"attack_surface\.json"):
             finalise_recon(programme)
 
     def test_carries_sweep_fields_through(self, sweep, programme, run_dir):

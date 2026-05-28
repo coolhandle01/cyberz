@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field, field_validator
 from models.primitives import Severity
 
 
-class AttackPlanItem(BaseModel):
+class AttackGraphItem(BaseModel):
     """One probe-target hypothesis from the VR's research pass."""
 
     probe: str  # CVE id or vulnerability-class name, e.g. "CVE-2022-22965" or "reflected XSS"
@@ -32,8 +32,8 @@ class AttackPlanItem(BaseModel):
 
         Lives on the model so every constructor (CrewAI args_schema
         validation, ``model_validate_json`` on a re-loaded attack plan,
-        a direct ``AttackPlanItem(...)`` call) sees the same cleaned
-        list. Pairs with ``validate_attack_plan``'s
+        a direct ``AttackGraphItem(...)`` call) sees the same cleaned
+        list. Pairs with ``validate_attack_graph``'s
         ``if not item.recon_evidence:`` hard error - an item that was
         passed whitespace-only entries ends up with an empty list and
         the validator catches it, instead of the persisted artefact
@@ -42,15 +42,15 @@ class AttackPlanItem(BaseModel):
         return [entry.strip() for entry in value if entry.strip()]
 
 
-class AttackPlan(BaseModel):
+class AttackGraph(BaseModel):
     """The VR's attack plan, handed to the PT and re-read at triage time."""
 
     programme_handle: str
     drafted_at: datetime
-    items: list[AttackPlanItem]
+    items: list[AttackGraphItem]
 
 
-class AttackPlanValidationIssue(BaseModel):
+class AttackGraphValidationIssue(BaseModel):
     """One issue produced by attack-plan validation."""
 
     section: str
@@ -58,21 +58,21 @@ class AttackPlanValidationIssue(BaseModel):
     message: str
 
 
-class AttackPlanValidationReport(BaseModel):
-    """Result of validating an AttackPlan."""
+class AttackGraphValidationReport(BaseModel):
+    """Result of validating an AttackGraph."""
 
     ok: bool
-    issues: list[AttackPlanValidationIssue] = Field(default_factory=list)
+    issues: list[AttackGraphValidationIssue] = Field(default_factory=list)
 
 
-class AttackPlanFinalisationError(RuntimeError):
-    """Raised when an AttackPlan cannot be persisted to attack_plan.json."""
+class AttackGraphFinalisationError(RuntimeError):
+    """Raised when an AttackGraph cannot be persisted to attack_graph.json."""
 
 
 __all__ = [
-    "AttackPlan",
-    "AttackPlanFinalisationError",
-    "AttackPlanItem",
-    "AttackPlanValidationIssue",
-    "AttackPlanValidationReport",
+    "AttackGraph",
+    "AttackGraphFinalisationError",
+    "AttackGraphItem",
+    "AttackGraphValidationIssue",
+    "AttackGraphValidationReport",
 ]

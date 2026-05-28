@@ -43,7 +43,7 @@ def nuclei_scan_tool(
     """
     Run nuclei against a specific set of endpoints, optionally filtered by template tags.
 
-    endpoints: list of endpoint objects to scan. Extract from ReconResult:
+    endpoints: list of endpoint objects to scan. Extract from AttackSurface:
       select live endpoints (status_code < 500), use the typed list directly.
       Example: [{"url": "https://example.com/", "status_code": 200, "technologies": ["WordPress"]}]
 

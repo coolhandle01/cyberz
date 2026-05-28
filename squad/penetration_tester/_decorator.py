@@ -14,7 +14,7 @@ from typing import Protocol, cast
 
 from pydantic import BaseModel
 
-from models import Endpoint, RawFinding, ReconResult
+from models import AttackSurface, Endpoint, RawFinding
 from squad import SquadTool, cyber_tool
 
 _PentestFn = Callable[..., list[RawFinding]]
@@ -82,8 +82,8 @@ def _parse_endpoints(endpoints: list[Endpoint]) -> list[Endpoint]:
     return [Endpoint.model_validate(e) for e in endpoints]
 
 
-def _recon_from_path(recon_path: str) -> ReconResult:
-    """Read a serialised ReconResult from disk.
+def _recon_from_path(recon_path: str) -> AttackSurface:
+    """Read a serialised AttackSurface from disk.
 
     ``recon_path`` is a relative path under the run directory. The
     outbound User-Agent is sourced from ``runtime.programme_handle``
@@ -92,4 +92,6 @@ def _recon_from_path(recon_path: str) -> ReconResult:
     """
     from tools.workspace import resolve_run_path
 
-    return ReconResult.model_validate_json(resolve_run_path(recon_path).read_text(encoding="utf-8"))
+    return AttackSurface.model_validate_json(
+        resolve_run_path(recon_path).read_text(encoding="utf-8")
+    )

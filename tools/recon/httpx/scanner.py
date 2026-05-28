@@ -24,6 +24,7 @@ from pathlib import Path
 
 import runtime
 from models.asset import Endpoint
+from models.primitives import FQDN
 from models.scanner import HttpxMode, HttpxScanResult
 from tools._helpers import _require_binary, _run
 from tools.recon.httpx.flags import _assemble_flags
@@ -32,7 +33,7 @@ from tools.recon.httpx.parser import _parse_ndjson
 logger = logging.getLogger(__name__)
 
 
-def _evidence_dirname(hosts: list[str], mode: HttpxMode) -> str:
+def _evidence_dirname(hosts: list[FQDN], mode: HttpxMode) -> str:
     """Stable directory name under runtime.run_dir() for one scan's evidence."""
     host_hash = hashlib.sha256("\n".join(sorted(hosts)).encode()).hexdigest()[:12]
     return f"httpx-{host_hash}-{mode.value}"
@@ -52,7 +53,7 @@ def _resolve_evidence_dir(dirname: str) -> Path | None:
 
 
 def httpx_scan(
-    hosts: list[str],
+    hosts: list[FQDN],
     mode: HttpxMode = HttpxMode.TECH_DETECT,
     *,
     with_screenshots: bool = False,
@@ -122,7 +123,7 @@ def httpx_scan(
     return HttpxScanResult(mode=mode, endpoints=endpoints, evidence_dir=evidence_rel)
 
 
-def probe_endpoints(hosts: list[str]) -> list[Endpoint]:
+def probe_endpoints(hosts: list[FQDN]) -> list[Endpoint]:
     """Backwards-compatible shim - ``httpx_scan(hosts, TECH_DETECT)``.
 
     The historical entry point the recon orchestrator and the legacy

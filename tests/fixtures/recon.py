@@ -1,4 +1,4 @@
-"""Recon-shaped fixtures: ``Endpoint`` / ``ReconResult`` plus the
+"""Recon-shaped fixtures: ``Endpoint`` / ``AttackSurface`` plus the
 cloud-storage hostname factories.
 
 Bucket / container names are built from ``target_sld`` (the
@@ -19,7 +19,7 @@ from collections.abc import Callable
 
 import pytest
 
-from models import Endpoint, ReconResult
+from models import AttackSurface, Endpoint
 
 
 @pytest.fixture()
@@ -33,8 +33,8 @@ def endpoint(target_apex: str) -> Endpoint:
 
 
 @pytest.fixture()
-def recon_result(programme, endpoint, target_apex: str) -> ReconResult:
-    return ReconResult(
+def recon_result(programme, endpoint, target_apex: str) -> AttackSurface:
+    return AttackSurface(
         programme=programme,
         subdomains=[f"api.{target_apex}", f"admin.{target_apex}"],
         endpoints=[endpoint],

@@ -30,13 +30,13 @@ This separation is deliberate: prompt iteration is a markdown edit, wiring is a 
 
 When data flows between agents (recon -> attack plan -> findings -> verified -> reports), use the workspace-file pair pattern:
 
-- Producer agent calls a typed `@tool` like `Finalise Research(plan: AttackPlan)` that validates and writes `attack_plan.json` to the run directory; returns the bare filename.
+- Producer agent calls a typed `@tool` like `Finalise Research(plan: AttackGraph)` that validates and writes `attack_graph.json` to the run directory; returns the bare filename.
 - The *task's* textual output is freeform briefing prose plus that filename.
-- Consumer agent calls a typed `@tool` like `Read Attack Plan -> AttackPlan` to deserialise the artefact.
+- Consumer agent calls a typed `@tool` like `Read Attack Plan -> AttackGraph` to deserialise the artefact.
 
 DO NOT use `output_pydantic=SomeModel` on tasks for inter-agent flow. Three reasons:
 
-1. **Size.** ReconResult is ~115KB / ~30K tokens on real targets. `output_pydantic` puts the full JSON in every downstream `context=`, which torches the LLM window.
+1. **Size.** AttackSurface is ~115KB / ~30K tokens on real targets. `output_pydantic` puts the full JSON in every downstream `context=`, which torches the LLM window.
 2. **Prose-coercion cost.** `output_pydantic` constrains the agent to JSON-only output. Agents naturally want to produce "Here is my reasoning, then the JSON" and JSON parsing breaks on the prose. Suppressing the prose reliably takes non-trivial prompt engineering.
 3. **Both-and.** Workspace files let the task's textual output be reasoning-narrative (which the next agent uses to orient) AND the typed artefact be the structured contract (which downstream code consumes). `output_pydantic` collapses these into one.
 

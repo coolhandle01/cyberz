@@ -117,7 +117,10 @@ class TestSchemaAcceptReject:
         [
             (_RunInitialSweepArgs, {}),
             (_ReconSubdomainsArgs, {}),
-            (_ReconSubdomainsArgs, {"sweep_path": "sweep.json", "host_filter": "api"}),
+            (
+                _ReconSubdomainsArgs,
+                {"attack_surface_path": "attack_surface.json", "host_filter": "api"},
+            ),
             (_ReconEndpointsArgs, {}),
             (
                 _ReconEndpointsArgs,

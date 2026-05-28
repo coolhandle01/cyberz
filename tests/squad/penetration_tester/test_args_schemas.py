@@ -80,7 +80,7 @@ from squad.penetration_tester import (
 )
 from squad.workspace_tools import (
     _ListRunFilesArgs,
-    _ReadAttackPlanArgs,
+    _ReadAttackGraphArgs,
     _ReadRunFileArgs,
 )
 from tests.squad._contract_assertions import (
@@ -270,7 +270,7 @@ class TestSchemaAcceptReject:
             # Read Attack Plan take no parameters - the empty payload is the
             # canonical call.
             (_ListRunFilesArgs, {}),
-            (_ReadAttackPlanArgs, {}),
+            (_ReadAttackGraphArgs, {}),
             (_ReadRunFileArgs, {"relative_path": "recon.json"}),
         ],
     )

@@ -70,7 +70,7 @@ def run_traceroute(hostnames: list[str], max_hops: int = 20) -> dict[str, list[s
 
     Uses tracepath (no root required) with fallback to traceroute. Returns an
     empty list for any host that times out or where the binary is unavailable.
-    Result is stored in ReconResult.network_hops so all downstream agents can
+    Result is stored in AttackSurface.network_hops so all downstream agents can
     reason about CDN/WAF bypass opportunities (e.g. origin IP directly reachable).
     """
     binary = shutil.which("tracepath") or shutil.which("traceroute")

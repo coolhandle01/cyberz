@@ -62,19 +62,19 @@ class TestSquadMemberRead:
             member.read("role")
 
 
-class TestAttackPlanWiring:
+class TestAttackGraphWiring:
     """The typed attack plan is the contract between VR research, PT, and VR
     triage. Both consumers must expose Read Attack Plan."""
 
-    def test_penetration_tester_has_read_attack_plan_tool(self) -> None:
-        from squad import read_attack_plan_tool
+    def test_penetration_tester_has_read_attack_graph_tool(self) -> None:
+        from squad import read_attack_graph_tool
 
-        assert read_attack_plan_tool in PENETRATION_TESTER.tools
+        assert read_attack_graph_tool in PENETRATION_TESTER.tools
 
-    def test_vulnerability_researcher_has_read_attack_plan_tool(self) -> None:
-        from squad import read_attack_plan_tool
+    def test_vulnerability_researcher_has_read_attack_graph_tool(self) -> None:
+        from squad import read_attack_graph_tool
 
-        assert read_attack_plan_tool in VULNERABILITY_RESEARCHER.tools
+        assert read_attack_graph_tool in VULNERABILITY_RESEARCHER.tools
 
 
 class TestBuildTasks:
