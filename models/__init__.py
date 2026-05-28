@@ -20,7 +20,8 @@ across every consumer.
 | ``models.insight`` | ``HostAnnotation``, ``InsightValidationIssue``, |
 |                    | ``InsightValidationReport``, ``ReconFinalisationError`` |
 | ``models.metrics`` | ``RunMetrics`` |
-| ``models.network`` | ``AsnRecord`` |
+| ``models.network`` | ``AsnRecord``, ``NmapMode``, ``NmapBanner``, ``NmapScripts``, |
+|                    | ``NmapService``, ``NmapHostResult``, ``NmapScanResult`` |
 | ``models.h1`` | HackerOne shapes incl. ``ProgrammeReportSummary`` |
 | ``models.attack`` | ``AttackPlan``, ``AttackPlanItem``, |
 |                   | ``AttackPlanValidationIssue``, ``AttackPlanValidationReport``, |
@@ -66,7 +67,15 @@ from models.insight import (
     ReconFinalisationError,
 )
 from models.metrics import RunMetrics
-from models.network import AsnRecord
+from models.network import (
+    AsnRecord,
+    NmapBanner,
+    NmapHostResult,
+    NmapMode,
+    NmapScanResult,
+    NmapScripts,
+    NmapService,
+)
 from models.owasp import OWASPEntry
 from models.primitives import Hostname, HttpUrl, IPAddress, Severity
 from models.report import AuthoredDraft
@@ -97,6 +106,12 @@ __all__ = [
     "InsightValidationIssue",
     "InsightValidationReport",
     "LlmEndpoint",
+    "NmapBanner",
+    "NmapHostResult",
+    "NmapMode",
+    "NmapScanResult",
+    "NmapScripts",
+    "NmapService",
     "OWASPEntry",
     "OpenPortsMap",
     "ProgrammeReportSummary",

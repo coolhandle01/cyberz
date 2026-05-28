@@ -353,11 +353,20 @@ class TestProbeEndpoints:
 # port_scan
 class TestPortScan:
     def test_parses_open_ports(self):
+        # nmap_scan (the new entry point) uses -oX XML output. The
+        # legacy port_scan() shim parses the same XML and flattens to
+        # the historical {host: [open_ports]} shape.
         mock_result = MagicMock()
         mock_result.stdout = (
-            "# Nmap scan\n"
-            "Host: 93.184.216.34 (example.com)\tStatus: Up\n"
-            "Host: 93.184.216.34 (example.com)\tPorts: 80/open/tcp, 443/open/tcp\n"
+            '<?xml version="1.0"?>\n'
+            "<nmaprun>"
+            '<host><address addr="example.com" addrtype="ipv4"/>'
+            "<ports>"
+            '<port protocol="tcp" portid="80"><state state="open"/></port>'
+            '<port protocol="tcp" portid="443"><state state="open"/></port>'
+            "</ports>"
+            "</host>"
+            "</nmaprun>"
         )
         mock_result.returncode = 0
         mock_result.stderr = ""
