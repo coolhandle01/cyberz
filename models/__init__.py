@@ -8,7 +8,7 @@ across every consumer.
 
 | Module | Contents |
 |---|---|
-| ``models.primitives`` | ``Severity``, ``FQDN``, ``HttpUrl``, ``IPAddress`` |
+| ``models.primitives`` | ``Severity``, ``FQDN``, ``HttpUrl``, ``IPAddress``, ``Email`` |
 | ``models.finding`` | ``RawFinding``, ``VerifiedVulnerability``, ``RawFindingSummary`` |
 | ``models.asset`` | ``Endpoint``, ``EndpointPage``, ``HostRole``, ``HostPriority``, |
 |                  | ``HostInsight``, ``IpAsset``, ``OpenPortsMap``, ``LlmEndpoint``, |
@@ -21,7 +21,7 @@ across every consumer.
 | ``models.insight`` | ``HostAnnotation``, ``InsightValidationIssue``, |
 |                    | ``InsightValidationReport``, ``ReconFinalisationError`` |
 | ``models.metrics`` | ``RunMetrics`` |
-| ``models.network`` | ``AsnRecord``, ``RdapRecord`` |
+| ``models.network`` | ``AsnRecord``, ``Contact``, ``ContactRole``, ``RdapRecord`` |
 | ``models.scanner`` | ``NmapMode``, ``NmapBanner``, ``NmapScripts``, ``NmapService``, |
 |                    | ``NmapHostResult``, ``NmapScanResult``, ``HttpxMode`` |
 | ``models.h1`` | HackerOne shapes incl. ``ProgrammeReportSummary`` |
@@ -70,9 +70,9 @@ from models.insight import (
     ReconFinalisationError,
 )
 from models.metrics import RunMetrics
-from models.network import AsnRecord, RdapRecord
+from models.network import AsnRecord, Contact, ContactRole, RdapRecord
 from models.owasp import OWASPEntry
-from models.primitives import FQDN, HttpUrl, IPAddress, Severity
+from models.primitives import FQDN, Email, HttpUrl, IPAddress, Severity
 from models.report import AuthoredDraft
 from models.scanner import (
     HttpxMode,
@@ -99,7 +99,10 @@ __all__ = [
     "AuthoredAssessment",
     "AuthoredDraft",
     "CWEEntry",
+    "Contact",
+    "ContactRole",
     "CveEntry",
+    "Email",
     "Endpoint",
     "EndpointPage",
     "HostAnnotation",

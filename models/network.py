@@ -35,10 +35,11 @@ describes the asset; ``scanner.py`` describes the scan.
 from __future__ import annotations
 
 from datetime import datetime
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
-from models.primitives import IPAddress
+from models.primitives import Email, IPAddress
 
 
 class AsnRecord(BaseModel):
@@ -77,6 +78,55 @@ class AsnRecord(BaseModel):
         # length cap is the boundary guard, no further sanitisation
         # needed at this layer.
     )
+
+
+class ContactRole(StrEnum):
+    """The RDAP entity role a ``Contact`` serves.
+
+    Subset of RFC 7483 §10.2.4. The OA-meaningful roles only - we
+    intentionally do not project unknown / non-standard role values
+    onto an ``OTHER`` bucket; the parser drops entities whose role
+    is outside this set rather than smuggle unfamiliar prose
+    through. Add a member here when a new role earns its keep.
+    """
+
+    REGISTRANT = "registrant"  # who registered the resource
+    ABUSE = "abuse"  # preferred contact for abuse reports
+    ADMIN = "admin"  # administrative contact
+    TECHNICAL = "technical"  # technical / operational contact
+    NOC = "noc"  # network operations center
+
+
+class Contact(BaseModel):
+    """A point-of-contact entity from an RDAP entity record.
+
+    Captures the vCard fields RDAP entities surface (RFC 7095): display
+    name, email, phone, plus the entity's RDAP role from the
+    ``ContactRole`` catalogue. One ``Contact`` per RDAP entity the
+    parser recognises.
+
+    Maps to amass's hanging ``SimpleProperty`` group on the
+    ``RIROrganization`` asset when amass lands (#45) - one Contact is
+    a clustered set of contact properties for a given role.
+
+    All vCard fields are optional - RIRs vary in which slots they
+    expose. A Contact carrying only ``role`` + ``email`` is useful
+    (the abuse channel); ``role`` + ``name`` alone is less useful but
+    a valid record.
+    """
+
+    role: ContactRole
+    email: Email | None = None
+    # Tool-captured from RDAP's vCard ``fn`` field. Defence: bounded
+    # length at the model boundary - RIRs emit short, trustworthy
+    # strings, so a max_length cap is the right level of defence
+    # without further escaping (the field flows into reports and is
+    # not re-issued to LLMs as instruction context).
+    name: str | None = Field(default=None, max_length=255)
+    # Tool-captured from RDAP's vCard ``tel`` field. Same defence:
+    # bounded length, no shape constraint (international phone formats
+    # vary; the OA reads this as opaque contact metadata).
+    phone: str | None = Field(default=None, max_length=64)
 
 
 class RdapRecord(BaseModel):
@@ -161,6 +211,17 @@ class RdapRecord(BaseModel):
         # check or re-lookup hits the same authoritative endpoint
         # without re-running the bootstrap-registry hop.
     )
+    contacts: list[Contact] = Field(
+        default_factory=list,
+        # Structured per-role contact records walked out of the RDAP
+        # ``entities`` array - registrant, abuse, admin, technical, NOC.
+        # The flat ``abuse_email`` / ``registrant_organisation`` fields
+        # above are the convenience-access shortcuts for the two roles
+        # the OA reads most often; ``contacts`` carries the full set
+        # for downstream consumers that want the richer surface (e.g.
+        # a disclosure email composer that wants every email it can
+        # reach).
+    )
 
 
-__all__ = ["AsnRecord", "RdapRecord"]
+__all__ = ["AsnRecord", "Contact", "ContactRole", "RdapRecord"]

@@ -41,7 +41,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from models.network import RdapRecord
+from models.network import Contact, ContactRole, RdapRecord
 from models.primitives import IPAddress
 from tools import http
 
@@ -229,25 +229,56 @@ def _parse_event(events: object, action: str) -> datetime | None:
     return None
 
 
+def _build_contact(entity: dict[str, Any], role: ContactRole) -> Contact | None:
+    """Build one ``Contact`` from an RDAP entity + the role it carries.
+
+    Defensive against the ``Email`` validator: a vCard ``email`` field
+    that isn't shaped like an email (rare, but RIRs are inconsistent)
+    drops the email but keeps the rest of the contact rather than
+    failing the whole record. ``None`` only when the entity produces
+    no useful fields at all.
+    """
+    vcard = entity.get("vcardArray")
+    name = _vcard_field(vcard, "fn")
+    email = _vcard_field(vcard, "email")
+    phone = _vcard_field(vcard, "tel")
+    if not (name or email or phone):
+        return None
+    try:
+        return Contact(role=role, email=email, name=name, phone=phone)
+    except ValueError:
+        # Email validator rejected the email shape (or a length cap
+        # bit). Retry without the email - the rest of the contact is
+        # still useful.
+        try:
+            return Contact(role=role, name=name, phone=phone)
+        except ValueError as exc:
+            logger.debug("contact dropped (role=%s): %s", role.value, exc)
+            return None
+
+
 def _parse_rdap_payload(payload: dict[str, Any], query: str, source_url: str) -> RdapRecord:
     """Defensively build an ``RdapRecord`` from an RDAP JSON response."""
     handle = payload.get("handle") if isinstance(payload.get("handle"), str) else None
     entities = payload.get("entities")
 
-    registrants = _walk_entities_for_role(entities, "registrant")
-    registrant_organisation = None
-    for ent in registrants:
-        name = _vcard_field(ent.get("vcardArray"), "fn")
-        if name:
-            registrant_organisation = name
-            break
+    contacts: list[Contact] = []
+    for role in ContactRole:
+        for ent in _walk_entities_for_role(entities, role.value):
+            contact = _build_contact(ent, role)
+            if contact is not None:
+                contacts.append(contact)
 
-    abuse_email = None
-    for ent in _walk_entities_for_role(entities, "abuse"):
-        email = _vcard_field(ent.get("vcardArray"), "email")
-        if email:
-            abuse_email = email
-            break
+    # The convenience-access flat fields read off the contacts list -
+    # one walk, two derived shortcuts the OA reads most often.
+    registrant_organisation = next(
+        (c.name for c in contacts if c.role is ContactRole.REGISTRANT and c.name),
+        None,
+    )
+    abuse_email = next(
+        (c.email for c in contacts if c.role is ContactRole.ABUSE and c.email),
+        None,
+    )
 
     return RdapRecord(
         query=query,
@@ -258,6 +289,7 @@ def _parse_rdap_payload(payload: dict[str, Any], query: str, source_url: str) ->
         registered_at=_parse_event(payload.get("events"), "registration"),
         last_changed_at=_parse_event(payload.get("events"), "last changed"),
         source_url=source_url,
+        contacts=contacts,
     )
 
 

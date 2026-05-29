@@ -10,6 +10,9 @@ from pydantic import BaseModel, ValidationError
 from models import (
     FQDN,
     AttackGraph,
+    Contact,
+    ContactRole,
+    Email,
     Endpoint,
     HttpUrl,
     IPAddress,
@@ -304,6 +307,80 @@ class TestIPAddress:
         probe = _IPAddressProbe(value="8.8.8.8")
         assert isinstance(probe.value, str)
         assert probe.value.startswith("8.")
+
+
+class _EmailProbe(BaseModel):
+    """Thin probe model used to drive the Email validator in isolation."""
+
+    value: Email
+
+
+class TestEmail:
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            "abuse@example.com",
+            "first.last@sub.example.com",
+            "a@b.co",
+        ],
+    )
+    def test_accepts_canonical_shapes(self, raw):
+        assert _EmailProbe(value=raw).value == raw
+
+    def test_normalises_to_lowercase(self):
+        # email_validator returns the normalised form (both local-part
+        # and domain case-folded) so equality holds across input
+        # variants.
+        assert _EmailProbe(value="Abuse@Example.COM").value == "abuse@example.com"
+
+    @pytest.mark.parametrize(
+        "bad",
+        ["", "   ", "no-at-sign", "@no-local-part.com", "missing-domain@", "two@@example.com"],
+    )
+    def test_rejects_malformed(self, bad):
+        with pytest.raises(ValidationError):
+            _EmailProbe(value=bad)
+
+    def test_runtime_type_is_str(self):
+        # Email is Annotated[str, ...] so f"mailto:{email}" /
+        # email.split("@") keep working without an audit.
+        probe = _EmailProbe(value="abuse@example.com")
+        assert isinstance(probe.value, str)
+        assert "@" in probe.value
+
+
+class TestContact:
+    def test_role_only_minimum(self):
+        # vCard fields are all optional - a Contact with just a role is
+        # legal but useless. The parser's _build_contact drops these
+        # before they reach RdapRecord; the model itself accepts.
+        c = Contact(role=ContactRole.ABUSE)
+        assert c.email is None
+        assert c.name is None
+        assert c.phone is None
+
+    def test_full_contact(self):
+        c = Contact(
+            role=ContactRole.REGISTRANT,
+            email="abuse@example.com",
+            name="Example Corp",
+            phone="+1-555-0123",
+        )
+        assert c.role is ContactRole.REGISTRANT
+        assert c.email == "abuse@example.com"
+
+    def test_invalid_email_rejects_contact(self):
+        # The Email primitive's validator fires on construction; a
+        # Contact carrying a mis-shaped email rejects rather than
+        # silently swallowing the bad value.
+        with pytest.raises(ValidationError):
+            Contact(role=ContactRole.ABUSE, email="not-an-email")
+
+    def test_serialise_roundtrip(self):
+        original = Contact(role=ContactRole.NOC, email="noc@example.com")
+        restored = Contact.model_validate_json(original.model_dump_json())
+        assert restored.role is ContactRole.NOC
+        assert restored.email == "noc@example.com"
 
 
 class TestAttackGraph:

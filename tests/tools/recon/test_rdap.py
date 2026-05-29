@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from models.network import RdapRecord
+from models.network import ContactRole, RdapRecord
 from tools.recon import rdap
 
 pytestmark = pytest.mark.unit
@@ -341,6 +341,135 @@ class TestLookupFailurePaths:
             patch.object(rdap, "_base_url_for_asn", return_value=long_url.rstrip("/")),
         ):
             assert rdap.lookup_rdap_for_asn(15169) is None
+
+
+# Contact walking
+
+
+class TestContactWalking:
+    def test_walks_full_contact_set(self):
+        payload = {
+            "entities": [
+                {
+                    "roles": ["registrant"],
+                    "vcardArray": [
+                        "vcard",
+                        [
+                            ["fn", {}, "text", "Example Corp"],
+                            ["email", {}, "text", "registry@example.com"],
+                            ["tel", {}, "text", "+1-555-0001"],
+                        ],
+                    ],
+                    "entities": [
+                        {
+                            "roles": ["abuse"],
+                            "vcardArray": [
+                                "vcard",
+                                [
+                                    ["fn", {}, "text", "Abuse Desk"],
+                                    ["email", {}, "text", "abuse@example.com"],
+                                ],
+                            ],
+                        },
+                        {
+                            "roles": ["technical"],
+                            "vcardArray": [
+                                "vcard",
+                                [
+                                    ["fn", {}, "text", "Tech NOC"],
+                                    ["email", {}, "text", "tech@example.com"],
+                                    ["tel", {}, "text", "+1-555-0002"],
+                                ],
+                            ],
+                        },
+                    ],
+                }
+            ]
+        }
+        record = rdap._parse_rdap_payload(payload, query="x", source_url="https://x")
+        roles = {c.role for c in record.contacts}
+        assert {ContactRole.REGISTRANT, ContactRole.ABUSE, ContactRole.TECHNICAL} <= roles
+        # The convenience-access flat fields still derive from the contacts.
+        assert record.registrant_organisation == "Example Corp"
+        assert record.abuse_email == "abuse@example.com"
+
+    def test_skips_entity_with_no_useful_fields(self):
+        # An entity with role but neither name, email, nor phone is
+        # filtered upstream of contact construction.
+        payload = {
+            "entities": [
+                {
+                    "roles": ["admin"],
+                    "vcardArray": ["vcard", []],
+                }
+            ]
+        }
+        record = rdap._parse_rdap_payload(payload, query="x", source_url="https://x")
+        assert record.contacts == []
+
+    def test_unknown_role_is_dropped(self):
+        # The parser walks ContactRole values only; an entity whose role
+        # is outside our catalogue does not project onto an OTHER bucket.
+        payload = {
+            "entities": [
+                {
+                    "roles": ["billing"],  # not in ContactRole
+                    "vcardArray": [
+                        "vcard",
+                        [
+                            ["fn", {}, "text", "Billing"],
+                            ["email", {}, "text", "billing@example.com"],
+                        ],
+                    ],
+                }
+            ]
+        }
+        record = rdap._parse_rdap_payload(payload, query="x", source_url="https://x")
+        assert record.contacts == []
+
+    def test_malformed_email_degrades_to_email_less_contact(self):
+        # An RDAP server returning a non-shaped email trips the Email
+        # validator; _build_contact retries without the email and keeps
+        # the rest of the contact intact.
+        payload = {
+            "entities": [
+                {
+                    "roles": ["abuse"],
+                    "vcardArray": [
+                        "vcard",
+                        [
+                            ["fn", {}, "text", "Abuse Desk"],
+                            ["email", {}, "text", "not an email"],
+                        ],
+                    ],
+                }
+            ]
+        }
+        record = rdap._parse_rdap_payload(payload, query="x", source_url="https://x")
+        assert len(record.contacts) == 1
+        assert record.contacts[0].name == "Abuse Desk"
+        assert record.contacts[0].email is None
+
+    def test_overlong_name_drops_contact_entirely(self):
+        # The Email validator passed; the name length cap rejects on
+        # both the initial construction and the email-stripped retry,
+        # so the contact drops on the floor.
+        payload = {
+            "entities": [
+                {
+                    "roles": ["abuse"],
+                    "vcardArray": [
+                        "vcard",
+                        [
+                            ["fn", {}, "text", "x" * 300],
+                            ["email", {}, "text", "abuse@example.com"],
+                        ],
+                    ],
+                }
+            ]
+        }
+        record = rdap._parse_rdap_payload(payload, query="x", source_url="https://x")
+        assert record.contacts == []
 
 
 # Defensive payload parsing
