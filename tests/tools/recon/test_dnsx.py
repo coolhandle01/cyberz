@@ -11,6 +11,7 @@ import pytest
 from tools.recon.dnsx import (
     _match_fingerprint,
     detect_takeover_candidates,
+    resolve_ptr,
     resolve_records,
 )
 
@@ -227,3 +228,108 @@ class TestDetectTakeoverCandidates:
     def test_empty_input_returns_empty(self):
         with patch("shutil.which", return_value=None):
             assert detect_takeover_candidates([]) == []
+
+
+class TestResolvePtr:
+    def test_empty_input_returns_empty(self):
+        with patch("shutil.which", return_value=None):
+            assert resolve_ptr([]) == []
+
+    def test_parses_ptr_json_output(self):
+        out = (
+            json.dumps({"host": "8.8.8.8", "ptr": ["dns.google."]})
+            + "\n"
+            + json.dumps({"host": "1.1.1.1", "ptr": ["one.one.one.one"]})
+            + "\n"
+        )
+        with (
+            patch("shutil.which", return_value="/usr/bin/dnsx"),
+            patch("tools.recon.dnsx._run", return_value=_completed(out)),
+        ):
+            records = resolve_ptr(["8.8.8.8", "1.1.1.1"])
+
+        assert len(records) == 2
+        by_ip = {r.ip: r for r in records}
+        # Trailing dot from the DNS wire format gets stripped.
+        assert by_ip["8.8.8.8"].hostnames == ["dns.google"]
+        assert by_ip["1.1.1.1"].hostnames == ["one.one.one.one"]
+
+    def test_skips_malformed_lines(self):
+        out = "this is not json\n" + json.dumps({"host": "8.8.8.8", "ptr": ["dns.google"]}) + "\n"
+        with (
+            patch("shutil.which", return_value="/usr/bin/dnsx"),
+            patch("tools.recon.dnsx._run", return_value=_completed(out)),
+        ):
+            records = resolve_ptr(["8.8.8.8"])
+        assert len(records) == 1
+
+    def test_skips_blank_lines(self):
+        out = "\n" + json.dumps({"host": "8.8.8.8", "ptr": ["dns.google"]}) + "\n\n"
+        with (
+            patch("shutil.which", return_value="/usr/bin/dnsx"),
+            patch("tools.recon.dnsx._run", return_value=_completed(out)),
+        ):
+            records = resolve_ptr(["8.8.8.8"])
+        assert len(records) == 1
+
+    def test_drops_entries_with_no_host(self):
+        out = json.dumps({"ptr": ["orphan.example.com"]}) + "\n"
+        with (
+            patch("shutil.which", return_value="/usr/bin/dnsx"),
+            patch("tools.recon.dnsx._run", return_value=_completed(out)),
+        ):
+            assert resolve_ptr(["8.8.8.8"]) == []
+
+    def test_drops_entries_where_ptr_is_not_list(self):
+        out = json.dumps({"host": "8.8.8.8", "ptr": "not a list"}) + "\n"
+        with (
+            patch("shutil.which", return_value="/usr/bin/dnsx"),
+            patch("tools.recon.dnsx._run", return_value=_completed(out)),
+        ):
+            assert resolve_ptr(["8.8.8.8"]) == []
+
+    def test_filters_non_string_hostnames(self):
+        # Defence: hostname list with mixed types - non-strings dropped
+        # but the record itself still lands with the string entries.
+        out = json.dumps({"host": "8.8.8.8", "ptr": ["dns.google", 42, None]}) + "\n"
+        with (
+            patch("shutil.which", return_value="/usr/bin/dnsx"),
+            patch("tools.recon.dnsx._run", return_value=_completed(out)),
+        ):
+            records = resolve_ptr(["8.8.8.8"])
+        assert len(records) == 1
+        assert records[0].hostnames == ["dns.google"]
+
+    def test_whitespace_only_input_returns_empty(self):
+        with patch("shutil.which", return_value="/usr/bin/dnsx"):
+            assert resolve_ptr(["   ", " "]) == []
+
+    def test_subprocess_failure_returns_empty(self):
+        with (
+            patch("shutil.which", return_value="/usr/bin/dnsx"),
+            patch("tools.recon.dnsx._run", side_effect=OSError("dnsx died")),
+        ):
+            assert resolve_ptr(["8.8.8.8"]) == []
+
+    def test_malformed_hostname_degrades_to_ip_only_record(self):
+        # A PTR hostname that trips the FQDN validator (e.g. embedded
+        # whitespace) drops the hostnames but keeps the IP signal.
+        out = json.dumps({"host": "8.8.8.8", "ptr": ["not a valid hostname"]}) + "\n"
+        with (
+            patch("shutil.which", return_value="/usr/bin/dnsx"),
+            patch("tools.recon.dnsx._run", return_value=_completed(out)),
+        ):
+            records = resolve_ptr(["8.8.8.8"])
+        assert len(records) == 1
+        assert records[0].ip == "8.8.8.8"
+        assert records[0].hostnames == []
+
+    def test_invalid_ip_in_response_drops_the_row(self):
+        # If the "host" field isn't a valid IP, the IPAddress validator
+        # rejects it on both the original and degraded retry - row drops.
+        out = json.dumps({"host": "not.an.ip", "ptr": ["x.example.com"]}) + "\n"
+        with (
+            patch("shutil.which", return_value="/usr/bin/dnsx"),
+            patch("tools.recon.dnsx._run", return_value=_completed(out)),
+        ):
+            assert resolve_ptr(["8.8.8.8"]) == []

@@ -11,12 +11,13 @@ across every consumer.
 | ``models.primitives`` | ``Severity``, ``FQDN``, ``HttpUrl``, ``IPAddress`` |
 | ``models.finding`` | ``RawFinding``, ``VerifiedVulnerability``, ``RawFindingSummary`` |
 | ``models.asset`` | ``Endpoint``, ``EndpointPage``, ``HostRole``, ``HostPriority``, |
-|                  | ``HostInsight``, ``OpenPortsMap``, ``LlmEndpoint``, ``AttackGraph`` |
+|                  | ``HostInsight``, ``IpAsset``, ``OpenPortsMap``, ``LlmEndpoint``, |
+|                  | ``AttackGraph`` |
 | ``models.workspace`` | ``RunFile``, ``RunFileContent`` |
 | ``models.cve`` | ``CveEntry`` |
 | ``models.cwe`` | ``CWEEntry`` |
 | ``models.owasp`` | ``OWASPEntry`` |
-| ``models.dns`` | ``TakeoverCandidate`` |
+| ``models.dns`` | ``PtrRecord``, ``TakeoverCandidate`` |
 | ``models.insight`` | ``HostAnnotation``, ``InsightValidationIssue``, |
 |                    | ``InsightValidationReport``, ``ReconFinalisationError`` |
 | ``models.metrics`` | ``RunMetrics`` |
@@ -46,6 +47,7 @@ from models.asset import (
     HostInsight,
     HostPriority,
     HostRole,
+    IpAsset,
     LlmEndpoint,
     OpenPortsMap,
 )
@@ -58,7 +60,7 @@ from models.attack import (
 )
 from models.cve import CveEntry
 from models.cwe import CWEEntry
-from models.dns import TakeoverCandidate
+from models.dns import PtrRecord, TakeoverCandidate
 from models.finding import RawFinding, RawFindingSummary, VerifiedVulnerability
 from models.h1 import ProgrammeReportSummary
 from models.insight import (
@@ -109,6 +111,7 @@ __all__ = [
     "IPAddress",
     "InsightValidationIssue",
     "InsightValidationReport",
+    "IpAsset",
     "LlmEndpoint",
     "NmapBanner",
     "NmapHostResult",
@@ -119,6 +122,7 @@ __all__ = [
     "OWASPEntry",
     "OpenPortsMap",
     "ProgrammeReportSummary",
+    "PtrRecord",
     "RawFinding",
     "RawFindingSummary",
     "RdapRecord",
