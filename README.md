@@ -304,6 +304,14 @@ Load-bearing structural decisions in cybersquad cite a canonical external spec a
 - [RFC 9110 section 10.1.5 - User-Agent](https://www.rfc-editor.org/rfc/rfc9110.html#section-10.1.5) - the header semantics underlying `tools/http.py`'s structured UA.
 - [Sennrich et al., Neural Machine Translation of Rare Words with Subword Units (ACL 2016, arXiv:1508.07909)](https://arxiv.org/abs/1508.07909) - the canonical BPE reference. The mechanism (frequency-trained subword vocabulary) is why the ASCII-only rule in `CONTRIBUTING.md` has measurable downstream cost, not just stylistic motivation.
 
+**Attack-graph reasoning**
+
+The `AttackGraph` / `AttackTree` / `AttackForest` shape in `models/attack.py` and `models/asset.py` is grounded in three papers, each carrying the worldview of one agent role. The longer-form companion is [`docs/academic-grounding.md`](./docs/academic-grounding.md).
+
+- [Schneier, *Attack Trees* (Dr. Dobb's Journal, December 1999)](https://www.schneier.com/academic/archives/1999/12/attack_trees.html) - the original goal-decomposition formalism. Maps to the VR's per-probe sub-goal trees.
+- [Sheyner, Haines, Jha, Lippmann, Wing, *Automated Generation and Analysis of Attack Graphs* (IEEE S&P 2002)](https://doi.org/10.1109/SECPRI.2002.1004377) - model-checked attack graphs and the MDP framing of "which path to try first." Maps to the PT's expected-value search; cited in the `AttackForest` docstring.
+- [Ou, Govindavajhala, Appel, *MulVAL: A Logic-based Network Security Analyzer* (USENIX Security 2005)](https://www.usenix.org/legacy/event/sec05/tech/full_papers/ou/ou.pdf) - the Datalog-based reasoner that scales attack-graph generation to real networks by representing fact-derivations rather than state transitions.
+
 ---
 
 ## Licence
