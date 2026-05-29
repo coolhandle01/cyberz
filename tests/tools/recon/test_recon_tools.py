@@ -566,3 +566,34 @@ class TestDiscoverPaths:
         ):
             result = discover_paths(endpoints)
         assert result == []
+
+
+class TestRunRecon:
+    def test_assembles_attack_graph_from_recon_pipeline(self, programme, target_apex):
+        # Smoke test for the orchestrator: every recon helper mocked,
+        # verifies the AttackGraph it builds carries the expected
+        # composition (subdomains the scope guard accepted, endpoints
+        # probed, ports scanned, tech collated, traceroute hops keyed
+        # by host).
+        from tools.recon import run_recon
+
+        ep = Endpoint(url=f"https://api.{target_apex}/", status_code=200, technologies=["nginx"])
+        with (
+            patch(
+                "tools.recon.enumerate_subdomains",
+                return_value=[f"api.{target_apex}", "out.example.org"],
+            ),
+            patch("tools.recon.probe_endpoints", return_value=[ep]),
+            patch("tools.recon.port_scan", return_value={f"api.{target_apex}": [443]}),
+            patch("tools.recon.discover_paths", return_value=[]),
+            patch("tools.recon.check_tls", return_value=[]),
+            patch("tools.recon.check_dns_email_security", return_value=[]),
+            patch("tools.recon.run_traceroute", return_value={}),
+        ):
+            attack_graph = run_recon(programme)
+
+        # Out-of-scope host filtered; the in-scope api.* survives.
+        assert f"api.{target_apex}" in attack_graph.subdomains
+        assert attack_graph.endpoints == [ep]
+        assert attack_graph.open_ports == {f"api.{target_apex}": [443]}
+        assert "nginx" in attack_graph.technologies

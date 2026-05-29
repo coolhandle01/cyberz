@@ -91,7 +91,7 @@ def httpx_scan(
                 target.mkdir(parents=True, exist_ok=True)
                 evidence_dir = target
                 evidence_rel = dirname
-            except OSError as exc:
+            except OSError as exc:  # pragma: no cover - defensive: mkdir on rundir
                 logger.warning("Failed to create httpx evidence dir %s: %s", target, exc)
 
     httpx_bin = _require_binary("httpx")

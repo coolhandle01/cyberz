@@ -17,6 +17,41 @@ pytestmark = pytest.mark.unit
 
 
 class TestOsintAnalystTools:
+    def test_recon_subdomains_tool_wraps_hostnames_as_fqdn(self) -> None:
+        # Thin wrapper: list[str] from the impl becomes list[FQDN] for the
+        # agent so the typed primitive's validator fires at the wrapper
+        # boundary, not inside the consumer.
+        from squad.osint_analyst import recon_subdomains_tool
+
+        with patch(
+            "squad.osint_analyst.discovery.recon_subdomains",
+            return_value=["api.example.com", "admin.example.com"],
+        ) as mimpl:
+            result = recon_subdomains_tool.func(
+                attack_graph_path="attack_graph.json", host_filter="api"
+            )
+
+        assert result == ["api.example.com", "admin.example.com"]
+        mimpl.assert_called_once_with("attack_graph.json", host_filter="api")
+
+    def test_recon_open_ports_tool_wraps_dict_as_open_ports_map(self) -> None:
+        # Wrapper turns the impl's ``{host: [ports]}`` into the typed
+        # ``OpenPortsMap`` the agent reads back.
+        from models import OpenPortsMap
+        from squad.osint_analyst import recon_open_ports_tool
+
+        with patch(
+            "squad.osint_analyst.discovery.recon_open_ports",
+            return_value={"api.example.com": [80, 443]},
+        ) as mimpl:
+            result = recon_open_ports_tool.func(
+                attack_graph_path="attack_graph.json", host="api.example.com"
+            )
+
+        assert isinstance(result, OpenPortsMap)
+        assert result.hosts == {"api.example.com": [80, 443]}
+        mimpl.assert_called_once_with("attack_graph.json", host="api.example.com")
+
     def test_run_initial_sweep_tool(self, programme_in_workspace, recon_result, tmp_path) -> None:
         from squad.osint_analyst import run_initial_sweep_tool
 

@@ -98,7 +98,7 @@ def nmap_scan(
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_text(result.stdout, encoding="utf-8")
                 evidence_rel = filename
-            except OSError as exc:
+            except OSError as exc:  # pragma: no cover - defensive: write on rundir
                 logger.warning("Failed to persist nmap evidence to %s: %s", target, exc)
 
     logger.info(

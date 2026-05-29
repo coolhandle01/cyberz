@@ -170,7 +170,7 @@ def _validate_ip_address(value: str) -> str:
     """
     import ipaddress
 
-    if not isinstance(value, str):
+    if not isinstance(value, str):  # pragma: no cover - Pydantic enforces str upstream
         raise ValueError(f"IP address must be a string, got {type(value).__name__}")
     cleaned = value.strip()
     if not cleaned:

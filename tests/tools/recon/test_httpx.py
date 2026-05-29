@@ -132,6 +132,38 @@ class TestHttpxScanCore:
         assert isinstance(result, HttpxScanResult)
         assert result.endpoints == []
 
+    def test_non_dict_json_line_skipped(self, target_url):
+        # httpx emits one JSON object per line; a stray JSON array / scalar
+        # is structurally valid JSON but not a row - parser skips it.
+        mock_result = self._mock_subprocess_result(
+            "[1, 2, 3]",
+            _ndjson_line(url=target_url, status_code=200, tech=[]),
+        )
+        with (
+            patch("tools.recon.httpx.scanner._require_binary", return_value="/usr/bin/httpx"),
+            patch("tools.recon.httpx.scanner._run", return_value=mock_result),
+        ):
+            result = httpx_scan([target_url], mode=HttpxMode.LIVE)
+        assert len(result.endpoints) == 1
+
+    def test_double_validation_failure_drops_row(self, target_url):
+        # Both Endpoint constructions raise: the first because of a bad
+        # SAN, the second (the degraded retry) because the URL itself is
+        # invalid. The row drops on the floor entirely; the parser keeps
+        # going.
+        mock_result = self._mock_subprocess_result(
+            _ndjson_line(url="://not a url", status_code=200, tech=[]),
+            _ndjson_line(url=target_url, status_code=200, tech=[]),
+        )
+        with (
+            patch("tools.recon.httpx.scanner._require_binary", return_value="/usr/bin/httpx"),
+            patch("tools.recon.httpx.scanner._run", return_value=mock_result),
+        ):
+            result = httpx_scan([target_url], mode=HttpxMode.LIVE)
+        # Bad row dropped, good row kept.
+        assert len(result.endpoints) == 1
+        assert result.endpoints[0].url == target_url
+
     def test_malformed_json_line_skipped(self, target_url):
         # One bad line + one good line - the good one survives.
         mock_result = self._mock_subprocess_result(

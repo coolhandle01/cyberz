@@ -258,6 +258,57 @@ class TestParseXml:
         xml = "<?xml version='1.0'?><nmaprun><host></host></nmaprun>"
         assert _parse_xml(xml) == []
 
+    def test_skips_host_with_empty_addr_attribute(self):
+        # <address> exists but addr="" - we have no host identifier to
+        # land the row against, so the host is skipped.
+        xml = (
+            "<?xml version='1.0'?><nmaprun>"
+            '<host><address addr="" addrtype="ipv4"/></host>'
+            "</nmaprun>"
+        )
+        assert _parse_xml(xml) == []
+
+    def test_skips_port_with_out_of_range_portid(self):
+        # NmapService.port is constrained to 1..65535. A nmap row with
+        # portid=70000 trips the validator; the port is dropped but the
+        # host row is kept.
+        xml = (
+            "<?xml version='1.0'?><nmaprun>"
+            '<host><address addr="1.1.1.1" addrtype="ipv4"/>'
+            '<ports><port protocol="tcp" portid="70000">'
+            '<state state="open"/></port></ports>'
+            "</host></nmaprun>"
+        )
+        results = _parse_xml(xml)
+        assert len(results) == 1
+        assert results[0].services == []
+
+    def test_service_name_only_used_when_product_absent(self):
+        # When nmap emits a service name but no product, the parser
+        # uses the service name as the banner string (port-number guess
+        # rather than banner-grabbed).
+        xml = (
+            "<?xml version='1.0'?><nmaprun>"
+            '<host><address addr="1.1.1.1" addrtype="ipv4"/>'
+            '<ports><port protocol="tcp" portid="22">'
+            '<state state="open"/><service name="ssh"/></port></ports>'
+            "</host></nmaprun>"
+        )
+        results = _parse_xml(xml)
+        assert len(results) == 1
+        assert results[0].services[0].service == "ssh"
+        assert results[0].services[0].product is None
+
+    def test_skips_host_when_host_validator_rejects_addr(self):
+        # NmapHostResult.host is typed FQDN | IPAddress; a non-routable
+        # string trips the validator and the row drops on the floor.
+        xml = (
+            "<?xml version='1.0'?><nmaprun>"
+            '<host><address addr="not a valid host" addrtype="ipv4"/></host>'
+            "</nmaprun>"
+        )
+        assert _parse_xml(xml) == []
+
     def test_skips_port_with_non_numeric_portid(self):
         xml = (
             "<?xml version='1.0'?><nmaprun>"
