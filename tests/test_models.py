@@ -571,6 +571,32 @@ class TestTLSCertificate:
             TLSCertificate(host=f"www.{target_apex}", issuer="x" * 256)
 
 
+class TestHostScore:
+    def test_minimal(self, target_apex):
+        from models import HostPriority, HostRole, HostScore
+
+        s = HostScore(hostname=f"api.{target_apex}", role=HostRole.API, priority=HostPriority.HIGH)
+        assert s.role == HostRole.API
+        assert s.priority == HostPriority.HIGH
+        assert s.annotated_at is not None
+
+    def test_serialise_roundtrip(self, target_apex):
+        from models import HostPriority, HostRole, HostScore
+
+        original = HostScore(
+            hostname=f"auth.{target_apex}", role=HostRole.AUTH, priority=HostPriority.MEDIUM
+        )
+        restored = HostScore.model_validate_json(original.model_dump_json())
+        assert restored.hostname == f"auth.{target_apex}"
+        assert restored.role == HostRole.AUTH
+
+    def test_rejects_malformed_host(self):
+        from models import HostPriority, HostRole, HostScore
+
+        with pytest.raises(ValidationError):
+            HostScore(hostname="https://x/y", role=HostRole.API, priority=HostPriority.LOW)
+
+
 class TestAttackForest:
     def test_serialise_roundtrip(self, attack_forest):
         restored = AttackForest.model_validate_json(attack_forest.model_dump_json())

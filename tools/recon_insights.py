@@ -34,8 +34,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from pydantic import TypeAdapter
+
 import runtime
-from models import AttackGraph, HostInsight, HostPriority, TLSCertificate
+from models import AttackGraph, HostInsight, HostPriority, HostScore, RawFinding, TLSCertificate
 from models.h1 import Programme
 
 # The insight shapes (HostAnnotation, InsightValidationIssue,
@@ -290,6 +292,103 @@ def load_tls_certificates() -> list[TLSCertificate]:
     )
 
 
+# Typed adapters for the per-host facet files that hold bare collections
+# rather than a single model - so the JSON still round-trips through a
+# typed boundary (the #45 amass-read side validates the same way).
+_HOST_FINDINGS = TypeAdapter(list[RawFinding])
+_HOST_PORTS = TypeAdapter(list[int])
+
+
+def host_score_path(hostname: FQDN) -> Path:
+    """Per-host score file: ``<host_dir>/host.json``."""
+    return host_dir(hostname) / "host.json"
+
+
+def save_host_score(score: HostScore) -> Path:
+    """Persist a ``HostScore`` to ``<run_dir>/hosts/<host>/host.json``."""
+    path = host_score_path(score.hostname)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(score.model_dump_json(indent=2), encoding="utf-8")
+    return path
+
+
+def load_host_scores() -> list[HostScore]:
+    """Load every per-host score in the current run, ordered by hostname."""
+    dir_ = _hosts_dir()
+    if not dir_.is_dir():
+        return []
+    return sorted(
+        (
+            HostScore.model_validate_json(p.read_text(encoding="utf-8"))
+            for p in dir_.glob("*/host.json")
+        ),
+        key=lambda s: s.hostname,
+    )
+
+
+def notes_path(hostname: FQDN) -> Path:
+    """Per-host prose file: ``<host_dir>/notes.md``."""
+    return host_dir(hostname) / "notes.md"
+
+
+def save_host_notes(hostname: FQDN, notes: str) -> Path:
+    """Persist the OA's prose guidance to ``<run_dir>/hosts/<host>/notes.md``.
+
+    The "look here, because ..." half of the curation, kept as markdown
+    outside the typed data shape. Agent-authored prose: it is read back by
+    downstream agents as workspace context (that is the point of the
+    handoff), so no injection guard - the risk surface is *verbatim
+    tool-captured* strings, which live in the typed evidence facets
+    (findings / tls), not here.
+    """
+    path = notes_path(hostname)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(notes, encoding="utf-8")
+    return path
+
+
+def findings_path(hostname: FQDN) -> Path:
+    """Per-host findings file: ``<host_dir>/findings.json``."""
+    return host_dir(hostname) / "findings.json"
+
+
+def save_host_findings(hostname: FQDN, findings: list[RawFinding]) -> Path:
+    """Persist a host's node-local findings to ``hosts/<host>/findings.json``."""
+    path = findings_path(hostname)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(_HOST_FINDINGS.dump_json(findings, indent=2))
+    return path
+
+
+def load_host_findings(hostname: FQDN) -> list[RawFinding]:
+    """Load a host's node-local findings; empty when none were written."""
+    path = findings_path(hostname)
+    if not path.is_file():
+        return []
+    return _HOST_FINDINGS.validate_json(path.read_text(encoding="utf-8"))
+
+
+def ports_path(hostname: FQDN) -> Path:
+    """Per-host open-ports file: ``<host_dir>/ports.json``."""
+    return host_dir(hostname) / "ports.json"
+
+
+def save_host_ports(hostname: FQDN, ports: list[int]) -> Path:
+    """Persist a host's open ports to ``hosts/<host>/ports.json``."""
+    path = ports_path(hostname)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(_HOST_PORTS.dump_json(ports, indent=2))
+    return path
+
+
+def load_host_ports(hostname: FQDN) -> list[int]:
+    """Load a host's open ports; empty when none were written."""
+    path = ports_path(hostname)
+    if not path.is_file():
+        return []
+    return _HOST_PORTS.validate_json(path.read_text(encoding="utf-8"))
+
+
 def load_attack_graph(attack_graph_filename: str = _ATTACK_GRAPH_FILENAME) -> AttackGraph:
     """Load the OA's internal sweep artefact."""
     path = runtime.run_dir() / attack_graph_filename
@@ -304,6 +403,55 @@ def load_attack_graph(attack_graph_filename: str = _ATTACK_GRAPH_FILENAME) -> At
 # 3xx redirects often hide gates, 401/403 confirm an auth-gated surface
 # worth probing. Pure 404/500 we let slide.
 _INTERESTING_STATUSES = {200, 201, 204, 301, 302, 307, 308, 401, 403}
+
+
+def _finding_host(target: str) -> str:
+    """Best-effort hostname from a ``RawFinding`` target (URL or bare host)."""
+    from urllib.parse import urlparse
+
+    candidate = target if "://" in target else f"//{target}"
+    return (urlparse(candidate).hostname or target).strip().lower()
+
+
+def _materialise_host_dirs(sweep: AttackGraph, insights: list[HostInsight]) -> None:
+    """Write each host's OAM-node directory under ``hosts/<fqdn>/``.
+
+    The OA's per-node handoff, split into typed facets so #45 can swap each
+    JSON write for an amass insert one day:
+
+    * ``host.json`` / ``notes.md`` - the curation: the typed score+priority,
+      and the prose "look here, because ..." lifted out of the data shape.
+    * ``ports.json`` / ``findings.json`` / ``tls.json`` - the recon facts,
+      read back off the sweep.
+
+    Dormant facets stay unwritten (empty ports, no certs) rather than
+    littering empty files.
+    """
+    for insight in insights:
+        save_host_score(
+            HostScore(
+                hostname=insight.hostname,
+                role=insight.role,
+                priority=insight.priority,
+                annotated_at=insight.annotated_at,
+            )
+        )
+        save_host_notes(insight.hostname, insight.notes)
+
+    for hostname, ports in sweep.open_ports.items():
+        if ports:
+            save_host_ports(hostname, ports)
+
+    findings_by_host: dict[str, list[RawFinding]] = {}
+    for finding in sweep.passive_findings:
+        host = _finding_host(finding.target)
+        if host:
+            findings_by_host.setdefault(host, []).append(finding)
+    for hostname, host_findings in findings_by_host.items():
+        save_host_findings(hostname, host_findings)
+
+    for certificate in sweep.tls_certificates:
+        save_tls_certificate(certificate)
 
 
 def finalise_recon(
@@ -359,6 +507,8 @@ def finalise_recon(
             "needs at least one focus target on a non-empty surface"
         )
 
+    _materialise_host_dirs(sweep, insights)
+
     final = AttackGraph(
         programme=sweep.programme,
         subdomains=sweep.subdomains,
@@ -367,6 +517,11 @@ def finalise_recon(
         technologies=sweep.technologies,
         passive_findings=sweep.passive_findings,
         network_hops=sweep.network_hops,
+        # Carry the sweep's enrichment forward - finalise previously dropped
+        # ip_assets (and would drop tls_certificates), losing it from the
+        # PT-facing recon.json even though the sweep gathered it.
+        ip_assets=sweep.ip_assets,
+        tls_certificates=sweep.tls_certificates,
         host_insights=insights,
         notes=_build_notes(sweep, insights),
     )
@@ -413,11 +568,22 @@ __all__ = [
     "InsightValidationReport",
     "ReconFinalisationError",
     "finalise_recon",
+    "findings_path",
     "host_dir",
+    "host_score_path",
     "insight_path",
     "load_attack_graph",
+    "load_host_findings",
+    "load_host_ports",
+    "load_host_scores",
     "load_insights",
     "load_tls_certificates",
+    "notes_path",
+    "ports_path",
+    "save_host_findings",
+    "save_host_notes",
+    "save_host_ports",
+    "save_host_score",
     "save_insight",
     "save_tls_certificate",
     "tls_path",

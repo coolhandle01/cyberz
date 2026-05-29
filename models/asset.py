@@ -176,6 +176,27 @@ class HostInsight(BaseModel):
     annotated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
+class HostScore(BaseModel):
+    """The OSINT Analyst's scoring of one host - the score/priority half of
+    ``HostInsight``, split out from the prose.
+
+    Pure machine-actionable curation: WHERE a host sits in the attack
+    surface (``role``) and how hard downstream agents should lean on it
+    (``priority``). The WHY - the agent's prose rationale - lives beside it
+    as ``notes.md`` rather than shoehorned into this data shape, so the PT
+    can filter on ``priority`` / ``role`` without parsing free text.
+
+    Materialised per host at ``hosts/<fqdn>/host.json`` - the typed header
+    of that host's OAM-asset directory. Maps toward amass's FQDN asset,
+    with role / priority as ``SimpleProperty`` values when #45 lands.
+    """
+
+    hostname: FQDN
+    role: HostRole
+    priority: HostPriority
+    annotated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
 class OpenPortsMap(BaseModel):
     """The recon-derived port map keyed by host.
 

@@ -318,3 +318,122 @@ class TestFinaliseRecon:
         data = json.loads(path.read_text())
         assert data["subdomains"] == sweep.subdomains
         assert len(data["endpoints"]) == len(sweep.endpoints)
+
+
+class TestHostFacetPersistence:
+    """The per-host OAM-node facets: host.json (score), notes.md, findings.json,
+    ports.json - writer/reader pairs under hosts/<fqdn>/."""
+
+    def test_host_score_writes_and_loads(self, run_dir, target_apex):
+        from models import HostPriority, HostRole, HostScore
+        from tools.recon_insights import host_score_path, load_host_scores, save_host_score
+
+        save_host_score(
+            HostScore(hostname=f"api.{target_apex}", role=HostRole.API, priority=HostPriority.HIGH)
+        )
+        assert host_score_path(f"api.{target_apex}") == (
+            run_dir / "hosts" / f"api.{target_apex}" / "host.json"
+        )
+        # sibling of insight.json in the same per-FQDN dir
+        score_dir = host_score_path(f"api.{target_apex}").parent
+        assert score_dir == insight_path(f"api.{target_apex}").parent
+        loaded = load_host_scores()
+        assert [s.hostname for s in loaded] == [f"api.{target_apex}"]
+
+    def test_load_host_scores_empty_when_no_dir(self, run_dir):
+        from tools.recon_insights import load_host_scores
+
+        assert load_host_scores() == []
+
+    def test_notes_writes_markdown(self, run_dir, target_apex):
+        from tools.recon_insights import save_host_notes
+
+        path = save_host_notes(f"api.{target_apex}", "look here, because it is the admin panel")
+        assert path == run_dir / "hosts" / f"api.{target_apex}" / "notes.md"
+        assert "admin panel" in path.read_text(encoding="utf-8")
+
+    def test_findings_roundtrip_and_empty(self, run_dir, target_apex):
+        from models import RawFinding
+        from tools.recon_insights import findings_path, load_host_findings, save_host_findings
+
+        finding = RawFinding(
+            title="weak TLS",
+            vuln_class="tls",
+            target=f"https://api.{target_apex}",
+            evidence="TLS 1.0 enabled",
+            tool="testssl",
+        )
+        save_host_findings(f"api.{target_apex}", [finding])
+        assert findings_path(f"api.{target_apex}").is_file()
+        loaded = load_host_findings(f"api.{target_apex}")
+        assert [f.title for f in loaded] == ["weak TLS"]
+        # absent host -> empty, no raise
+        assert load_host_findings(f"absent.{target_apex}") == []
+
+    def test_ports_roundtrip_and_empty(self, run_dir, target_apex):
+        from tools.recon_insights import load_host_ports, ports_path, save_host_ports
+
+        save_host_ports(f"api.{target_apex}", [22, 443])
+        assert ports_path(f"api.{target_apex}").is_file()
+        assert load_host_ports(f"api.{target_apex}") == [22, 443]
+        assert load_host_ports(f"absent.{target_apex}") == []
+
+
+class TestFinaliseMaterialisesHostDirs:
+    def test_writes_every_facet(self, sweep, programme, run_dir, target_apex):
+        from models import RawFinding, TLSCertificate
+        from tools.recon_insights import (
+            host_score_path,
+            load_host_findings,
+            load_host_ports,
+            load_tls_certificates,
+            notes_path,
+        )
+
+        enriched = sweep.model_copy(
+            update={
+                "open_ports": {f"api.{target_apex}": [443], f"empty.{target_apex}": []},
+                "passive_findings": [
+                    RawFinding(
+                        title="weak TLS",
+                        vuln_class="tls",
+                        target=f"https://api.{target_apex}/x",
+                        evidence="e",
+                        tool="testssl",
+                    ),
+                    # empty target -> _finding_host yields "" -> skipped
+                    RawFinding(
+                        title="orphan", vuln_class="dns", target="", evidence="e", tool="dig"
+                    ),
+                ],
+                "tls_certificates": [TLSCertificate(host=f"api.{target_apex}")],
+            }
+        )
+        _write_sweep(run_dir, enriched)
+        save_insight(_good_insight())  # api.example.com, HIGH
+        finalise_recon(programme)
+
+        # curation facets (from the insight)
+        assert host_score_path("api.example.com").is_file()
+        assert "primary target" in notes_path("api.example.com").read_text(encoding="utf-8")
+        # fact facets (from the sweep)
+        assert load_host_ports(f"api.{target_apex}") == [443]
+        assert load_host_ports(f"empty.{target_apex}") == []  # empty list -> not written
+        assert [f.title for f in load_host_findings(f"api.{target_apex}")] == ["weak TLS"]
+        assert len(load_tls_certificates()) == 1
+
+    def test_carries_enrichment_into_recon_json(self, sweep, programme, run_dir, target_apex):
+        from models import IpAsset, TLSCertificate
+
+        enriched = sweep.model_copy(
+            update={
+                "ip_assets": [IpAsset(ip="8.8.8.8")],
+                "tls_certificates": [TLSCertificate(host=f"api.{target_apex}")],
+            }
+        )
+        _write_sweep(run_dir, enriched)
+        save_insight(_good_insight())
+        out = finalise_recon(programme)
+        final = AttackGraph.model_validate_json(out.read_text(encoding="utf-8"))
+        assert len(final.ip_assets) == 1
+        assert len(final.tls_certificates) == 1

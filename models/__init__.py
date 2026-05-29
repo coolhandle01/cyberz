@@ -11,8 +11,8 @@ across every consumer.
 | ``models.primitives`` | ``Severity``, ``FQDN``, ``HttpUrl``, ``IPAddress``, ``Email`` |
 | ``models.finding`` | ``RawFinding``, ``VerifiedVulnerability``, ``RawFindingSummary`` |
 | ``models.asset`` | ``Endpoint``, ``EndpointPage``, ``HostRole``, ``HostPriority``, |
-|                  | ``HostInsight``, ``IpAsset``, ``OpenPortsMap``, ``Service``, |
-|                  | ``TLSCertificate``, ``LlmEndpoint``, ``AttackGraph`` |
+|                  | ``HostInsight``, ``HostScore``, ``IpAsset``, ``OpenPortsMap``, |
+|                  | ``Service``, ``TLSCertificate``, ``LlmEndpoint``, ``AttackGraph`` |
 | ``models.workspace`` | ``RunFile``, ``RunFileContent`` |
 | ``models.cve`` | ``CveEntry`` |
 | ``models.cwe`` | ``CWEEntry`` |
@@ -47,6 +47,7 @@ from models.asset import (
     HostInsight,
     HostPriority,
     HostRole,
+    HostScore,
     IpAsset,
     LlmEndpoint,
     OpenPortsMap,
@@ -111,6 +112,7 @@ __all__ = [
     "HostInsight",
     "HostPriority",
     "HostRole",
+    "HostScore",
     "HttpUrl",
     "HttpxMode",
     "IPAddress",

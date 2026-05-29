@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from urllib.parse import urlparse
 
-from models import AttackGraph, Endpoint, TLSCertificate
+from models import AttackGraph, Endpoint
 from models.h1 import Programme, ScopeType
 from tools.recon.cert_transparency import cert_transparency
 from tools.recon.dirfuzz import discover_paths
@@ -23,7 +23,6 @@ from tools.recon.subfinder import enumerate_subdomains
 from tools.recon.tls import check_dns_email_security, check_tls
 from tools.recon.traceroute import run_traceroute
 from tools.recon.waybackurls import historical_urls
-from tools.recon_insights import save_tls_certificate
 
 logger = logging.getLogger(__name__)
 
@@ -98,22 +97,6 @@ __all__ = [
 ]
 
 
-def _emit_tls_certificates(endpoints: list[Endpoint]) -> list[TLSCertificate]:
-    """Lift leaf certs off the probed endpoints into first-class assets.
-
-    Writes one per-host evidence file (``hosts/<fqdn>/tls.json``) and
-    returns the aggregate for ``AttackGraph.tls_certificates``. Mirrors
-    the ``host_insights`` write/aggregate split. Empty unless a
-    WEB_INVENTORY probe attached certs - the TECH_DETECT shim grabs
-    none, so this is dormant on today's default recon, like the SAN
-    promotion in ``run_recon``.
-    """
-    certificates = [ep.tls_certificate for ep in endpoints if ep.tls_certificate]
-    for certificate in certificates:
-        save_tls_certificate(certificate)
-    return certificates
-
-
 def run_recon(programme: Programme) -> AttackGraph:
     """Full recon pipeline for a single programme."""
     seed_domains: list[str] = []
@@ -179,7 +162,6 @@ def run_recon(programme: Programme) -> AttackGraph:
     dns_records = resolve_records(in_scope_hosts)
     unique_ips = list(dict.fromkeys(ip for record in dns_records for ip in record.a_records))
     ip_assets = compose_ip_assets(unique_ips)
-    tls_certificates = _emit_tls_certificates(endpoints)
 
     return AttackGraph(
         programme=programme,
@@ -190,6 +172,9 @@ def run_recon(programme: Programme) -> AttackGraph:
         passive_findings=passive_findings,
         network_hops=network_hops,
         ip_assets=ip_assets,
-        tls_certificates=tls_certificates,
+        # Cert aggregate for the sweep; per-host materialisation happens at
+        # finalise (the bound handoff point), not here - run_recon stays
+        # side-effect-free.
+        tls_certificates=[ep.tls_certificate for ep in endpoints if ep.tls_certificate],
         notes=f"Seeded from {seed_domains}. {len(in_scope_hosts)} in-scope hosts.",
     )
