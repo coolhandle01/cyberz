@@ -20,9 +20,10 @@ boundary, not the IP one - see the per-tool notes below.
 
 from pydantic import BaseModel, Field
 
-from models import IPAddress, IpAsset
+from models import IPAddress, IpAsset, RdapRecord
 from squad import cyber_tool
 from tools.recon.ip_asset import compose_ip_assets
+from tools.recon.rdap import lookup_rdap_for_asn
 
 
 class _LookupIpAssetsArgs(BaseModel):
@@ -64,7 +65,46 @@ def lookup_ip_assets_tool(ips: list[IPAddress]) -> list[IpAsset]:
     return compose_ip_assets(ips)
 
 
+class _LookupRdapAsnArgs(BaseModel):
+    """Explicit args_schema for the Lookup RDAP for ASN tool."""
+
+    asn: int = Field(
+        ge=0,
+        le=4_294_967_295,  # 32-bit ASN range per RFC 6793
+        description=(
+            "Autonomous System Number to look up, as a bare integer (e.g."
+            " 13335 for Cloudflare) - no ``AS`` prefix; a non-numeric"
+            " string rejects upstream. Read it off an ``IpAsset.asn``"
+            " record surfaced by Lookup IP Assets. Out-of-range values"
+            " (negative, or above the 32-bit ceiling) reject at the"
+            " boundary."
+        ),
+    )
+
+
+@cyber_tool("Lookup RDAP for ASN", args_schema=_LookupRdapAsnArgs)
+def lookup_rdap_asn_tool(asn: int) -> RdapRecord | None:
+    """
+    Look up the RDAP (RFC 7483) registration record for one ASN: the
+    AS-owner organisation, abuse / registrant contacts, and registration
+    events. This is the ASN-side pivot - IP-side RDAP already rides in on
+    ``Lookup IP Assets`` (``IpAsset.rdap``), so reach for this when the
+    question is about the AS itself: who to disclose to, or building a
+    pattern-of-life view of an org's address space.
+
+    Fires one RDAP HTTP fetch against the authoritative RIR (resolved via
+    the IANA bootstrap registry). Returns an ``RdapRecord`` ({query,
+    handle, rir, registrant_organisation, abuse_email, registered_at,
+    last_changed_at, source_url, contacts}), or ``None`` when the
+    bootstrap has no entry for the ASN or the RIR lookup fails - the OA
+    keeps moving rather than blocking on a miss.
+    """
+    return lookup_rdap_for_asn(asn)
+
+
 __all__ = [
     "_LookupIpAssetsArgs",
+    "_LookupRdapAsnArgs",
     "lookup_ip_assets_tool",
+    "lookup_rdap_asn_tool",
 ]
