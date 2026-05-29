@@ -225,4 +225,10 @@ class AttackGraph(BaseModel):
     # Per-host curation the OSINT Analyst authors via Annotate Host. Empty on
     # the OA's internal attack_graph.json; populated on the final recon.json.
     host_insights: list[HostInsight] = Field(default_factory=list)
+    # IP-rooted enrichment: one IpAsset per unique IP observed across the
+    # in-scope hosts' A records. Composes Cymru ASN data, RDAP registrant
+    # data, and dnsx PTR hostnames into the cybersquad equivalent of an
+    # amass IPAddress asset + its hanging SimpleProperty values. Empty when
+    # the resolve / enrichment pass did not run.
+    ip_assets: list[IpAsset] = Field(default_factory=list)
     completed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

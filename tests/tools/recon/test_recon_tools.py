@@ -574,10 +574,14 @@ class TestRunRecon:
         # verifies the AttackGraph it builds carries the expected
         # composition (subdomains the scope guard accepted, endpoints
         # probed, ports scanned, tech collated, traceroute hops keyed
-        # by host).
+        # by host, IP enrichment composed from resolve_records).
+        from models import IpAsset
         from tools.recon import run_recon
+        from tools.recon.dnsx import DNSRecord
 
         ep = Endpoint(url=f"https://api.{target_apex}/", status_code=200, technologies=["nginx"])
+        dns_record = DNSRecord(hostname=f"api.{target_apex}", a_records=["8.8.8.8"], cname=[])
+        ip_asset = IpAsset(ip="8.8.8.8")
         with (
             patch(
                 "tools.recon.enumerate_subdomains",
@@ -589,6 +593,8 @@ class TestRunRecon:
             patch("tools.recon.check_tls", return_value=[]),
             patch("tools.recon.check_dns_email_security", return_value=[]),
             patch("tools.recon.run_traceroute", return_value={}),
+            patch("tools.recon.resolve_records", return_value=[dns_record]) as mock_resolve,
+            patch("tools.recon.compose_ip_assets", return_value=[ip_asset]) as mock_compose,
         ):
             attack_graph = run_recon(programme)
 
@@ -597,3 +603,9 @@ class TestRunRecon:
         assert attack_graph.endpoints == [ep]
         assert attack_graph.open_ports == {f"api.{target_apex}": [443]}
         assert "nginx" in attack_graph.technologies
+
+        # IP enrichment: A records from resolve_records feed
+        # compose_ip_assets, the result lands on AttackGraph.ip_assets.
+        mock_resolve.assert_called_once_with([f"api.{target_apex}"])
+        mock_compose.assert_called_once_with(["8.8.8.8"])
+        assert attack_graph.ip_assets == [ip_asset]

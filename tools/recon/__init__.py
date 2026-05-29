@@ -13,8 +13,9 @@ from models import AttackGraph, Endpoint
 from models.h1 import Programme, ScopeType
 from tools.recon.cert_transparency import cert_transparency
 from tools.recon.dirfuzz import discover_paths
-from tools.recon.dnsx import TakeoverCandidate, detect_takeover_candidates
+from tools.recon.dnsx import TakeoverCandidate, detect_takeover_candidates, resolve_records
 from tools.recon.httpx import probe_endpoints
+from tools.recon.ip_asset import compose_ip_assets
 from tools.recon.llm import detect_llm_endpoints
 from tools.recon.nmap import port_scan
 from tools.recon.scope import filter_in_scope, host_of
@@ -80,6 +81,7 @@ __all__ = [
     "cert_transparency",
     "check_dns_email_security",
     "check_tls",
+    "compose_ip_assets",
     "detect_llm_endpoints",
     "detect_takeover_candidates",
     "discover_paths",
@@ -89,6 +91,7 @@ __all__ = [
     "host_of",
     "port_scan",
     "probe_endpoints",
+    "resolve_records",
     "run_recon",
     "run_traceroute",
 ]
@@ -137,6 +140,13 @@ def run_recon(programme: Programme) -> AttackGraph:
 
     network_hops = run_traceroute(in_scope_hosts[:20])
 
+    # IP-rooted enrichment: resolve A records once for the in-scope hosts,
+    # unique-ify the IPs, compose one IpAsset per IP via Cymru + RDAP +
+    # dnsx PTR. One IpAsset = one amass IPAddress asset's worth of input.
+    dns_records = resolve_records(in_scope_hosts)
+    unique_ips = list(dict.fromkeys(ip for record in dns_records for ip in record.a_records))
+    ip_assets = compose_ip_assets(unique_ips)
+
     return AttackGraph(
         programme=programme,
         subdomains=in_scope_hosts,
@@ -145,5 +155,6 @@ def run_recon(programme: Programme) -> AttackGraph:
         technologies=list(dict.fromkeys(all_tech)),
         passive_findings=passive_findings,
         network_hops=network_hops,
+        ip_assets=ip_assets,
         notes=f"Seeded from {seed_domains}. {len(in_scope_hosts)} in-scope hosts.",
     )
