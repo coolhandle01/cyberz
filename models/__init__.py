@@ -12,7 +12,7 @@ across every consumer.
 | ``models.finding`` | ``RawFinding``, ``VerifiedVulnerability``, ``RawFindingSummary`` |
 | ``models.asset`` | ``Endpoint``, ``EndpointPage``, ``HostRole``, ``HostPriority``, |
 |                  | ``HostInsight``, ``IpAsset``, ``OpenPortsMap``, ``Service``, |
-|                  | ``LlmEndpoint``, ``AttackGraph`` |
+|                  | ``TLSCertificate``, ``LlmEndpoint``, ``AttackGraph`` |
 | ``models.workspace`` | ``RunFile``, ``RunFileContent`` |
 | ``models.cve`` | ``CveEntry`` |
 | ``models.cwe`` | ``CWEEntry`` |
@@ -51,6 +51,7 @@ from models.asset import (
     LlmEndpoint,
     OpenPortsMap,
     Service,
+    TLSCertificate,
 )
 from models.attack import (
     AttackForest,
@@ -137,6 +138,7 @@ __all__ = [
     "Service",
     "Severity",
     "SeverityDecision",
+    "TLSCertificate",
     "TakeoverCandidate",
     "Technology",
     "TechnologyCategory",
