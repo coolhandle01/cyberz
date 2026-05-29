@@ -35,7 +35,7 @@ import re
 from pathlib import Path
 
 import runtime
-from models import AttackGraph, HostInsight, HostPriority
+from models import AttackGraph, HostInsight, HostPriority, TLSCertificate
 from models.h1 import Programme
 
 # The insight shapes (HostAnnotation, InsightValidationIssue,
@@ -258,6 +258,38 @@ def load_insights() -> list[HostInsight]:
     )
 
 
+def tls_path(hostname: FQDN) -> Path:
+    """Return the on-disk path of the TLS cert for ``hostname``.
+
+    The cert lives at ``<host_dir>/tls.json`` - the per-host sibling of
+    ``insight.json``, the leaf certificate hanging off the host's
+    per-FQDN directory the way ``host_dir`` reserves room for.
+    """
+    return host_dir(hostname) / "tls.json"
+
+
+def save_tls_certificate(certificate: TLSCertificate) -> Path:
+    """Persist a cert to ``<run_dir>/hosts/<host>/tls.json``."""
+    path = tls_path(certificate.host)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(certificate.model_dump_json(indent=2), encoding="utf-8")
+    return path
+
+
+def load_tls_certificates() -> list[TLSCertificate]:
+    """Load every per-host TLS cert in the current run, ordered by host."""
+    dir_ = _hosts_dir()
+    if not dir_.is_dir():
+        return []
+    return sorted(
+        (
+            TLSCertificate.model_validate_json(p.read_text(encoding="utf-8"))
+            for p in dir_.glob("*/tls.json")
+        ),
+        key=lambda c: c.host,
+    )
+
+
 def load_attack_graph(attack_graph_filename: str = _ATTACK_GRAPH_FILENAME) -> AttackGraph:
     """Load the OA's internal sweep artefact."""
     path = runtime.run_dir() / attack_graph_filename
@@ -385,7 +417,10 @@ __all__ = [
     "insight_path",
     "load_attack_graph",
     "load_insights",
+    "load_tls_certificates",
     "save_insight",
+    "save_tls_certificate",
+    "tls_path",
     "uncovered_interesting_hosts",
     "validate_insight",
 ]

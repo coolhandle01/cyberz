@@ -337,6 +337,74 @@ class TestHttpxScanWebInventoryMode:
         assert result.endpoints[0].status_code == 200
         assert result.endpoints[0].tls_sans == []
 
+    def test_captures_tls_certificate(self, target_url, target_apex):
+        # The tls block becomes a full TLSCertificate asset on the endpoint:
+        # issuer / validity / fingerprint / SANs, not just the SAN side-channel.
+        mock_result = MagicMock(
+            stdout=_ndjson_line(
+                url=target_url,
+                status_code=200,
+                tech=["nginx:1.18.0"],
+                tls={
+                    "subject_cn": target_apex,
+                    "issuer_cn": "Let's Encrypt",
+                    "not_after": "2026-09-01T00:00:00Z",
+                    "fingerprint_hash": {"sha256": "ab" * 32},
+                    "subject_alt_names": [target_apex, f"api.{target_apex}"],
+                },
+            ),
+            returncode=0,
+            stderr="",
+        )
+        with (
+            patch("tools.recon.httpx.scanner._require_binary", return_value="/usr/bin/httpx"),
+            patch("tools.recon.httpx.scanner._run", return_value=mock_result),
+        ):
+            result = httpx_scan([target_url], mode=HttpxMode.WEB_INVENTORY)
+        cert = result.endpoints[0].tls_certificate
+        assert cert is not None
+        assert cert.issuer == "Let's Encrypt"
+        assert cert.fingerprint_sha256 == "ab" * 32
+        assert cert.not_after is not None
+        assert cert.subject_alt_names == [target_apex, f"api.{target_apex}"]
+
+    def test_no_tls_block_yields_no_certificate(self, target_url):
+        mock_result = MagicMock(
+            stdout=_ndjson_line(url=target_url, status_code=200, tech=[]),
+            returncode=0,
+            stderr="",
+        )
+        with (
+            patch("tools.recon.httpx.scanner._require_binary", return_value="/usr/bin/httpx"),
+            patch("tools.recon.httpx.scanner._run", return_value=mock_result),
+        ):
+            result = httpx_scan([target_url], mode=HttpxMode.WEB_INVENTORY)
+        assert result.endpoints[0].tls_certificate is None
+
+    def test_cert_keeps_wildcard_san_that_tls_sans_drops(self, target_url, target_apex):
+        # A wildcard SAN trips the FQDN-typed tls_sans (whole batch degraded
+        # to []), but the cert's list[str] SANs capture it faithfully - the
+        # exact reason TLSCertificate.subject_alt_names is not list[FQDN].
+        mock_result = MagicMock(
+            stdout=_ndjson_line(
+                url=target_url,
+                status_code=200,
+                tech=["nginx"],
+                tls={"subject_alt_names": [f"*.{target_apex}", target_apex]},
+            ),
+            returncode=0,
+            stderr="",
+        )
+        with (
+            patch("tools.recon.httpx.scanner._require_binary", return_value="/usr/bin/httpx"),
+            patch("tools.recon.httpx.scanner._run", return_value=mock_result),
+        ):
+            result = httpx_scan([target_url], mode=HttpxMode.WEB_INVENTORY)
+        ep = result.endpoints[0]
+        assert ep.tls_sans == []
+        assert ep.tls_certificate is not None
+        assert f"*.{target_apex}" in ep.tls_certificate.subject_alt_names
+
 
 class TestHttpxScanEvidence:
     def test_no_evidence_dir_when_toggles_off(self, target_url):

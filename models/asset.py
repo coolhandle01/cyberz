@@ -76,6 +76,13 @@ class Endpoint(BaseModel):
     # OA's curation pass can promote to net-new in-scope hosts when
     # the SAN matches the programme's apex.
     tls_sans: list[FQDN] = Field(default_factory=list)
+    # The leaf cert observed on this endpoint, as the OAM ``TLSCertificate``
+    # asset shape (issuer / validity / fingerprint / full SAN list). Where
+    # ``tls_sans`` is the FQDN-typed discovery side-channel (wildcards
+    # dropped), this carries the cert faithfully. ``None`` outside
+    # ``WEB_INVENTORY`` / when no cert was grabbed. ``run_recon`` lifts
+    # these off the endpoints into ``AttackGraph.tls_certificates``.
+    tls_certificate: TLSCertificate | None = None
 
 
 class EndpointPage(BaseModel):
@@ -346,4 +353,11 @@ class AttackGraph(BaseModel):
     # amass IPAddress asset + its hanging SimpleProperty values. Empty when
     # the resolve / enrichment pass did not run.
     ip_assets: list[IpAsset] = Field(default_factory=list)
+    # Leaf TLS certificates observed during the httpx WEB_INVENTORY pass,
+    # lifted off the endpoints by ``run_recon`` - one per HTTPS endpoint
+    # that presented a cert. The cybersquad equivalent of amass's
+    # TLSCertificate asset nodes; the per-host copy lives at
+    # ``hosts/<fqdn>/tls.json``. Populated OA-side, read by the PT/VR
+    # (additive: empty when the WEB_INVENTORY pass did not run).
+    tls_certificates: list[TLSCertificate] = Field(default_factory=list)
     completed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

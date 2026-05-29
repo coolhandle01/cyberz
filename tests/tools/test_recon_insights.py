@@ -13,13 +13,17 @@ from models import (
     HostInsight,
     HostPriority,
     HostRole,
+    TLSCertificate,
 )
 from tools.recon_insights import (
     ReconFinalisationError,
     finalise_recon,
     insight_path,
     load_insights,
+    load_tls_certificates,
     save_insight,
+    save_tls_certificate,
+    tls_path,
     uncovered_interesting_hosts,
     validate_insight,
 )
@@ -212,6 +216,28 @@ class TestPersistence:
         # runtime.run_dir() raises first.
         with pytest.raises(ValueError, match="empty after sanitisation"):
             insight_path("///")
+
+
+class TestTlsCertificatePersistence:
+    def test_save_writes_per_host_file(self, run_dir, target_apex):
+        cert = TLSCertificate(host=f"api.{target_apex}", issuer="Let's Encrypt")
+        path = save_tls_certificate(cert)
+        assert path == run_dir / "hosts" / f"api.{target_apex}" / "tls.json"
+        restored = TLSCertificate.model_validate_json(path.read_text(encoding="utf-8"))
+        assert restored.issuer == "Let's Encrypt"
+
+    def test_tls_json_is_sibling_of_insight(self, run_dir, target_apex):
+        # The cert hangs off the same per-FQDN directory as insight.json.
+        assert tls_path(f"api.{target_apex}").parent == insight_path(f"api.{target_apex}").parent
+
+    def test_load_orders_by_host(self, run_dir, target_apex):
+        save_tls_certificate(TLSCertificate(host=f"zebra.{target_apex}"))
+        save_tls_certificate(TLSCertificate(host=f"aardvark.{target_apex}"))
+        loaded = load_tls_certificates()
+        assert [c.host for c in loaded] == [f"aardvark.{target_apex}", f"zebra.{target_apex}"]
+
+    def test_load_empty_when_no_dir(self, run_dir):
+        assert load_tls_certificates() == []
 
 
 # Coverage helper
