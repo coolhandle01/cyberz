@@ -81,6 +81,14 @@ class TechnologyCategory(StrEnum):
     service_discovery = "service-discovery"
     hosting_panel = "hosting-panel"
 
+    # AI / LLM-backed services - the detection slot for the
+    # ``LlmEndpoint`` -> ``DiscoveredMCP`` lineage (see ``models/asset.py``).
+    # Wappalyzer added an LLM category as model-backed services
+    # proliferated; the slug mirrors it. No ``_CATALOGUE`` entries map to
+    # this yet (tools/recon/technology.py) - the category exists ahead of
+    # the coercer rows / MCP-detection probe that will populate it.
+    llm = "llm"
+
 
 class Technology(BaseModel):
     """One detected technology on an asset.
