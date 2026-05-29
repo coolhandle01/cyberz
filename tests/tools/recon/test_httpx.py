@@ -61,6 +61,33 @@ class TestAssembleFlags:
             flags = _assemble_flags(mode)
             assert "-timeout" in flags
 
+    def test_rate_retries_threads_from_scan_config(self, monkeypatch):
+        """httpx picks ``-rate-limit`` / ``-retries`` / ``-threads`` off
+        ``config.scan`` so the operator's stealth dial flows through.
+
+        Patches the singleton via the same import alias ``flags.py``
+        binds. ``TestAdaptiveSleep`` reloads ``config``, leaving older
+        modules referencing the pre-reload singleton; targeting the
+        consumer's alias makes the patch robust to that.
+        """
+        from tools.recon.httpx import flags as httpx_flags
+
+        monkeypatch.setattr(httpx_flags.config.scan, "httpx_rate_limit", 13)
+        monkeypatch.setattr(httpx_flags.config.scan, "httpx_retries", 4)
+        monkeypatch.setattr(httpx_flags.config.scan, "httpx_threads", 7)
+        flags = _assemble_flags(HttpxMode.LIVE)
+        assert flags[flags.index("-rate-limit") + 1] == "13"
+        assert flags[flags.index("-retries") + 1] == "4"
+        assert flags[flags.index("-threads") + 1] == "7"
+
+    def test_rate_retries_threads_present_in_every_mode(self):
+        """The caps apply to every mode, not just LIVE."""
+        for mode in HttpxMode:
+            flags = _assemble_flags(mode)
+            assert "-rate-limit" in flags, f"{mode.value} missing -rate-limit"
+            assert "-retries" in flags, f"{mode.value} missing -retries"
+            assert "-threads" in flags, f"{mode.value} missing -threads"
+
     def test_no_overlapping_recon_flags(self):
         # Skipping -asn (defers to asn.py / Cymru) and -cname (defers
         # to dnsx). Pin the omission so a future "let's just throw all

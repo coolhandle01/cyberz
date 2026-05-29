@@ -60,11 +60,20 @@ def _assemble_flags(
     flags are silently omitted - the scan still produces structured
     signal, just no files-on-disk.
     """
+    # Rate / retry / thread caps live on ``config.scan`` and pick their
+    # values from the operator's scan-mode dial in ``ScanConfig.__post_init__``.
+    # Stealth scales them down, raid scales them up; one source of truth.
     flags: list[str] = [
         "-silent",
         "-json",
         "-timeout",
         str(config.recon.http_timeout),
+        "-rate-limit",
+        str(config.scan.httpx_rate_limit),
+        "-retries",
+        str(config.scan.httpx_retries),
+        "-threads",
+        str(config.scan.httpx_threads),
         *_MODE_FLAGS[mode],
     ]
     if (with_screenshots or with_responses) and evidence_dir is not None:

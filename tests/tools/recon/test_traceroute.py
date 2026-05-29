@@ -98,6 +98,23 @@ class TestRunTraceroute:
                 result = run_traceroute(["example.com"])
         assert result == {"example.com": []}
 
+    def test_skips_when_traceroute_disabled(self, monkeypatch):
+        """STEALTH posture flips ``config.scan.traceroute_enabled`` False.
+
+        Gate fires before binary detection - no shutil.which / subprocess
+        call ever lands. The OA's loudest tool (ICMP from the operator IP)
+        respects the stealth dial.
+        """
+        import tools.recon.traceroute as trace_mod
+
+        monkeypatch.setattr(trace_mod.config.scan, "traceroute_enabled", False)
+        with patch("shutil.which") as which:
+            with patch("tools.recon.traceroute._run") as run:
+                result = run_traceroute(["example.com"])
+        assert result == {}
+        which.assert_not_called()
+        run.assert_not_called()
+
     def test_uses_traceroute_when_tracepath_absent(self):
         calls = []
 

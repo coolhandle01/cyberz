@@ -230,6 +230,36 @@ class TestDetectTakeoverCandidates:
             assert detect_takeover_candidates([]) == []
 
 
+class TestResolveRecordsScanModeFlags:
+    """The -rate-limit / -t caps flow through from config.scan.
+
+    Patches the singleton via dnsx.py's import alias so the test stays
+    robust to ``TestAdaptiveSleep``'s ``reload_module(config)``.
+    """
+
+    def test_passes_rate_limit_and_threads_from_config(self, monkeypatch):
+        import tools.recon.dnsx as dnsx_mod
+
+        monkeypatch.setattr(dnsx_mod.config.scan, "dnsx_rate_limit", 42)
+        monkeypatch.setattr(dnsx_mod.config.scan, "dnsx_threads", 9)
+        captured: list[list[str]] = []
+
+        def fake_run(cmd, timeout: int = 60, input: str | None = None) -> CompletedProcess:
+            captured.append(cmd)
+            return CompletedProcess(cmd, 0, "", "")
+
+        with (
+            patch("shutil.which", return_value="/usr/bin/dnsx"),
+            patch("tools.recon.dnsx._run", side_effect=fake_run),
+        ):
+            resolve_records(["api.example.com"])
+
+        assert captured, "expected dnsx to be invoked"
+        argv = captured[0]
+        assert argv[argv.index("-rate-limit") + 1] == "42"
+        assert argv[argv.index("-t") + 1] == "9"
+
+
 class TestResolvePtr:
     def test_empty_input_returns_empty(self):
         with patch("shutil.which", return_value=None):
@@ -333,3 +363,26 @@ class TestResolvePtr:
             patch("tools.recon.dnsx._run", return_value=_completed(out)),
         ):
             assert resolve_ptr(["8.8.8.8"]) == []
+
+    def test_passes_rate_limit_and_threads_from_config(self, monkeypatch):
+        """PTR lookup picks the same dnsx caps off ``config.scan``."""
+        import tools.recon.dnsx as dnsx_mod
+
+        monkeypatch.setattr(dnsx_mod.config.scan, "dnsx_rate_limit", 11)
+        monkeypatch.setattr(dnsx_mod.config.scan, "dnsx_threads", 3)
+        captured: list[list[str]] = []
+
+        def fake_run(cmd, timeout: int = 60, input: str | None = None) -> CompletedProcess:
+            captured.append(cmd)
+            return CompletedProcess(cmd, 0, "", "")
+
+        with (
+            patch("shutil.which", return_value="/usr/bin/dnsx"),
+            patch("tools.recon.dnsx._run", side_effect=fake_run),
+        ):
+            resolve_ptr(["8.8.8.8"])
+
+        assert captured, "expected dnsx PTR to be invoked"
+        argv = captured[0]
+        assert argv[argv.index("-rate-limit") + 1] == "11"
+        assert argv[argv.index("-t") + 1] == "3"

@@ -20,6 +20,7 @@ from pydantic import BaseModel
 # in-models rule. Re-exported here so existing ``from tools.recon.dnsx
 # import TakeoverCandidate`` consumers keep working; the canonical
 # import path is ``from models import TakeoverCandidate``.
+from config import config
 from models.dns import PtrRecord, TakeoverCandidate
 from models.primitives import IPAddress
 from tools._helpers import _require_binary, _run
@@ -122,7 +123,17 @@ def resolve_records(hostnames: list[str]) -> list[DNSRecord]:
         return []
 
     result = _run(
-        [dnsx, "-a", "-cname", "-json", "-silent"],
+        [
+            dnsx,
+            "-a",
+            "-cname",
+            "-json",
+            "-silent",
+            "-rate-limit",
+            str(config.scan.dnsx_rate_limit),
+            "-t",
+            str(config.scan.dnsx_threads),
+        ],
         timeout=180,
         input=input_data,
     )
@@ -214,7 +225,17 @@ def resolve_ptr(ips: list[IPAddress]) -> list[PtrRecord]:
 
     try:
         result = _run(
-            [dnsx, "-ptr", "-resp", "-json", "-silent"],
+            [
+                dnsx,
+                "-ptr",
+                "-resp",
+                "-json",
+                "-silent",
+                "-rate-limit",
+                str(config.scan.dnsx_rate_limit),
+                "-t",
+                str(config.scan.dnsx_threads),
+            ],
             timeout=180,
             input=input_data,
         )
