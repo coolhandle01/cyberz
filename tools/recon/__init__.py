@@ -121,6 +121,22 @@ def run_recon(programme: Programme) -> AttackGraph:
 
     in_scope_hosts = filter_in_scope(all_subdomains, programme)
     endpoints = probe_endpoints(in_scope_hosts)
+
+    # Promote TLS SANs observed during probing to in-scope subdomains.
+    # Multi-SAN certs leak every hostname the server is authoritative for;
+    # the scope guard filters those that match the programme. Dormant
+    # today because ``probe_endpoints`` is the TECH_DETECT shim (no
+    # -tls-grab); activates the moment any caller flips run_recon to
+    # HttpxMode.WEB_INVENTORY or an OA-side tool pipes WEB_INVENTORY
+    # endpoints through this helper. Code lives upstream of the dormancy
+    # so SANs join in_scope_hosts atomically with the probe that surfaced
+    # them - downstream IP enrichment, traceroute, and DNS checks all see
+    # the promoted hosts in one pass.
+    san_candidates = list({san for ep in endpoints for san in ep.tls_sans})
+    if san_candidates:
+        promoted = filter_in_scope(san_candidates, programme)
+        in_scope_hosts = list(dict.fromkeys(in_scope_hosts + promoted))
+
     live_hosts = [ep.url for ep in endpoints if ep.status_code and ep.status_code < 500]
     open_ports = port_scan(live_hosts[:20])
 

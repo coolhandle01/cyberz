@@ -609,3 +609,64 @@ class TestRunRecon:
         mock_resolve.assert_called_once_with([f"api.{target_apex}"])
         mock_compose.assert_called_once_with(["8.8.8.8"])
         assert attack_graph.ip_assets == [ip_asset]
+
+    def test_promotes_in_scope_tls_sans_to_subdomains(self, programme, target_apex):
+        # When httpx runs in WEB_INVENTORY mode, Endpoint.tls_sans carries
+        # the SAN-leaked hostnames. run_recon promotes the ones the scope
+        # guard accepts onto subdomains so downstream enrichment sees them
+        # in the same pass.
+        from tools.recon import run_recon
+
+        ep = Endpoint(
+            url=f"https://api.{target_apex}/",
+            status_code=200,
+            tls_sans=[
+                f"admin.{target_apex}",  # in-scope, should promote
+                "bystander.example.org",  # out-of-scope, should filter
+            ],
+        )
+        with (
+            patch(
+                "tools.recon.enumerate_subdomains",
+                return_value=[f"api.{target_apex}"],
+            ),
+            patch("tools.recon.probe_endpoints", return_value=[ep]),
+            patch("tools.recon.port_scan", return_value={}),
+            patch("tools.recon.discover_paths", return_value=[]),
+            patch("tools.recon.check_tls", return_value=[]),
+            patch("tools.recon.check_dns_email_security", return_value=[]),
+            patch("tools.recon.run_traceroute", return_value={}),
+            patch("tools.recon.resolve_records", return_value=[]),
+            patch("tools.recon.compose_ip_assets", return_value=[]),
+        ):
+            attack_graph = run_recon(programme)
+
+        # In-scope SAN promoted; out-of-scope SAN filtered.
+        assert f"api.{target_apex}" in attack_graph.subdomains
+        assert f"admin.{target_apex}" in attack_graph.subdomains
+        assert "bystander.example.org" not in attack_graph.subdomains
+
+    def test_no_san_promotion_when_endpoints_carry_no_sans(self, programme, target_apex):
+        # TECH_DETECT-mode endpoints have empty tls_sans (no -tls-grab) -
+        # the promotion path is a no-op and subdomains stays as the
+        # enumerate_subdomains output filtered through the scope guard.
+        from tools.recon import run_recon
+
+        ep = Endpoint(url=f"https://api.{target_apex}/", status_code=200)
+        with (
+            patch(
+                "tools.recon.enumerate_subdomains",
+                return_value=[f"api.{target_apex}"],
+            ),
+            patch("tools.recon.probe_endpoints", return_value=[ep]),
+            patch("tools.recon.port_scan", return_value={}),
+            patch("tools.recon.discover_paths", return_value=[]),
+            patch("tools.recon.check_tls", return_value=[]),
+            patch("tools.recon.check_dns_email_security", return_value=[]),
+            patch("tools.recon.run_traceroute", return_value={}),
+            patch("tools.recon.resolve_records", return_value=[]),
+            patch("tools.recon.compose_ip_assets", return_value=[]),
+        ):
+            attack_graph = run_recon(programme)
+
+        assert attack_graph.subdomains == [f"api.{target_apex}"]
