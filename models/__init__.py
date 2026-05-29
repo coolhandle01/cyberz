@@ -20,7 +20,7 @@ across every consumer.
 | ``models.insight`` | ``HostAnnotation``, ``InsightValidationIssue``, |
 |                    | ``InsightValidationReport``, ``ReconFinalisationError`` |
 | ``models.metrics`` | ``RunMetrics`` |
-| ``models.network`` | ``AsnRecord`` |
+| ``models.network`` | ``AsnRecord``, ``RdapRecord`` |
 | ``models.scanner`` | ``NmapMode``, ``NmapBanner``, ``NmapScripts``, ``NmapService``, |
 |                    | ``NmapHostResult``, ``NmapScanResult``, ``HttpxMode`` |
 | ``models.h1`` | HackerOne shapes incl. ``ProgrammeReportSummary`` |
@@ -68,7 +68,7 @@ from models.insight import (
     ReconFinalisationError,
 )
 from models.metrics import RunMetrics
-from models.network import AsnRecord
+from models.network import AsnRecord, RdapRecord
 from models.owasp import OWASPEntry
 from models.primitives import FQDN, HttpUrl, IPAddress, Severity
 from models.report import AuthoredDraft
@@ -121,6 +121,7 @@ __all__ = [
     "ProgrammeReportSummary",
     "RawFinding",
     "RawFindingSummary",
+    "RdapRecord",
     "ReconFinalisationError",
     "RunFile",
     "RunFileContent",
