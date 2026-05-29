@@ -1,11 +1,68 @@
 # Academic grounding
 
-Some of cybersquad's structural decisions cite specific academic work at the
-assertion site - a docstring, a comment, a model name. This file is the
-longer-form "why these papers, what's actually in them, how do they map to
-the pipeline" companion. The three papers below ground the
-`AttackGraph` / `AttackTree` / `AttackForest` shape in `models/attack.py`
-and `models/asset.py`.
+Some of cybersquad's structural decisions cite a specific upstream work
+at the assertion site - a docstring, a comment, a model name. This file
+is the longer-form companion: what each one is, what is actually in it,
+how it maps to the pipeline.
+
+Covers the OWASP Open Asset Model (the graph shape cybersquad emits
+into, when amass lands per #45) and the academic papers that ground
+the `AttackGraph` / `AttackTree` / `AttackForest` naming in
+`models/attack.py` and `models/asset.py`.
+
+cybersquad's design favours open-source, community-maintained tooling
+and standardised vocabularies (notably OWASP Amass, the OWASP Top 10,
+and the OWASP Cheat Sheet Series) over reimplementations of the
+academic work cited below. The papers are cited for the intellectual
+grounding they provide, not as implementation references.
+
+## OWASP Open Asset Model (the graph cybersquad emits into)
+
+OWASP Amass's Open Asset Model (OAM):
+<https://github.com/owasp-amass/open-asset-model>
+
+OAM is a typed graph model of attack-surface assets. Three things
+matter for cybersquad's design:
+
+- **Assets are typed nodes.** FQDN, IPAddress, AutonomousSystem,
+  Netblock, RIROrganization, TLSCertificate, ContactRecord, Service,
+  among others defined by the spec. Each asset type has its own
+  schema; not all asset types carry the same properties.
+- **Relations are typed edges.** Edges carry semantic types rather
+  than being untyped pointers - for example:
+  `FQDN -A_RECORD-> IPAddress`, `IPAddress -CONTAINED_BY-> Netblock`,
+  `Netblock -ANNOUNCED_BY-> AutonomousSystem`,
+  `AutonomousSystem -MANAGED_BY-> RIROrganization`. Queries can
+  pattern-match on edge type.
+- **Properties hang off assets** to add metadata: `DNSRecordProperty`
+  (DNS data), `SimpleProperty` (arbitrary k/v), `SourceProperty` (which
+  tool / source produced the fact), `VulnProperty` (CVE-style
+  vulnerability data). Provenance is in the model.
+
+This is what makes amass a graph database rather than a property bag.
+You can ask "which IPAddresses sit in Netblock N?" or "which FQDNs
+resolve to IPs in ASN X?" and the model has the shape to answer.
+
+### How cybersquad uses it
+
+The typed shapes in `models/asset.py` and `models/network.py` are
+designed to round-trip into OAM:
+
+- `FQDN`, `IPAddress` primitives map to OAM asset identifiers.
+- `AsnRecord` carries an AutonomousSystem asset plus its SimpleProperty
+  group (organisation name, country).
+- `RdapRecord` carries an RIROrganization asset plus its `Contact`
+  records.
+- `IpAsset` composes one IPAddress asset with its ASN, RDAP, and PTR
+  properties as a single cybersquad-native shape.
+
+When #45 lands, the OSINT Analyst writes these records into the OAM
+graph (Postgres-backed). Downstream agents query the graph for context
+per decision.
+
+A canonical link to the OWASP Amass team's design essays on OAM is
+pending; the spec repository linked above is the authoritative
+reference for the model itself.
 
 ## Schneier 1999 - attack trees
 
@@ -14,8 +71,8 @@ Bruce Schneier, *Attack Trees*, Dr. Dobb's Journal, December 1999.
 
 The original formalism. A goal at the root, AND/OR sub-goals as children,
 leaves as atomic attack steps. Probabilities or costs hang off each leaf;
-the tree as a whole answers "what is the cheapest / most likely path to
-this goal?" by rolling values up.
+the tree as a whole answers "what is the lowest-cost or most likely
+path to this goal?" by rolling values up.
 
 Two important properties:
 
@@ -59,11 +116,12 @@ handled. The output is the graph.
   Decision Process. You can compute expected utility of a scenario and
   reason about *which path to try first* under uncertainty. The paper's
   own caveat is that the full MDP is intractable at scale (state
-  explosion is the headline problem of model-checked attack graphs); in
-  practice you approximate with A\* + a domain heuristic.
-- **Minimum-cut.** What is the smallest set of edges you would need to
-  remove to break every path to the goal? The defender's "minimum patch
-  set" question. NP-hard but has decent approximation algorithms.
+  explosion is the dominant scaling limitation of model-checked attack
+  graphs); in practice one approximates with A\* and a domain heuristic.
+- **Minimum-cut.** What is the smallest set of edges that would need to
+  be removed to break every path to the goal? The defender's "minimum
+  patch set" question. NP-hard but admits tractable approximation
+  algorithms.
 
 In cybersquad this maps to the **PT's worldview**. Given the trees the VR
 produced, plan a search that maximises expected value of finding bugs -
@@ -71,30 +129,25 @@ Sheyner-style MDP reasoning, A\* + domain heuristic in practice. The
 `AttackForest` docstring in `models/attack.py` cites Sheyner specifically
 for this MDP framing.
 
-## Ou et al. 2005 - MulVAL: a logic-based network security analyzer
+## Related work: Ou et al. 2005 - MulVAL
 
-Xinming Ou, Sudhakar Govindavajhala, Andrew W. Appel, *MulVAL: A Logic-based
-Network Security Analyzer*, USENIX Security Symposium 2005.
+Xinming Ou, Sudhakar Govindavajhala, Andrew W. Appel, *MulVAL: A
+Logic-based Network Security Analyzer*, USENIX Security 2005.
 <https://www.usenix.org/legacy/event/sec05/tech/full_papers/ou/ou.pdf>
 
-The canonical reference for automated attack-graph reasoning at scale.
-Encodes vulnerability data and network topology as Datalog facts; uses
-XSB-Prolog tabled evaluation to derive multi-hop attack paths in
-polynomial time, sidestepping the state-space explosion that bounds
-Sheyner-style approaches.
-
-cybersquad does not use MulVAL and has no current plans to. Listed here
-because it is the reference any reader of this file is likely to look
-for next, and because the OAM-shaped graph cybersquad produces would be
-a plausible input to a MulVAL-style reasoner if the mission ever extends
-beyond single-target bug bounty into multi-host attack-path enumeration
-or defender-side patch prioritisation.
+The canonical multi-host attack-graph reasoner: Datalog facts plus
+XSB-Prolog tabled evaluation. cybersquad does not currently use
+MulVAL. It is listed here because it is the reference any reader of
+this material is likely to consult next, and because the OAM graph
+cybersquad emits would be a plausible input to a MulVAL-style
+reasoner should cybersquad's scope ever extend into multi-host
+attack-path enumeration.
 
 ## How they stack in cybersquad
 
 | Role | Worldview | Reference |
 |---|---|---|
-| OSINT Analyst | Describes the graph. Collects facts about hosts, services, technologies, trust. | (graph-as-facts; MulVAL input shape) |
+| OSINT Analyst | Describes the graph. Collects facts about hosts, services, technologies, trust. | OWASP Open Asset Model (amass) |
 | Vulnerability Researcher | Finds the trees. Per probe + target, decomposes a sub-goal. | Schneier 1999 |
 | Penetration Tester | Searches the forest. Expected-value path selection across trees. | Sheyner 2002 (MDP), A\* with a domain heuristic in practice |
 
