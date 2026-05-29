@@ -11,8 +11,8 @@ across every consumer.
 | ``models.primitives`` | ``Severity``, ``FQDN``, ``HttpUrl``, ``IPAddress``, ``Email`` |
 | ``models.finding`` | ``RawFinding``, ``VerifiedVulnerability``, ``RawFindingSummary`` |
 | ``models.asset`` | ``Endpoint``, ``EndpointPage``, ``HostRole``, ``HostPriority``, |
-|                  | ``HostInsight``, ``IpAsset``, ``OpenPortsMap``, ``LlmEndpoint``, |
-|                  | ``AttackGraph`` |
+|                  | ``HostInsight``, ``IpAsset``, ``OpenPortsMap``, ``Service``, |
+|                  | ``LlmEndpoint``, ``AttackGraph`` |
 | ``models.workspace`` | ``RunFile``, ``RunFileContent`` |
 | ``models.cve`` | ``CveEntry`` |
 | ``models.cwe`` | ``CWEEntry`` |
@@ -50,6 +50,7 @@ from models.asset import (
     IpAsset,
     LlmEndpoint,
     OpenPortsMap,
+    Service,
 )
 from models.attack import (
     AttackForest,
@@ -133,6 +134,7 @@ __all__ = [
     "RunFile",
     "RunFileContent",
     "RunMetrics",
+    "Service",
     "Severity",
     "SeverityDecision",
     "TakeoverCandidate",

@@ -448,6 +448,76 @@ class TestIpAsset:
             IpAsset(ip="not an ip")
 
 
+class TestService:
+    def test_minimal_record(self):
+        # host + port + protocol is the floor; the -sV banner fields and
+        # the technology rows populate only when the scan recovered them.
+        from models import Service
+
+        svc = Service(host="8.8.8.8", port=443, protocol="tcp")
+        assert svc.host == "8.8.8.8"
+        assert svc.port == 443
+        assert svc.name is None
+        assert svc.product is None
+        assert svc.technologies == []
+
+    def test_composes_typed_technologies(self, target_apex):
+        # The OA-boundary translation coerces banner detail into typed
+        # ``Technology`` rows hanging off the Service node.
+        from models import Service
+        from models.technology import Technology, TechnologyCategory
+
+        svc = Service(
+            host=f"api.{target_apex}",
+            port=443,
+            protocol="tcp",
+            name="http",
+            product="nginx",
+            version="1.25.3",
+            technologies=[
+                Technology(
+                    name="nginx",
+                    categories=[TechnologyCategory.web_server],
+                    version="1.25.3",
+                )
+            ],
+        )
+        assert svc.product == "nginx"
+        assert svc.technologies[0].name == "nginx"
+
+    def test_serialise_roundtrip(self):
+        from models import Service
+
+        original = Service(host="1.1.1.1", port=53, protocol="udp", name="domain")
+        restored = Service.model_validate_json(original.model_dump_json())
+        assert restored.host == "1.1.1.1"
+        assert restored.port == 53
+        assert restored.name == "domain"
+
+    def test_rejects_out_of_range_port(self):
+        from models import Service
+
+        with pytest.raises(ValidationError):
+            Service(host="8.8.8.8", port=70000, protocol="tcp")
+
+    def test_rejects_malformed_host(self):
+        # The FQDN | IPAddress union rejects a URL-shaped host upstream of
+        # any graph emission, the same boundary FQDN enforces elsewhere.
+        from models import Service
+
+        with pytest.raises(ValidationError):
+            Service(host="https://evil.test/x", port=443, protocol="tcp")
+
+    def test_rejects_oversize_banner(self):
+        # The max_length cap on the tool-captured banner fields is the
+        # boundary defence against an outsize injection riding a malformed
+        # service banner across the OA -> PT handoff.
+        from models import Service
+
+        with pytest.raises(ValidationError):
+            Service(host="8.8.8.8", port=443, protocol="tcp", product="x" * 129)
+
+
 class TestAttackForest:
     def test_serialise_roundtrip(self, attack_forest):
         restored = AttackForest.model_validate_json(attack_forest.model_dump_json())

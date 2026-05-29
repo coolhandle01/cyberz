@@ -180,6 +180,60 @@ class OpenPortsMap(BaseModel):
     hosts: dict[FQDN, list[int]] = Field(default_factory=dict)
 
 
+class Service(BaseModel):
+    """The cybersquad shape that maps to amass's ``Service`` asset.
+
+    One open network service on a single host:port, as the OSINT
+    Analyst's deep-scan pass (a focused nmap ``-sC -sV`` against a host's
+    known-open ports) observes it. The OAM-vernacular counterpart to the
+    scanner-internal ``NmapService`` (``models/scanner.py``): where
+    ``NmapService`` mirrors nmap's raw ``<port>`` / ``<service>`` XML,
+    ``Service`` is the asset-graph shape the OA emits for downstream
+    agents - the rich sibling of ``OpenPortsMap``, which carries bare
+    port numbers only.
+
+    When amass lands (#45), each ``Service`` becomes one amass
+    ``Service`` asset node related to its host's ``FQDN`` / ``IPAddress``
+    asset:
+
+    * ``host`` + ``port`` -> the Service asset's identity and the
+      ``port`` edge from the host asset.
+    * ``name`` / ``product`` / ``version`` / ``extra_info`` ->
+      ``SimpleProperty`` values on the Service node (the service-banner
+      detail ``-sV`` recovered).
+    * ``technologies`` -> the same ``SimpleProperty`` / ``VulnProperty``
+      group ``Technology`` already projects (see ``models/technology.py``),
+      attached to the Service rather than the host.
+
+    OAM is a *presence* graph: a ``Service`` exists in the model only
+    when the scan actually observed an open service. A host that is down,
+    or alive with nothing listening, contributes zero ``Service`` nodes -
+    absence carries "nothing here", so there is deliberately no
+    down / filtered / closed state on this shape (that lives in the
+    scanner layer's ``NmapService.state``, below the OA boundary).
+    """
+
+    host: FQDN | IPAddress
+    port: int = Field(ge=1, le=65535)
+    protocol: str = Field(max_length=8)  # "tcp" / "udp"
+
+    # Tool-captured from nmap's service-version (-sV) output, translated
+    # from the scanner layer's ``NmapService`` at the OA tool boundary.
+    # Defence: each field carries the same boundary length cap as its
+    # ``NmapService`` source so a malformed banner cannot smuggle a large
+    # injection across the OA -> PT handoff; the translation also
+    # normalises tech detail into the typed ``technologies`` rows below.
+    name: str | None = Field(default=None, max_length=64)  # nmap "service" field
+    product: str | None = Field(default=None, max_length=128)
+    version: str | None = Field(default=None, max_length=64)
+    extra_info: str | None = Field(default=None, max_length=255)
+
+    # Typed tech rows derived from the service banner via the recon-side
+    # ``coerce_technologies`` coercer - the per-service slice of what
+    # ``NmapHostResult.detected_technologies`` carries host-wide.
+    technologies: list[Technology] = Field(default_factory=list)
+
+
 class LlmEndpoint(BaseModel):
     """An endpoint flagged as LLM-backed by ``detect_llm_endpoints``.
 
