@@ -58,14 +58,18 @@ class NmapScripts(StrEnum):
     """NSE (Nmap Scripting Engine) bundle the OA opts into.
 
     Each member maps to nmap's ``--script=<expr>`` argument.
-    ``HTTP_HEADERS`` is a narrow web-recon set; ``SAFE`` is nmap's own
-    ``safe`` category (no exploitation, low noise); ``VULN`` runs the
-    ``vuln`` category which actively probes for known CVEs - loud,
-    refused under ``ScanMode.STEALTH`` by the wrapper.
+    ``HTTP_HEADERS`` is a narrow web-recon set; ``DEFAULT`` is nmap's
+    ``-sC`` (the ``default`` NSE category, run as ``--script=default``)
+    - the safe-by-design banner / service-detail bundle the focused
+    "deep scan a host's known-open ports" pass reaches for; ``SAFE`` is
+    nmap's broader ``safe`` category (no exploitation, low noise);
+    ``VULN`` runs the ``vuln`` category which actively probes for known
+    CVEs - loud, refused under ``ScanMode.STEALTH`` by the wrapper.
     """
 
     NONE = "none"
     HTTP_HEADERS = "http-headers"  # --script=banner,http-server-header,http-title
+    DEFAULT = "default"  # --script=default; nmap's -sC default-script category
     SAFE = "safe"  # --script=safe
     VULN = "vuln"  # --script=vuln
 

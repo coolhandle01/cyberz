@@ -2,9 +2,10 @@
 
 Two callable surfaces re-exported through ``tools/recon/nmap/__init__.py``:
 
-* ``nmap_scan(hosts, mode, banner, scripts, persist_evidence)`` - the
-  rich entry point. Returns ``NmapScanResult`` with per-host services,
-  derived ``Technology`` rows, and (optional) evidence-XML path.
+* ``nmap_scan(hosts, mode, banner, scripts, persist_evidence, ports)``
+  - the rich entry point. Returns ``NmapScanResult`` with per-host
+  services, derived ``Technology`` rows, and (optional) evidence-XML
+  path. ``ports`` focuses the scan on an explicit ``-p`` list.
 * ``port_scan(hosts)`` - backwards-compatible shim for the historical
   ``dict[host, list[ports]]`` shape consumed by ``run_recon`` and the
   legacy tests.
@@ -56,6 +57,7 @@ def nmap_scan(
     banner: NmapBanner = NmapBanner.NONE,
     scripts: NmapScripts = NmapScripts.NONE,
     persist_evidence: bool = True,
+    ports: list[int] | None = None,
 ) -> NmapScanResult:
     """Run nmap against ``hosts`` with typed mode / banner / scripts knobs.
 
@@ -63,6 +65,11 @@ def nmap_scan(
     config.scan.scan_mode)`` - the OA reasons in modes, the wrapper
     handles the CLI shape. Returns a typed ``NmapScanResult`` carrying
     per-host services + derived ``Technology`` rows.
+
+    ``ports`` is the optional focused-target list: when non-empty it
+    swaps the mode's ``-F`` (top-100) for an explicit ``-p <csv>`` so a
+    caller can deep-scan a host's known-open ports rather than re-sweep
+    the top-100. Empty / ``None`` keeps the mode's default breadth.
 
     When ``persist_evidence=True`` and a pipeline run is bound, the
     nmap XML output is also written to ``runtime.run_dir()`` and the
@@ -78,7 +85,7 @@ def nmap_scan(
         return NmapScanResult(mode=mode, hosts=[])
 
     nmap_bin = _require_binary("nmap")
-    flags = _assemble_flags(mode, banner, scripts, config.scan.scan_mode)
+    flags = _assemble_flags(mode, banner, scripts, config.scan.scan_mode, ports=ports)
     cmd = [nmap_bin, *flags, "-oX", "-", *hosts]
 
     try:

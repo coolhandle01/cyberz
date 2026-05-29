@@ -36,6 +36,7 @@ _BANNER_INTENSITY: dict[NmapBanner, str | None] = {
 _SCRIPTS_EXPR: dict[NmapScripts, str | None] = {
     NmapScripts.NONE: None,
     NmapScripts.HTTP_HEADERS: "banner,http-server-header,http-title",
+    NmapScripts.DEFAULT: "default",  # nmap's -sC bundle, via the uniform --script= path
     NmapScripts.SAFE: "safe",
     NmapScripts.VULN: "vuln",
 }
@@ -55,8 +56,14 @@ def _assemble_flags(
     banner: NmapBanner,
     scripts: NmapScripts,
     scan_mode: ConfigScanMode,
+    ports: list[int] | None = None,
 ) -> list[str]:
     """Compose the final nmap flag list from the four axes.
+
+    ``ports`` is the optional focused-target list: when non-empty it
+    swaps the mode's ``-F`` (top-100) for an explicit ``-p <csv>``, the
+    "deep scan a host's known-open ports" case. Empty / ``None`` keeps
+    the mode's default breadth so every existing caller is unaffected.
 
     Refuses incompatible combinations at the boundary rather than
     letting nmap surface them mid-scan:
@@ -72,6 +79,14 @@ def _assemble_flags(
         )
 
     flags = list(_MODE_FLAGS[mode])
+
+    # Focused port targeting: replace the mode's top-100 (-F) with an
+    # explicit -p list. Guard on a non-empty list so an empty list
+    # degrades to the mode default rather than emitting a bare -p.
+    if ports:
+        if "-F" in flags:
+            flags.remove("-F")
+        flags += ["-p", ",".join(str(p) for p in ports)]
 
     # Banner intensity only meaningful when -sV is in the base flag list.
     if "-sV" in flags:

@@ -126,6 +126,8 @@ class TestAssembleFlags:
             (NmapScripts.HTTP_HEADERS, "banner,http-server-header,http-title"),
             (NmapScripts.SAFE, "safe"),
             (NmapScripts.VULN, "vuln"),
+            # DEFAULT is nmap's -sC bundle, expressed as --script=default.
+            (NmapScripts.DEFAULT, "default"),
         ],
     )
     def test_scripts_argument(self, scripts, expected_expr):
@@ -201,6 +203,58 @@ class TestAssembleFlags:
             ConfigScanMode.NORMAL,
         )
         assert "-O" in flags
+
+    def test_default_scripts_maps_to_sc_bundle(self):
+        # NmapScripts.DEFAULT is nmap's -sC (default NSE category),
+        # composed through the uniform --script= path as --script=default.
+        flags = _assemble_flags(
+            NmapMode.SERVICE_VERSION,
+            NmapBanner.LIGHT,
+            NmapScripts.DEFAULT,
+            ConfigScanMode.NORMAL,
+        )
+        assert "--script=default" in flags
+
+    def test_ports_replace_top_100_with_targeted_p(self):
+        # A focused port list swaps -F (top-100) for -p <csv>: the
+        # Deep Scan Host case - re-scan a host's known-open ports only.
+        flags = _assemble_flags(
+            NmapMode.SERVICE_VERSION,
+            NmapBanner.LIGHT,
+            NmapScripts.DEFAULT,
+            ConfigScanMode.NORMAL,
+            ports=[22, 80, 443],
+        )
+        assert "-F" not in flags
+        assert "-p" in flags
+        assert flags[flags.index("-p") + 1] == "22,80,443"
+        # The mode's other flags still stand.
+        assert "-sV" in flags
+
+    def test_ports_none_keeps_top_100(self):
+        # Default (no ports) keeps the existing -F top-100 behaviour so
+        # every current caller is unaffected.
+        flags = _assemble_flags(
+            NmapMode.SERVICE_VERSION,
+            NmapBanner.LIGHT,
+            NmapScripts.NONE,
+            ConfigScanMode.NORMAL,
+        )
+        assert "-F" in flags
+        assert "-p" not in flags
+
+    def test_empty_ports_list_keeps_top_100(self):
+        # An empty list is "no targeting" - degrade to -F rather than
+        # emitting a bare -p with no spec.
+        flags = _assemble_flags(
+            NmapMode.SERVICE_VERSION,
+            NmapBanner.LIGHT,
+            NmapScripts.NONE,
+            ConfigScanMode.NORMAL,
+            ports=[],
+        )
+        assert "-F" in flags
+        assert "-p" not in flags
 
 
 class TestParseXml:
@@ -432,6 +486,27 @@ class TestNmapScan:
             result = nmap_scan(["x.example"], persist_evidence=True)
         assert result.evidence_path is None
         assert len(result.hosts) == 2  # parsing still happened
+
+    def test_ports_threaded_into_command(self):
+        # nmap_scan(ports=...) reaches the assembled argv as -p <csv>,
+        # the path Deep Scan Host rides for a focused re-scan.
+        mock_result = self._mock_subprocess_result(_XML_NO_HOSTS)
+        with (
+            patch("tools.recon.nmap.scanner._require_binary", return_value="/usr/bin/nmap"),
+            patch("tools.recon.nmap.scanner._run", return_value=mock_result) as mock_run,
+        ):
+            nmap_scan(
+                ["x.example"],
+                mode=NmapMode.SERVICE_VERSION,
+                scripts=NmapScripts.DEFAULT,
+                ports=[22, 443],
+                persist_evidence=False,
+            )
+        cmd = mock_run.call_args.args[0]
+        assert "-p" in cmd
+        assert cmd[cmd.index("-p") + 1] == "22,443"
+        assert "-F" not in cmd
+        assert "--script=default" in cmd
 
     def test_command_uses_oX_dash_for_xml_stdout(self):
         # Sanity: the assembled command pipes XML to stdout via -oX -,
