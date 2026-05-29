@@ -64,6 +64,13 @@ class AttackForest(BaseModel):
     searches the forest for the shortest viable path to each goal
     (the kill chain - a derived projection, not a stored type).
 
+    The PT's reasoning is closer to A* with a domain heuristic plus
+    MDPs over attack graphs (Sheyner et al. 2002, *Automated Generation
+    and Analysis of Attack Graphs*) than literal travelling-salesman,
+    but the salesman intuition holds: optimise a route through a
+    discovered topology, working backwards from the goal, with online
+    re-planning as probes succeed or fail.
+
     Today a flat ``trees`` list with no inter-tree relations. Two
     forward-looking expansions land here when the VR matures:
 
