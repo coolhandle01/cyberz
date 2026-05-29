@@ -77,34 +77,18 @@ Xinming Ou, Sudhakar Govindavajhala, Andrew W. Appel, *MulVAL: A Logic-based
 Network Security Analyzer*, USENIX Security Symposium 2005.
 <https://www.usenix.org/legacy/event/sec05/tech/full_papers/ou/ou.pdf>
 
-The practical evolution. MulVAL stands for **MUL**ti-host, multi-stage
-**V**ulnerability **A**nalysis. Where Sheyner's NuSMV approach blows up
-combinatorially in state size (product of all host states),
-MulVAL encodes the same problem in **Datalog**, evaluated by XSB Prolog.
-Facts: vulnerability data (OVAL / NVD), network topology (firewall +
-routing config), service configuration. Rules: "if X is vulnerable AND
-attacker can reach X AND has privilege Y on Z, then attacker gains
-privilege W on X." Run the reasoner, out pops a logical attack graph
-where nodes are facts and edges are rule applications.
+The canonical reference for automated attack-graph reasoning at scale.
+Encodes vulnerability data and network topology as Datalog facts; uses
+XSB-Prolog tabled evaluation to derive multi-hop attack paths in
+polynomial time, sidestepping the state-space explosion that bounds
+Sheyner-style approaches.
 
-**Why it scales.** The graph represents fact-derivations, not state
-transitions, so you sidestep the exploded state space. They report
-results on networks with hundreds of hosts where the Sheyner-style
-approach would be infeasible. Polynomial-time tabled evaluation in
-Datalog is the underlying machinery.
-
-**Why it is the right reference for cybersquad's vision.** MulVAL is wired
-into *real scanner output*. Nessus / OpenVAS / similar reports get parsed
-into Datalog facts. NVD CVSS scores feed exploitability and impact rules.
-That maps directly onto the cybersquad shape: the OA produces facts about
-the network, the VR's rules say "this attack achieves this privilege given
-those preconditions," the PT reasons across all of it.
-
-Open-source implementations live at variations of
-<https://github.com/risksense/mulval> (forks are common; upstream activity
-is intermittent). The academic descendants - probabilistic MulVAL,
-defense-planning extensions, real-time variants - cover most of the
-"automated attack-graph reasoning" sub-field.
+cybersquad does not use MulVAL and has no current plans to. Listed here
+because it is the reference any reader of this file is likely to look
+for next, and because the OAM-shaped graph cybersquad produces would be
+a plausible input to a MulVAL-style reasoner if the mission ever extends
+beyond single-target bug bounty into multi-host attack-path enumeration
+or defender-side patch prioritisation.
 
 ## How they stack in cybersquad
 
