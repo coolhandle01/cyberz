@@ -13,8 +13,12 @@ primitives:
 * ``HostInsight`` (from ``models``) - the agent's working artefact per host.
 * ``validate_insight(insight, sweep, programme)`` - quality gate. Returns the
   issue list. Hard errors block ``finalise_recon``.
+* ``host_dir(fqdn)`` - the per-host evidence directory under
+  ``<run_dir>/hosts/<fqdn>/``. Future recon tools (screenshots, scan
+  output, response bodies) write per-host artefacts here so each
+  directory carries one FQDN asset's worth of evidence end-to-end.
 * ``save_insight`` / ``load_insights`` - persist insights under
-  ``<run_dir>/host_insights/<hostname>.json``.
+  ``<run_dir>/hosts/<fqdn>/insight.json``.
 * ``finalise_recon(programme, attack_graph_path)`` - load the sweep, validate every
   insight, build the canonical ``AttackGraph`` for downstream agents, and
   write ``recon.json``. Refuses on hard errors or insufficient curation.
@@ -48,13 +52,14 @@ from models.insight import (
 from models.primitives import FQDN
 from tools.recon.scope import filter_in_scope
 
-_INSIGHTS_SUBDIR = "host_insights"
+_HOSTS_SUBDIR = "hosts"
 _ATTACK_GRAPH_FILENAME = "attack_graph.json"
 _RECON_FILENAME = "recon.json"
 
 # FQDNs must be made filesystem-safe before persisting under
-# ``host_insights/<hostname>.json``. The replacement is reversible because we
-# never reverse it - the JSON body carries the original hostname.
+# ``hosts/<fqdn>/``. The replacement is reversible because we never
+# reverse it - the persisted artefacts carry the original hostname in
+# their body.
 _HOSTNAME_SANITISE = re.compile(r"[^A-Za-z0-9.\-_]")
 
 
@@ -197,24 +202,42 @@ def _strip_version(tech: str) -> str:
 # Persistence
 
 
-def _insights_dir() -> Path:
-    return runtime.run_dir() / _INSIGHTS_SUBDIR
+def _hosts_dir() -> Path:
+    return runtime.run_dir() / _HOSTS_SUBDIR
+
+
+def host_dir(hostname: FQDN) -> Path:
+    """Return the per-host evidence directory under ``<run_dir>/hosts/``.
+
+    Each in-scope FQDN gets its own directory; ``insight_path`` writes
+    ``insight.json`` here, and future evidence-writing tools (httpx
+    screenshots, nmap output, response bodies) hang their per-host
+    artefacts off the same dir. The layout maps cleanly onto an amass
+    FQDN asset's worth of input: one directory = one node's evidence
+    trail.
+
+    Sanitises the hostname for filesystem use. The replacement is
+    reversible because we never reverse it - the persisted artefacts
+    inside carry the original hostname in their body.
+    """
+    safe = _HOSTNAME_SANITISE.sub("_", hostname.strip().lower())
+    if not safe or safe.strip("_") == "":
+        raise ValueError("hostname is empty after sanitisation")
+    return _hosts_dir() / safe
 
 
 def insight_path(hostname: FQDN) -> Path:
     """Return the on-disk path of the insight for ``hostname``.
 
-    FQDNs are used directly as filenames (with a small character
-    sanitisation pass). The body carries the original hostname.
+    The insight lives at ``<host_dir>/insight.json`` - one file inside
+    the host's per-FQDN directory. Sibling files (screenshots, scan
+    output, response bodies) land alongside as recon tools write them.
     """
-    safe = _HOSTNAME_SANITISE.sub("_", hostname.strip().lower())
-    if not safe or safe.strip("_") == "":
-        raise ValueError("hostname is empty after sanitisation")
-    return _insights_dir() / f"{safe}.json"
+    return host_dir(hostname) / "insight.json"
 
 
 def save_insight(insight: HostInsight) -> Path:
-    """Persist an insight to ``<run_dir>/host_insights/<host>.json``."""
+    """Persist an insight to ``<run_dir>/hosts/<host>/insight.json``."""
     path = insight_path(insight.hostname)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(insight.model_dump_json(indent=2), encoding="utf-8")
@@ -223,13 +246,13 @@ def save_insight(insight: HostInsight) -> Path:
 
 def load_insights() -> list[HostInsight]:
     """Load every insight in the current run, ordered by hostname."""
-    dir_ = _insights_dir()
+    dir_ = _hosts_dir()
     if not dir_.is_dir():
         return []
     return sorted(
         (
             HostInsight.model_validate_json(p.read_text(encoding="utf-8"))
-            for p in dir_.glob("*.json")
+            for p in dir_.glob("*/insight.json")
         ),
         key=lambda i: i.hostname,
     )
@@ -275,7 +298,7 @@ def finalise_recon(
 
     if not insights:
         raise ReconFinalisationError(
-            "no host_insights have been authored; call Annotate Host for the "
+            "no host insights have been authored; call Annotate Host for the "
             "interesting hosts in the sweep before finalising"
         )
 
@@ -358,6 +381,7 @@ __all__ = [
     "InsightValidationReport",
     "ReconFinalisationError",
     "finalise_recon",
+    "host_dir",
     "insight_path",
     "load_attack_graph",
     "load_insights",

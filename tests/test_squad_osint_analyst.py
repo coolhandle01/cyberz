@@ -86,7 +86,7 @@ class TestOsintAnalystTools:
 
         assert isinstance(result, HostAnnotation)
         assert result.validation.ok is True
-        assert (tmp_path / "host_insights" / "api.example.com.json").exists()
+        assert (tmp_path / "hosts" / "api.example.com" / "insight.json").exists()
 
     def test_annotate_host_tool_surfaces_validation_issues(
         self, programme_in_workspace, recon_result, tmp_path, target_apex
@@ -151,7 +151,7 @@ class TestOsintAnalystTools:
 
         (run_dir / "attack_graph.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
 
-        with pytest.raises(ValueError, match="no host_insights"):
+        with pytest.raises(ValueError, match="no host insights"):
             finalise_recon_tool.func()
 
     def test_probe_hostnames_tool(self, programme_in_workspace, endpoint) -> None:

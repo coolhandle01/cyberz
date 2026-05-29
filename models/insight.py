@@ -39,7 +39,7 @@ class HostAnnotation(BaseModel):
     """Return shape of the Annotate Host tool.
 
     ``path`` is the workspace-relative location of the persisted insight
-    (e.g. ``host_insights/api.example.com.json``); ``validation`` is the
+    (e.g. ``hosts/api.example.com/insight.json``); ``validation`` is the
     quality-gate report for the insight that was just authored.
     """
 

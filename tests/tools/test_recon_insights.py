@@ -166,10 +166,19 @@ class TestValidateInsight:
 class TestPersistence:
     def test_save_insight_writes_per_host_file(self, run_dir):
         path = save_insight(_good_insight())
-        assert path == run_dir / "host_insights" / "api.example.com.json"
+        assert path == run_dir / "hosts" / "api.example.com" / "insight.json"
         assert path.exists()
         loaded = HostInsight.model_validate_json(path.read_text())
         assert loaded.hostname == "api.example.com"
+
+    def test_host_dir_is_per_fqdn_directory_under_hosts(self, run_dir):
+        # host_dir is the public hook future evidence-writing tools
+        # (screenshots, scan output, response bodies) call to find the
+        # per-FQDN slot.
+        from tools.recon_insights import host_dir
+
+        d = host_dir("api.example.com")
+        assert d == run_dir / "hosts" / "api.example.com"
 
     def test_insight_path_sanitises_special_chars(self, run_dir):
         # HostInsight.hostname is now typed as FQDN so weird chars cannot
@@ -179,9 +188,11 @@ class TestPersistence:
         from tools.recon_insights import insight_path
 
         path = insight_path("weird host/name.example.com")
-        # / is sanitised to _ so the path stays inside the host_insights dir.
-        assert "/" not in path.name
-        assert path.parent.name == "host_insights"
+        # / in the FQDN is sanitised to _ so the host's directory stays
+        # inside hosts/ rather than escaping via path traversal.
+        assert "/" not in path.parent.name
+        assert path.parent.parent.name == "hosts"
+        assert path.name == "insight.json"
 
     def test_load_insights_orders_by_hostname(self, run_dir):
         save_insight(_good_insight(hostname="zebra.example.com"))
@@ -196,7 +207,7 @@ class TestPersistence:
         assert load_insights() == []
 
     def test_insight_path_rejects_empty_hostname(self, run_dir):
-        # ``insight_path`` builds <run_dir>/host_insights/<sanitised>.json, so
+        # ``insight_path`` builds <run_dir>/hosts/<sanitised>/insight.json, so
         # the sanitisation check has to run against a stub run_dir or
         # runtime.run_dir() raises first.
         with pytest.raises(ValueError, match="empty after sanitisation"):
@@ -249,7 +260,7 @@ class TestFinaliseRecon:
 
     def test_refuses_without_insights(self, sweep, programme, run_dir):
         _write_sweep(run_dir, sweep)
-        with pytest.raises(ReconFinalisationError, match="no host_insights"):
+        with pytest.raises(ReconFinalisationError, match="no host insights"):
             finalise_recon(programme)
 
     def test_refuses_when_no_high_priority(self, sweep, programme, run_dir):
