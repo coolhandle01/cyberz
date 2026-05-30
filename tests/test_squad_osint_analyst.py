@@ -17,14 +17,49 @@ pytestmark = pytest.mark.unit
 
 
 class TestOsintAnalystTools:
+    def test_recon_subdomains_tool_wraps_hostnames_as_fqdn(self) -> None:
+        # Thin wrapper: list[str] from the impl becomes list[FQDN] for the
+        # agent so the typed primitive's validator fires at the wrapper
+        # boundary, not inside the consumer.
+        from squad.osint_analyst import recon_subdomains_tool
+
+        with patch(
+            "squad.osint_analyst.discovery.recon_subdomains",
+            return_value=["api.example.com", "admin.example.com"],
+        ) as mimpl:
+            result = recon_subdomains_tool.func(
+                attack_graph_path="attack_graph.json", host_filter="api"
+            )
+
+        assert result == ["api.example.com", "admin.example.com"]
+        mimpl.assert_called_once_with("attack_graph.json", host_filter="api")
+
+    def test_recon_open_ports_tool_wraps_dict_as_open_ports_map(self) -> None:
+        # Wrapper turns the impl's ``{host: [ports]}`` into the typed
+        # ``OpenPortsMap`` the agent reads back.
+        from models import OpenPortsMap
+        from squad.osint_analyst import recon_open_ports_tool
+
+        with patch(
+            "squad.osint_analyst.discovery.recon_open_ports",
+            return_value={"api.example.com": [80, 443]},
+        ) as mimpl:
+            result = recon_open_ports_tool.func(
+                attack_graph_path="attack_graph.json", host="api.example.com"
+            )
+
+        assert isinstance(result, OpenPortsMap)
+        assert result.hosts == {"api.example.com": [80, 443]}
+        mimpl.assert_called_once_with("attack_graph.json", host="api.example.com")
+
     def test_run_initial_sweep_tool(self, programme_in_workspace, recon_result, tmp_path) -> None:
         from squad.osint_analyst import run_initial_sweep_tool
 
         with patch("squad.osint_analyst.discovery.run_recon", return_value=recon_result) as mrun:
             result = run_initial_sweep_tool.func()
 
-        assert result == "sweep.json"
-        assert (tmp_path / "sweep.json").exists()
+        assert result == "attack_graph.json"
+        assert (tmp_path / "attack_graph.json").exists()
         mrun.assert_called_once_with(programme_in_workspace)
 
     def test_annotate_host_tool_writes_insight_and_returns_validation(
@@ -32,7 +67,9 @@ class TestOsintAnalystTools:
     ) -> None:
         from squad.osint_analyst import annotate_host_tool
 
-        (tmp_path / "sweep.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
+        (tmp_path / "attack_graph.json").write_text(
+            recon_result.model_dump_json(), encoding="utf-8"
+        )
 
         result = annotate_host_tool.func(
             hostname="api.example.com",
@@ -49,14 +86,16 @@ class TestOsintAnalystTools:
 
         assert isinstance(result, HostAnnotation)
         assert result.validation.ok is True
-        assert (tmp_path / "host_insights" / "api.example.com.json").exists()
+        assert (tmp_path / "hosts" / "api.example.com" / "insight.json").exists()
 
     def test_annotate_host_tool_surfaces_validation_issues(
         self, programme_in_workspace, recon_result, tmp_path, target_apex
     ) -> None:
         from squad.osint_analyst import annotate_host_tool
 
-        (tmp_path / "sweep.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
+        (tmp_path / "attack_graph.json").write_text(
+            recon_result.model_dump_json(), encoding="utf-8"
+        )
 
         result = annotate_host_tool.func(
             hostname=f"api.{target_apex}",
@@ -76,7 +115,7 @@ class TestOsintAnalystTools:
     def test_uncovered_hosts_tool_returns_missing(self, programme, recon_result, run_dir) -> None:
         from squad.osint_analyst import uncovered_hosts_tool
 
-        (run_dir / "sweep.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
+        (run_dir / "attack_graph.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
         result = uncovered_hosts_tool.func()
 
         assert isinstance(result, list)
@@ -88,7 +127,7 @@ class TestOsintAnalystTools:
     ) -> None:
         from squad.osint_analyst import annotate_host_tool, finalise_recon_tool
 
-        (run_dir / "sweep.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
+        (run_dir / "attack_graph.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
 
         annotate_host_tool.func(
             hostname=f"api.{target_apex}",
@@ -110,9 +149,9 @@ class TestOsintAnalystTools:
     ) -> None:
         from squad.osint_analyst import finalise_recon_tool
 
-        (run_dir / "sweep.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
+        (run_dir / "attack_graph.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
 
-        with pytest.raises(ValueError, match="no host_insights"):
+        with pytest.raises(ValueError, match="no host insights"):
             finalise_recon_tool.func()
 
     def test_probe_hostnames_tool(self, programme_in_workspace, endpoint) -> None:
@@ -150,7 +189,7 @@ class TestOsintAnalystTools:
 
         Asserts on the real scope-guard path: the fixture programme's
         structured scope (``example.com`` + ``*.example.com``) does not
-        cover ``bystander.example.org``, so the ``TargetHostnames``
+        cover ``bystander.example.org``, so the ``TargetFQDNs``
         validator empties the list and ``probe_endpoints_impl`` is
         never called.
         """
@@ -194,7 +233,7 @@ class TestOsintAnalystTools:
         self, programme_in_workspace, bystander_url, invoke_tool
     ) -> None:
         """Same scope-guard contract as ``test_probe_hostnames_tool_drops_out_of_scope``,
-        on the DNS side: the ``TargetHostnames`` validator drops the
+        on the DNS side: the ``TargetFQDNs`` validator drops the
         out-of-scope hostname at args_schema time, before any DNS
         traffic fires."""
         from urllib.parse import urlparse

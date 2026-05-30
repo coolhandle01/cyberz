@@ -1,7 +1,9 @@
-"""
-tests/tools/cloud/test_cloud.py - unit tests for tools/cloud/
+"""tests/tools/cloud/test_services.py - unit tests for tools/cloud/services.py.
 
-Covers S3 bucket checks, Azure Blob Storage checks, and exposed services.
+Exposed-service checks: unauthenticated databases (Elasticsearch / CouchDB
+/ Redis / MongoDB), sensitive-file exposure (.git / .env / phpinfo / ...),
+admin panels, and the per-product branded panel / dashboard probes
+(cPanel / Plesk / Grafana / Kibana / Portainer / Consul / Vault).
 """
 
 from __future__ import annotations
@@ -10,9 +12,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from models import Endpoint, ReconResult, Severity
-from tools.cloud.aws import check_s3_buckets
-from tools.cloud.azure import check_azure_blob_containers, check_azure_sas_tokens
+from models import AttackGraph, Endpoint, Severity
 from tools.cloud.services import (
     check_admin_panels,
     check_consul_vault_paths,
@@ -34,154 +34,9 @@ from tools.cloud.services import (
 pytestmark = pytest.mark.unit
 
 
-# check_s3_buckets
-
-
-class TestCheckS3Buckets:
-    """The agent picks S3 hostnames OSINT actually surfaced in recon;
-    no bucket-name guessing - we only probe assets the programme has
-    exposed."""
-
-    def test_detects_publicly_listable_bucket(self, s3_hostname, make_response):
-        listing_xml = '<?xml version="1.0"?><ListBucketResult></ListBucketResult>'
-        with patch("requests.get", return_value=make_response(status=200, body=listing_xml)):
-            results = check_s3_buckets([s3_hostname])
-
-        listable = [r for r in results if "Publicly Listable" in r.title]
-        assert len(listable) == 1
-        assert listable[0].severity_hint == Severity.HIGH
-        assert listable[0].vuln_class == "CloudMisconfiguration"
-        assert listable[0].target == f"https://{s3_hostname}/"
-
-    def test_detects_publicly_accessible_bucket(self, make_s3_hostname, make_response):
-        with patch(
-            "requests.get",
-            return_value=make_response(status=200, body="some non-listing content"),
-        ):
-            results = check_s3_buckets([make_s3_hostname()])
-
-        accessible = [r for r in results if "Publicly Accessible" in r.title]
-        assert len(accessible) == 1
-        assert accessible[0].severity_hint == Severity.MEDIUM
-
-    def test_non_200_produces_no_finding(self, s3_hostname, make_response):
-        with patch("requests.get", return_value=make_response(status=403, body="Access Denied")):
-            results = check_s3_buckets([s3_hostname])
-
-        assert results == []
-
-    def test_empty_input_makes_no_requests(self):
-        with patch("requests.get") as mget:
-            results = check_s3_buckets([])
-
-        assert results == []
-        mget.assert_not_called()
-
-    def test_iterates_every_supplied_hostname(self, make_s3_hostname, make_response):
-        seen_urls: list[str] = []
-
-        def recording_get(url, **kwargs):
-            seen_urls.append(url)
-            return make_response(status=403, body="Denied")
-
-        hostnames = [make_s3_hostname("assets"), make_s3_hostname("backup")]
-        with patch("requests.get", side_effect=recording_get):
-            check_s3_buckets(hostnames)
-
-        for hostname in hostnames:
-            assert any(hostname in u for u in seen_urls)
-
-    def test_network_exception_is_swallowed(self, s3_hostname):
-        with patch("requests.get", side_effect=Exception("timeout")):
-            results = check_s3_buckets([s3_hostname])
-        assert results == []
-
-
-# check_azure_blob_containers
-
-
-class TestCheckAzureBlobContainers:
-    """The agent picks Azure Blob hostnames OSINT actually surfaced in
-    recon; the canonical container-name list (``public``, ``assets``,
-    ``static``, ...) is probed against each."""
-
-    def test_detects_publicly_listed_container(self, azure_blob_hostname, make_response):
-        listing_xml = '<?xml version="1.0"?><EnumerationResults><Blobs/></EnumerationResults>'
-        with patch("requests.get", return_value=make_response(status=200, body=listing_xml)):
-            results = check_azure_blob_containers([azure_blob_hostname])
-
-        listed = [r for r in results if "Publicly Listed" in r.title]
-        assert len(listed) >= 1
-        assert listed[0].severity_hint == Severity.HIGH
-
-    def test_empty_input_makes_no_requests(self):
-        with patch("requests.get") as mget:
-            results = check_azure_blob_containers([])
-
-        assert results == []
-        mget.assert_not_called()
-
-    def test_probes_every_supplied_hostname(self, make_azure_blob_hostname, make_response):
-        seen_urls: list[str] = []
-
-        def recording_get(url, **kwargs):
-            seen_urls.append(url)
-            return make_response(status=403, body="Denied")
-
-        hostnames = [make_azure_blob_hostname("storage"), make_azure_blob_hostname("assets")]
-        with patch("requests.get", side_effect=recording_get):
-            check_azure_blob_containers(hostnames)
-
-        for hostname in hostnames:
-            assert any(hostname in u for u in seen_urls)
-
-    def test_network_exception_is_swallowed(self, azure_blob_hostname):
-        with patch("requests.get", side_effect=Exception("timeout")):
-            results = check_azure_blob_containers([azure_blob_hostname])
-        assert results == []
-
-
-# check_azure_sas_tokens
-
-
-class TestCheckAzureSasTokens:
-    """Static URL inspection - no HTTP requests fire."""
-
-    def test_detects_sas_token_in_endpoint_url(self, azure_sas_endpoint):
-        with patch("requests.get") as mget:
-            results = check_azure_sas_tokens([azure_sas_endpoint])
-
-        sas_findings = [r for r in results if "SAS Token" in r.title]
-        assert len(sas_findings) == 1
-        assert sas_findings[0].severity_hint == Severity.HIGH
-        # Static URL inspection: never fires HTTP.
-        mget.assert_not_called()
-
-    def test_clean_urls_produce_no_findings(self, target_url):
-        endpoint = Endpoint(url=f"{target_url}/files/doc.pdf?download=1", status_code=200)
-
-        with patch("requests.get") as mget:
-            results = check_azure_sas_tokens([endpoint])
-
-        assert results == []
-        mget.assert_not_called()
-
-    def test_empty_input_makes_no_requests(self):
-        with patch("requests.get") as mget:
-            results = check_azure_sas_tokens([])
-
-        assert results == []
-        mget.assert_not_called()
-
-
-# ---------------------------------------------------------------------------
-# Granular service check functions
-# ---------------------------------------------------------------------------
-
-
 class TestCheckUnauthenticatedDatabases:
     def test_detects_elasticsearch(self, programme):
-        recon = ReconResult(
+        recon = AttackGraph(
             programme=programme,
             subdomains=[],
             endpoints=[],
@@ -199,7 +54,7 @@ class TestCheckUnauthenticatedDatabases:
         assert es[0].vuln_class == "ExposedService"
 
     def test_detects_couchdb(self, programme):
-        recon = ReconResult(
+        recon = AttackGraph(
             programme=programme,
             subdomains=[],
             endpoints=[],
@@ -216,7 +71,7 @@ class TestCheckUnauthenticatedDatabases:
         assert couch[0].severity_hint == Severity.CRITICAL
 
     def test_detects_redis_via_ping(self, programme):
-        recon = ReconResult(
+        recon = AttackGraph(
             programme=programme,
             subdomains=[],
             endpoints=[],
@@ -234,7 +89,7 @@ class TestCheckUnauthenticatedDatabases:
         assert redis[0].severity_hint == Severity.CRITICAL
 
     def test_detects_mongodb_via_ismaster(self, programme):
-        recon = ReconResult(
+        recon = AttackGraph(
             programme=programme,
             subdomains=[],
             endpoints=[],
@@ -254,7 +109,7 @@ class TestCheckUnauthenticatedDatabases:
         assert mongo[0].severity_hint == Severity.CRITICAL
 
     def test_skips_host_without_matching_ports(self, programme):
-        recon = ReconResult(
+        recon = AttackGraph(
             programme=programme,
             subdomains=[],
             endpoints=[],
@@ -267,7 +122,7 @@ class TestCheckUnauthenticatedDatabases:
         assert results == []
 
     def test_exception_is_swallowed(self, programme):
-        recon = ReconResult(
+        recon = AttackGraph(
             programme=programme,
             subdomains=[],
             endpoints=[],
@@ -389,7 +244,7 @@ class TestGranularPanels:
     """Spot-check each branded panel / dashboard tool hits the right
     port (or reverse-proxy path) on the right host. Helpers now take
     typed inputs (``list[str]`` for hostnames, ``list[Endpoint]`` for
-    path probes) rather than ``ReconResult``; the conversion lives at
+    path probes) rather than ``AttackGraph``; the conversion lives at
     the wrapper layer."""
 
     def _hostnames(self, target_apex: str) -> list[str]:

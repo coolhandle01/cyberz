@@ -4,7 +4,7 @@ Portainer. Each dashboard splits into two wrappers so the agent picks
 each target type explicitly and each wrapper carries a single
 ``scope_filter``:
 
-- ``<engine> Port Check`` - takes ``list[Hostname]`` (the host:port
+- ``<engine> Port Check`` - takes ``list[FQDN]`` (the host:port
   pairs from recon) and probes the dashboard's signature port.
 - ``<engine> Path Check`` - takes ``list[Endpoint]`` (the live origins
   from recon) and probes the reverse-proxy path on each.
@@ -15,7 +15,7 @@ specific exposure mode.
 
 from pydantic import BaseModel, Field
 
-from models import Endpoint, Hostname, RawFinding
+from models import FQDN, Endpoint, RawFinding
 from squad import cyber_tool
 from squad.penetration_tester._decorator import _parse_endpoints
 from tools.cloud import (
@@ -26,15 +26,15 @@ from tools.cloud import (
     check_portainer_paths,
     check_portainer_ports,
 )
-from tools.recon.scope import TargetEndpoints, TargetHostnames
+from tools.recon.scope import TargetEndpoints, TargetFQDNs
 
 
 class _GrafanaPortArgs(BaseModel):
     """Explicit args_schema for the Grafana Port Check tool."""
 
-    hostnames: TargetHostnames = Field(
+    hostnames: TargetFQDNs = Field(
         description=(
-            "Hostnames showing port 3000 open, hostnames whose"
+            "FQDNs showing port 3000 open, hostnames whose"
             " technologies mention Grafana, or hostnames on a DevOps /"
             " SRE-heavy target. Probes Grafana on port 3000. The"
             " wrapper's scope filter drops out-of-scope hostnames before"
@@ -44,7 +44,7 @@ class _GrafanaPortArgs(BaseModel):
 
 
 @cyber_tool("Grafana Port Check", args_schema=_GrafanaPortArgs)
-def grafana_port_check_tool(hostnames: list[Hostname]) -> list[RawFinding]:
+def grafana_port_check_tool(hostnames: list[FQDN]) -> list[RawFinding]:
     """
     Check for an exposed Grafana metrics dashboard on port 3000 on each
     supplied hostname.
@@ -85,9 +85,9 @@ def grafana_path_check_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
 class _KibanaPortArgs(BaseModel):
     """Explicit args_schema for the Kibana Port Check tool."""
 
-    hostnames: TargetHostnames = Field(
+    hostnames: TargetFQDNs = Field(
         description=(
-            "Hostnames showing port 5601 (Kibana) or 9200 (Elasticsearch"
+            "FQDNs showing port 5601 (Kibana) or 9200 (Elasticsearch"
             " stack) open, or hostnames whose technologies mention Kibana"
             " or Elasticsearch. Probes Kibana on port 5601. The wrapper's"
             " scope filter drops out-of-scope hostnames before any probe."
@@ -96,7 +96,7 @@ class _KibanaPortArgs(BaseModel):
 
 
 @cyber_tool("Kibana Port Check", args_schema=_KibanaPortArgs)
-def kibana_port_check_tool(hostnames: list[Hostname]) -> list[RawFinding]:
+def kibana_port_check_tool(hostnames: list[FQDN]) -> list[RawFinding]:
     """
     Check for an exposed Kibana log / data visualisation dashboard on
     port 5601 on each supplied hostname.
@@ -137,9 +137,9 @@ def kibana_path_check_tool(endpoints: list[Endpoint]) -> list[RawFinding]:
 class _PortainerPortArgs(BaseModel):
     """Explicit args_schema for the Portainer Port Check tool."""
 
-    hostnames: TargetHostnames = Field(
+    hostnames: TargetFQDNs = Field(
         description=(
-            "Hostnames showing port 9000 open, or hostnames whose"
+            "FQDNs showing port 9000 open, or hostnames whose"
             " technologies mention Docker / containerised infrastructure."
             " Probes Portainer on port 9000. The wrapper's scope filter"
             " drops out-of-scope hostnames before any probe."
@@ -148,7 +148,7 @@ class _PortainerPortArgs(BaseModel):
 
 
 @cyber_tool("Portainer Port Check", args_schema=_PortainerPortArgs)
-def portainer_port_check_tool(hostnames: list[Hostname]) -> list[RawFinding]:
+def portainer_port_check_tool(hostnames: list[FQDN]) -> list[RawFinding]:
     """
     Check for an exposed Portainer Docker management UI on port 9000 on
     each supplied hostname.

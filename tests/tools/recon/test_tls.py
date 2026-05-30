@@ -53,6 +53,25 @@ class TestCheckTls:
             results = check_tls([ep])
         assert results == []
 
+    def test_skips_when_tls_disabled(self, monkeypatch, target_url: str):
+        """STEALTH posture flips ``config.scan.tls_enabled`` False.
+
+        Gate fires before endpoint filtering / testssl detection - no
+        subprocess fires when the operator dial is stealth. Parallel
+        to the traceroute gate; both are binary "do this at all" levers
+        because slowing them does not buy quiet.
+        """
+        import tools.recon.tls as tls_mod
+
+        monkeypatch.setattr(tls_mod.config.scan, "tls_enabled", False)
+        endpoint = Endpoint(url=f"{target_url}/", status_code=200)
+        with patch("shutil.which") as which:
+            with patch("tools.recon.tls._run") as run:
+                findings = check_tls([endpoint])
+        assert findings == []
+        which.assert_not_called()
+        run.assert_not_called()
+
     def test_returns_empty_when_no_https_endpoints(self):
         ep = Endpoint(url="http://app.example.com/", status_code=200)
         with patch("shutil.which", return_value="/usr/bin/testssl.sh"):

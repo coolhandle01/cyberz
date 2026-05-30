@@ -3,16 +3,16 @@ Exposed database / search-index probes - look for unauthenticated
 admin / data endpoints on Elasticsearch, CouchDB, Redis, MongoDB,
 PostgreSQL, MySQL / MariaDB.
 
-Each wrapper takes typed ``list[Hostname]`` picked by the agent from
+Each wrapper takes typed ``list[FQDN]`` picked by the agent from
 recon (the host:port pairs surfaced by the nmap pass) and a wrapper-
 level ``scope_filter`` drops anything outside the selected programme's
 structured scope before the probe fires. See the recon-side precedent
-in ``squad/osint_analyst/discovery.py`` (``Probe Hostnames``).
+in ``squad/osint_analyst/discovery.py`` (``Probe FQDNs``).
 """
 
 from pydantic import BaseModel, Field
 
-from models import Hostname, RawFinding
+from models import FQDN, RawFinding
 from squad import cyber_tool
 from tools.cloud import (
     check_couchdb,
@@ -22,15 +22,15 @@ from tools.cloud import (
     check_postgresql,
     check_redis,
 )
-from tools.recon.scope import TargetHostnames
+from tools.recon.scope import TargetFQDNs
 
 
 class _ElasticsearchCheckArgs(BaseModel):
     """Explicit args_schema for the Unauthenticated Elasticsearch Check tool."""
 
-    hostnames: TargetHostnames = Field(
+    hostnames: TargetFQDNs = Field(
         description=(
-            "Hostnames showing port 9200 open (or technologies mentioning"
+            "FQDNs showing port 9200 open (or technologies mentioning"
             " Elasticsearch). Probes /_cluster/health on each; a 200 with"
             " cluster_name confirms no auth. The wrapper's scope filter"
             " drops any hostname outside the selected programme's"
@@ -40,7 +40,7 @@ class _ElasticsearchCheckArgs(BaseModel):
 
 
 @cyber_tool("Unauthenticated Elasticsearch Check", args_schema=_ElasticsearchCheckArgs)
-def elasticsearch_tool(hostnames: list[Hostname]) -> list[RawFinding]:
+def elasticsearch_tool(hostnames: list[FQDN]) -> list[RawFinding]:
     """
     Check for an unauthenticated Elasticsearch instance on port 9200 on each
     supplied hostname. Probes /_cluster/health - a 200 response with
@@ -60,9 +60,9 @@ def elasticsearch_tool(hostnames: list[Hostname]) -> list[RawFinding]:
 class _CouchdbCheckArgs(BaseModel):
     """Explicit args_schema for the Unauthenticated CouchDB Check tool."""
 
-    hostnames: TargetHostnames = Field(
+    hostnames: TargetFQDNs = Field(
         description=(
-            "Hostnames showing port 5984 open. Probes /_all_dbs on each;"
+            "FQDNs showing port 5984 open. Probes /_all_dbs on each;"
             " a 200 listing databases confirms no auth. The wrapper's"
             " scope filter drops out-of-scope hostnames before any probe."
         ),
@@ -70,7 +70,7 @@ class _CouchdbCheckArgs(BaseModel):
 
 
 @cyber_tool("Unauthenticated CouchDB Check", args_schema=_CouchdbCheckArgs)
-def couchdb_tool(hostnames: list[Hostname]) -> list[RawFinding]:
+def couchdb_tool(hostnames: list[FQDN]) -> list[RawFinding]:
     """
     Check for an unauthenticated CouchDB instance on port 5984 on each
     supplied hostname. Probes /_all_dbs - a 200 response listing databases
@@ -88,9 +88,9 @@ def couchdb_tool(hostnames: list[Hostname]) -> list[RawFinding]:
 class _RedisCheckArgs(BaseModel):
     """Explicit args_schema for the Unauthenticated Redis Check tool."""
 
-    hostnames: TargetHostnames = Field(
+    hostnames: TargetFQDNs = Field(
         description=(
-            "Hostnames showing port 6379 open. Sends a PING; a +PONG"
+            "FQDNs showing port 6379 open. Sends a PING; a +PONG"
             " without AUTH confirms no password is set. The wrapper's"
             " scope filter drops out-of-scope hostnames before any probe."
         ),
@@ -98,7 +98,7 @@ class _RedisCheckArgs(BaseModel):
 
 
 @cyber_tool("Unauthenticated Redis Check", args_schema=_RedisCheckArgs)
-def redis_tool(hostnames: list[Hostname]) -> list[RawFinding]:
+def redis_tool(hostnames: list[FQDN]) -> list[RawFinding]:
     """
     Check for an unauthenticated Redis instance on port 6379 via a PING
     command. A +PONG response without sending AUTH confirms no password
@@ -116,9 +116,9 @@ def redis_tool(hostnames: list[Hostname]) -> list[RawFinding]:
 class _MongodbCheckArgs(BaseModel):
     """Explicit args_schema for the Unauthenticated MongoDB Check tool."""
 
-    hostnames: TargetHostnames = Field(
+    hostnames: TargetFQDNs = Field(
         description=(
-            "Hostnames showing port 27017 open. Sends a minimal isMaster"
+            "FQDNs showing port 27017 open. Sends a minimal isMaster"
             " wire query; a valid response without error confirms"
             " unauthenticated access. The wrapper's scope filter drops"
             " out-of-scope hostnames before any probe."
@@ -127,7 +127,7 @@ class _MongodbCheckArgs(BaseModel):
 
 
 @cyber_tool("Unauthenticated MongoDB Check", args_schema=_MongodbCheckArgs)
-def mongodb_tool(hostnames: list[Hostname]) -> list[RawFinding]:
+def mongodb_tool(hostnames: list[FQDN]) -> list[RawFinding]:
     """
     Check for an unauthenticated MongoDB instance on port 27017 on each
     supplied hostname. Sends a minimal isMaster wire-protocol query - a
@@ -146,9 +146,9 @@ def mongodb_tool(hostnames: list[Hostname]) -> list[RawFinding]:
 class _PostgresqlCheckArgs(BaseModel):
     """Explicit args_schema for the Exposed PostgreSQL Check tool."""
 
-    hostnames: TargetHostnames = Field(
+    hostnames: TargetFQDNs = Field(
         description=(
-            "Hostnames showing port 5432 open. CRITICAL if trust"
+            "FQDNs showing port 5432 open. CRITICAL if trust"
             " authentication allows connection without a password;"
             " MEDIUM if the port is exposed but credentials are required"
             " (unnecessary internet exposure). The wrapper's scope filter"
@@ -158,7 +158,7 @@ class _PostgresqlCheckArgs(BaseModel):
 
 
 @cyber_tool("Exposed PostgreSQL Check", args_schema=_PostgresqlCheckArgs)
-def postgresql_tool(hostnames: list[Hostname]) -> list[RawFinding]:
+def postgresql_tool(hostnames: list[FQDN]) -> list[RawFinding]:
     """
     Check for PostgreSQL on port 5432 on each supplied hostname. Returns
     CRITICAL if trust authentication allows connection without a password;
@@ -177,9 +177,9 @@ def postgresql_tool(hostnames: list[Hostname]) -> list[RawFinding]:
 class _MysqlCheckArgs(BaseModel):
     """Explicit args_schema for the Exposed MySQL/MariaDB Check tool."""
 
-    hostnames: TargetHostnames = Field(
+    hostnames: TargetFQDNs = Field(
         description=(
-            "Hostnames showing port 3306 open. MEDIUM if the port is"
+            "FQDNs showing port 3306 open. MEDIUM if the port is"
             " reachable and the server responds with a valid handshake"
             " (unnecessary internet exposure; verify anonymous login is"
             " disabled). The wrapper's scope filter drops out-of-scope"
@@ -189,7 +189,7 @@ class _MysqlCheckArgs(BaseModel):
 
 
 @cyber_tool("Exposed MySQL/MariaDB Check", args_schema=_MysqlCheckArgs)
-def mysql_tool(hostnames: list[Hostname]) -> list[RawFinding]:
+def mysql_tool(hostnames: list[FQDN]) -> list[RawFinding]:
     """
     Check for MySQL or MariaDB on port 3306 on each supplied hostname.
     Returns MEDIUM if the port is reachable and the server responds with a

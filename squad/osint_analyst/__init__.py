@@ -6,8 +6,8 @@ cohesive responsibility:
 - ``discovery`` - sweep + slicers + passive expansion (cert
   transparency, historical URLs, LLM endpoint detection) + active
   hostname probes + takeover detection. The "what is the surface"
-  half. The two active-probe wrappers (``Probe Hostnames``, ``Detect
-  Takeover Candidates``) take ``list[Hostname]``; ``@cyber_tool``
+  half. The two active-probe wrappers (``Probe FQDNs``, ``Detect
+  Takeover Candidates``) take ``list[FQDN]``; ``@cyber_tool``
   auto-detects the typed-target field and runs the programme scope
   guard in the wrapper rather than inline in the body. The shared
   ``current_programme`` reader lives in ``squad.workspace_tools``.
@@ -42,7 +42,7 @@ from squad.osint_analyst.discovery import (
     _DetectTakeoverCandidatesArgs,
     _HistoricalUrlsArgs,
     _LlmDetectionArgs,
-    _ProbeHostnamesArgs,
+    _ProbeFQDNsArgs,
     _ReconEndpointsArgs,
     _ReconOpenPortsArgs,
     _ReconSubdomainsArgs,
@@ -56,6 +56,14 @@ from squad.osint_analyst.discovery import (
     recon_open_ports_tool,
     recon_subdomains_tool,
     run_initial_sweep_tool,
+)
+from squad.osint_analyst.enrichment import (
+    _DeepScanHostArgs,
+    _LookupIpAssetsArgs,
+    _LookupRdapAsnArgs,
+    deep_scan_host_tool,
+    lookup_ip_assets_tool,
+    lookup_rdap_asn_tool,
 )
 from squad.workspace_tools import _ListRunFilesArgs, _ReadRunFileArgs
 
@@ -71,6 +79,10 @@ MEMBER = SquadMember(
         llm_detection_tool,
         probe_hostnames_tool,
         detect_takeover_candidates_tool,
+        # Post-sweep pivot / enrichment
+        lookup_ip_assets_tool,
+        lookup_rdap_asn_tool,
+        deep_scan_host_tool,
         lookup_cwe_tool,
         lookup_owasp_tool,
         annotate_host_tool,
@@ -88,8 +100,11 @@ MEMBER = SquadMember(
         "Certificate Transparency Lookup": _CertTransparencyArgs,
         "Historical URL Discovery": _HistoricalUrlsArgs,
         "LLM Endpoint Detection": _LlmDetectionArgs,
-        "Probe Hostnames": _ProbeHostnamesArgs,
+        "Probe FQDNs": _ProbeFQDNsArgs,
         "Detect Takeover Candidates": _DetectTakeoverCandidatesArgs,
+        "Lookup IP Assets": _LookupIpAssetsArgs,
+        "Lookup RDAP for ASN": _LookupRdapAsnArgs,
+        "Deep Scan Host": _DeepScanHostArgs,
         "Lookup CWE": _OsintLookupCweArgs,
         "Lookup OWASP Guidance": _OsintLookupOwaspArgs,
         "Annotate Host": _AnnotateHostArgs,
@@ -106,9 +121,12 @@ __all__ = [  # noqa: RUF022 - grouped by purpose, not alphabetised
     "MEMBER",
     # Wrappers - discovery
     "cert_transparency_tool",
+    "deep_scan_host_tool",
     "detect_takeover_candidates_tool",
     "historical_urls_tool",
     "llm_detection_tool",
+    "lookup_ip_assets_tool",
+    "lookup_rdap_asn_tool",
     "probe_hostnames_tool",
     "recon_endpoints_tool",
     "recon_open_ports_tool",
@@ -123,13 +141,16 @@ __all__ = [  # noqa: RUF022 - grouped by purpose, not alphabetised
     # args_schema classes (re-exported so test imports stay stable)
     "_AnnotateHostArgs",
     "_CertTransparencyArgs",
+    "_DeepScanHostArgs",
     "_DetectTakeoverCandidatesArgs",
     "_FinaliseReconArgs",
     "_HistoricalUrlsArgs",
     "_LlmDetectionArgs",
+    "_LookupIpAssetsArgs",
+    "_LookupRdapAsnArgs",
     "_OsintLookupCweArgs",
     "_OsintLookupOwaspArgs",
-    "_ProbeHostnamesArgs",
+    "_ProbeFQDNsArgs",
     "_ReconEndpointsArgs",
     "_ReconOpenPortsArgs",
     "_ReconSubdomainsArgs",

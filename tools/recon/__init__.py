@@ -9,14 +9,15 @@ from __future__ import annotations
 import logging
 from urllib.parse import urlparse
 
-from models import Endpoint, ReconResult
+from models import AttackGraph, Endpoint
 from models.h1 import Programme, ScopeType
 from tools.recon.cert_transparency import cert_transparency
 from tools.recon.dirfuzz import discover_paths
-from tools.recon.dnsx import TakeoverCandidate, detect_takeover_candidates
+from tools.recon.dnsx import TakeoverCandidate, detect_takeover_candidates, resolve_records
+from tools.recon.httpx import probe_endpoints
+from tools.recon.ip_asset import compose_ip_assets
 from tools.recon.llm import detect_llm_endpoints
 from tools.recon.nmap import port_scan
-from tools.recon.probe import probe_endpoints
 from tools.recon.scope import filter_in_scope, host_of
 from tools.recon.subfinder import enumerate_subdomains
 from tools.recon.tls import check_dns_email_security, check_tls
@@ -80,6 +81,7 @@ __all__ = [
     "cert_transparency",
     "check_dns_email_security",
     "check_tls",
+    "compose_ip_assets",
     "detect_llm_endpoints",
     "detect_takeover_candidates",
     "discover_paths",
@@ -89,12 +91,13 @@ __all__ = [
     "host_of",
     "port_scan",
     "probe_endpoints",
+    "resolve_records",
     "run_recon",
     "run_traceroute",
 ]
 
 
-def run_recon(programme: Programme) -> ReconResult:
+def run_recon(programme: Programme) -> AttackGraph:
     """Full recon pipeline for a single programme."""
     seed_domains: list[str] = []
     for item in programme.in_scope:
@@ -118,6 +121,22 @@ def run_recon(programme: Programme) -> ReconResult:
 
     in_scope_hosts = filter_in_scope(all_subdomains, programme)
     endpoints = probe_endpoints(in_scope_hosts)
+
+    # Promote TLS SANs observed during probing to in-scope subdomains.
+    # Multi-SAN certs leak every hostname the server is authoritative for;
+    # the scope guard filters those that match the programme. Dormant
+    # today because ``probe_endpoints`` is the TECH_DETECT shim (no
+    # -tls-grab); activates the moment any caller flips run_recon to
+    # HttpxMode.WEB_INVENTORY or an OA-side tool pipes WEB_INVENTORY
+    # endpoints through this helper. Code lives upstream of the dormancy
+    # so SANs join in_scope_hosts atomically with the probe that surfaced
+    # them - downstream IP enrichment, traceroute, and DNS checks all see
+    # the promoted hosts in one pass.
+    san_candidates = list({san for ep in endpoints for san in ep.tls_sans})
+    if san_candidates:
+        promoted = filter_in_scope(san_candidates, programme)
+        in_scope_hosts = list(dict.fromkeys(in_scope_hosts + promoted))
+
     live_hosts = [ep.url for ep in endpoints if ep.status_code and ep.status_code < 500]
     open_ports = port_scan(live_hosts[:20])
 
@@ -137,7 +156,14 @@ def run_recon(programme: Programme) -> ReconResult:
 
     network_hops = run_traceroute(in_scope_hosts[:20])
 
-    return ReconResult(
+    # IP-rooted enrichment: resolve A records once for the in-scope hosts,
+    # unique-ify the IPs, compose one IpAsset per IP via Cymru + RDAP +
+    # dnsx PTR. One IpAsset = one amass IPAddress asset's worth of input.
+    dns_records = resolve_records(in_scope_hosts)
+    unique_ips = list(dict.fromkeys(ip for record in dns_records for ip in record.a_records))
+    ip_assets = compose_ip_assets(unique_ips)
+
+    return AttackGraph(
         programme=programme,
         subdomains=in_scope_hosts,
         endpoints=endpoints,
@@ -145,5 +171,10 @@ def run_recon(programme: Programme) -> ReconResult:
         technologies=list(dict.fromkeys(all_tech)),
         passive_findings=passive_findings,
         network_hops=network_hops,
+        ip_assets=ip_assets,
+        # Cert aggregate for the sweep; per-host materialisation happens at
+        # finalise (the bound handoff point), not here - run_recon stays
+        # side-effect-free.
+        tls_certificates=[ep.tls_certificate for ep in endpoints if ep.tls_certificate],
         notes=f"Seeded from {seed_domains}. {len(in_scope_hosts)} in-scope hosts.",
     )

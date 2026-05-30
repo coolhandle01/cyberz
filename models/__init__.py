@@ -8,24 +8,29 @@ across every consumer.
 
 | Module | Contents |
 |---|---|
-| ``models.primitives`` | ``Severity``, ``Hostname``, ``HttpUrl`` |
+| ``models.primitives`` | ``Severity``, ``FQDN``, ``HttpUrl``, ``IPAddress``, ``Email`` |
 | ``models.finding`` | ``RawFinding``, ``VerifiedVulnerability``, ``RawFindingSummary`` |
 | ``models.asset`` | ``Endpoint``, ``EndpointPage``, ``HostRole``, ``HostPriority``, |
-|                  | ``HostInsight``, ``OpenPortsMap``, ``LlmEndpoint``, ``ReconResult`` |
+|                  | ``HostInsight``, ``HostScore``, ``IpAsset``, ``OpenPortsMap``, |
+|                  | ``Service``, ``TLSCertificate``, ``LlmEndpoint``, ``AttackGraph`` |
 | ``models.workspace`` | ``RunFile``, ``RunFileContent`` |
 | ``models.cve`` | ``CveEntry`` |
 | ``models.cwe`` | ``CWEEntry`` |
 | ``models.owasp`` | ``OWASPEntry`` |
-| ``models.dns`` | ``TakeoverCandidate`` |
+| ``models.dns`` | ``PtrRecord``, ``TakeoverCandidate`` |
 | ``models.insight`` | ``HostAnnotation``, ``InsightValidationIssue``, |
 |                    | ``InsightValidationReport``, ``ReconFinalisationError`` |
 | ``models.metrics`` | ``RunMetrics`` |
+| ``models.network`` | ``AsnRecord``, ``Contact``, ``ContactRole``, ``RdapRecord`` |
+| ``models.scanner`` | ``NmapMode``, ``NmapBanner``, ``NmapScripts``, ``NmapService``, |
+|                    | ``NmapHostResult``, ``NmapScanResult``, ``HttpxMode`` |
 | ``models.h1`` | HackerOne shapes incl. ``ProgrammeReportSummary`` |
-| ``models.attack`` | ``AttackPlan``, ``AttackPlanItem``, |
-|                   | ``AttackPlanValidationIssue``, ``AttackPlanValidationReport``, |
-|                   | ``AttackPlanFinalisationError`` |
+| ``models.attack`` | ``AttackForest``, ``AttackTree``, |
+|                   | ``AttackForestValidationIssue``, ``AttackForestValidationReport``, |
+|                   | ``AttackForestFinalisationError`` |
 | ``models.triage`` | ``AuthoredAssessment``, ``SeverityDecision`` |
 | ``models.report`` | ``AuthoredDraft`` |
+| ``models.technology`` | ``Technology``, ``TechnologyCategory`` |
 
 The per-domain modules import only from layers below them in the
 dependency graph: primitives -> finding -> h1 -> asset. No module imports
@@ -36,25 +41,29 @@ that the pre-split layout had to dance around.
 from __future__ import annotations
 
 from models.asset import (
+    AttackGraph,
     Endpoint,
     EndpointPage,
     HostInsight,
     HostPriority,
     HostRole,
+    HostScore,
+    IpAsset,
     LlmEndpoint,
     OpenPortsMap,
-    ReconResult,
+    Service,
+    TLSCertificate,
 )
 from models.attack import (
-    AttackPlan,
-    AttackPlanFinalisationError,
-    AttackPlanItem,
-    AttackPlanValidationIssue,
-    AttackPlanValidationReport,
+    AttackForest,
+    AttackForestFinalisationError,
+    AttackForestValidationIssue,
+    AttackForestValidationReport,
+    AttackTree,
 )
 from models.cve import CveEntry
 from models.cwe import CWEEntry
-from models.dns import TakeoverCandidate
+from models.dns import PtrRecord, TakeoverCandidate
 from models.finding import RawFinding, RawFindingSummary, VerifiedVulnerability
 from models.h1 import ProgrammeReportSummary
 from models.insight import (
@@ -64,45 +73,76 @@ from models.insight import (
     ReconFinalisationError,
 )
 from models.metrics import RunMetrics
+from models.network import AsnRecord, Contact, ContactRole, RdapRecord
 from models.owasp import OWASPEntry
-from models.primitives import Hostname, HttpUrl, Severity
+from models.primitives import FQDN, Email, HttpUrl, IPAddress, Severity
 from models.report import AuthoredDraft
+from models.scanner import (
+    HttpxMode,
+    NmapBanner,
+    NmapHostResult,
+    NmapMode,
+    NmapScanResult,
+    NmapScripts,
+    NmapService,
+)
+from models.technology import Technology, TechnologyCategory
 from models.triage import AuthoredAssessment, SeverityDecision
 from models.workspace import RunFile, RunFileContent
 
 __all__ = [
-    "AttackPlan",
-    "AttackPlanFinalisationError",
-    "AttackPlanItem",
-    "AttackPlanValidationIssue",
-    "AttackPlanValidationReport",
+    "FQDN",
+    "AsnRecord",
+    "AttackForest",
+    "AttackForestFinalisationError",
+    "AttackForestValidationIssue",
+    "AttackForestValidationReport",
+    "AttackGraph",
+    "AttackTree",
     "AuthoredAssessment",
     "AuthoredDraft",
     "CWEEntry",
+    "Contact",
+    "ContactRole",
     "CveEntry",
+    "Email",
     "Endpoint",
     "EndpointPage",
     "HostAnnotation",
     "HostInsight",
     "HostPriority",
     "HostRole",
-    "Hostname",
+    "HostScore",
     "HttpUrl",
+    "HttpxMode",
+    "IPAddress",
     "InsightValidationIssue",
     "InsightValidationReport",
+    "IpAsset",
     "LlmEndpoint",
+    "NmapBanner",
+    "NmapHostResult",
+    "NmapMode",
+    "NmapScanResult",
+    "NmapScripts",
+    "NmapService",
     "OWASPEntry",
     "OpenPortsMap",
     "ProgrammeReportSummary",
+    "PtrRecord",
     "RawFinding",
     "RawFindingSummary",
+    "RdapRecord",
     "ReconFinalisationError",
-    "ReconResult",
     "RunFile",
     "RunFileContent",
     "RunMetrics",
+    "Service",
     "Severity",
     "SeverityDecision",
+    "TLSCertificate",
     "TakeoverCandidate",
+    "Technology",
+    "TechnologyCategory",
     "VerifiedVulnerability",
 ]

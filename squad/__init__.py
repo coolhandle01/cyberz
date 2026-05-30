@@ -90,8 +90,8 @@ def cyber_tool(
 
     Scope safety is a Pydantic-native property of the args_schema, not
     of this decorator: agent-facing target fields are typed via the
-    ``TargetHostnames`` / ``TargetEndpoints`` (list, filter) or
-    ``TargetHostname`` / ``TargetEndpoint`` (single, reject) aliases
+    ``TargetFQDNs`` / ``TargetEndpoints`` (list, filter) or
+    ``TargetFQDN`` / ``TargetEndpoint`` (single, reject) aliases
     in ``tools.recon.scope``. The ``AfterValidator`` on each alias
     consults ``current_programme()`` during
     ``args_schema.model_validate(...)`` - CrewAI's tool-call path runs
@@ -113,7 +113,7 @@ def cyber_tool(
 # imports. The deferred-import pattern is explicitly endorsed by ruff for
 # this case: https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file/
 from squad.workspace_tools import (  # noqa: E402 - deferred to break import cycle (see comment above)
-    read_attack_plan_tool,
+    read_attack_forest_tool,
     read_run_file_tool,
     read_run_filelist_tool,
 )
@@ -230,7 +230,7 @@ __all__ = [
     "build_agent",
     "build_task",
     "cyber_tool",
-    "read_attack_plan_tool",
+    "read_attack_forest_tool",
     "read_run_file_tool",
     "read_run_filelist_tool",
 ]

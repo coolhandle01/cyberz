@@ -39,7 +39,7 @@ from squad.osint_analyst import (
     _LlmDetectionArgs,
     _OsintLookupCweArgs,
     _OsintLookupOwaspArgs,
-    _ProbeHostnamesArgs,
+    _ProbeFQDNsArgs,
     _ReconEndpointsArgs,
     _ReconOpenPortsArgs,
     _ReconSubdomainsArgs,
@@ -60,7 +60,7 @@ pytestmark = pytest.mark.unit
 
 
 # Every schema in this file with a typed-target field
-# (``TargetHostnames`` / ``TargetEndpoints`` / ``TargetHostname`` /
+# (``TargetFQDNs`` / ``TargetEndpoints`` / ``TargetFQDN`` /
 # ``TargetEndpoint``) runs its ``AfterValidator`` during
 # ``model_validate`` - and that validator calls ``current_programme()``.
 # Autousing ``programme_in_workspace`` stages a programme into the
@@ -117,7 +117,10 @@ class TestSchemaAcceptReject:
         [
             (_RunInitialSweepArgs, {}),
             (_ReconSubdomainsArgs, {}),
-            (_ReconSubdomainsArgs, {"sweep_path": "sweep.json", "host_filter": "api"}),
+            (
+                _ReconSubdomainsArgs,
+                {"attack_graph_path": "attack_graph.json", "host_filter": "api"},
+            ),
             (_ReconEndpointsArgs, {}),
             (
                 _ReconEndpointsArgs,
@@ -164,13 +167,13 @@ class TestSchemaAcceptReject:
         _HistoricalUrlsArgs.model_validate({"domain": apex})
 
     def test_probe_hostnames_accepts_victim_hostname(self, target_url: str) -> None:
-        """Probe Hostnames takes a list of hostnames - no programme handle.
+        """Probe FQDNs takes a list of hostnames - no programme handle.
 
         The wrapper-level ``scope_filter`` sources the Programme from
         the workspace (``current_programme()`` -> ``programme.json``),
         so the schema does not require a per-call handle.
         """
-        _ProbeHostnamesArgs.model_validate({"hostnames": [urlparse(target_url).hostname]})
+        _ProbeFQDNsArgs.model_validate({"hostnames": [urlparse(target_url).hostname]})
 
     def test_detect_takeover_candidates_accepts_bystander_hostname(
         self, bystander_url: str
@@ -214,7 +217,7 @@ class TestSchemaAcceptReject:
             _CertTransparencyArgs,  # domain required
             _HistoricalUrlsArgs,  # domain required
             _LlmDetectionArgs,  # endpoints required
-            _ProbeHostnamesArgs,  # hostnames required (scope_filter sources Programme)
+            _ProbeFQDNsArgs,  # hostnames required (scope_filter sources Programme)
             _DetectTakeoverCandidatesArgs,  # hostnames required (scope_filter sources Programme)
             _OsintLookupCweArgs,  # query required
             _OsintLookupOwaspArgs,  # query required
@@ -246,10 +249,10 @@ class TestSchemaAcceptReject:
         with pytest.raises(ValidationError):
             _AnnotateHostArgs.model_validate({**base, "priority": "urgent"})
 
-    # Hostname-typed fields. Every schema below
-    # carries at least one ``Hostname`` field; passing a URL / port / path
+    # FQDN-typed fields. Every schema below
+    # carries at least one ``FQDN`` field; passing a URL / port / path
     # rejects upstream, before the scope filter sees the value.
-    # test_models.py's TestHostname covers the validator exhaustively;
+    # tests/models/test_primitives.py TestFQDN covers the validator exhaustively;
     # this method asserts the OSINT schemas actually wire it, with each
     # malformed case derived from ``target_url`` so the deliberately broken
     # input is recognisably "the in-scope target, mis-shaped" rather than
@@ -260,7 +263,7 @@ class TestSchemaAcceptReject:
             (_CertTransparencyArgs, "domain", f"https://{host}", {}),
             (_HistoricalUrlsArgs, "domain", f"{host}:8080", {}),
             (_ReconOpenPortsArgs, "host", f"{host}/path", {}),
-            (_ProbeHostnamesArgs, "hostnames", [f"https://{host}"], {}),
+            (_ProbeFQDNsArgs, "hostnames", [f"https://{host}"], {}),
             (_DetectTakeoverCandidatesArgs, "hostnames", [f"{host}:9000"], {}),
         ]
         for schema_cls, field, value, base in cases:
@@ -268,12 +271,12 @@ class TestSchemaAcceptReject:
                 schema_cls.model_validate({**base, field: value})
 
     def test_annotate_host_hostname_rejects_url(self, target_url: str) -> None:
-        """Annotate Host's hostname is Hostname-typed; passing the full URL fails."""
+        """Annotate Host's hostname is FQDN-typed; passing the full URL fails."""
         with pytest.raises(ValidationError):
             _AnnotateHostArgs.model_validate(_annotate_host_base(target_url))
 
     def test_hostname_fields_lowercase_input(self, target_url: str) -> None:
-        """Hostname validator lowercases - the schema returns the normalised form."""
+        """FQDN validator lowercases - the schema returns the normalised form."""
         host = (urlparse(target_url).hostname or "").upper()
         validated = _AnnotateHostArgs.model_validate(_annotate_host_base(host))
         assert validated.hostname == host.lower()

@@ -12,9 +12,9 @@ from pydantic import BaseModel, Field
 
 import runtime
 from models import (
+    FQDN,
     Endpoint,
     EndpointPage,
-    Hostname,
     LlmEndpoint,
     OpenPortsMap,
     TakeoverCandidate,
@@ -32,8 +32,8 @@ from tools.recon import probe_endpoints as probe_endpoints_impl
 from tools.recon.query import recon_endpoints, recon_open_ports, recon_subdomains
 from tools.recon.scope import (
     TargetEndpoints,
-    TargetHostname,
-    TargetHostnames,
+    TargetFQDN,
+    TargetFQDNs,
 )
 
 
@@ -55,29 +55,30 @@ def run_initial_sweep_tool() -> str:
     assets: subfinder for subdomain enumeration, httpx for live HTTP/S
     probing and tech detection, nmap for port scanning, ffuf for content
     discovery, plus passive TLS and DNS email-security checks. Writes the
-    serialised inventory to ``sweep.json`` (the OA's internal draft) in the
+    serialised inventory to ``attack_graph.json`` (the OA's internal draft) in the
     run directory and returns the relative filename.
 
     This is the inventory step. Annotate the interesting hosts with
     Annotate Host and call Finalise Recon to produce the canonical
-    ``recon.json`` that downstream agents consume.
+    ``recon.json`` that the Vulnerability Researcher and Penetration
+    Tester consume.
     """
     programme = current_programme()
     result = run_recon(programme)
-    out_path = runtime.run_dir() / "sweep.json"
+    out_path = runtime.run_dir() / "attack_graph.json"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(result.model_dump_json(), encoding="utf-8")
-    return "sweep.json"
+    return "attack_graph.json"
 
 
 class _ReconSubdomainsArgs(BaseModel):
     """Explicit args_schema for the OSINT Recon Subdomains tool."""
 
-    sweep_path: str = Field(
-        default="sweep.json",
+    attack_graph_path: str = Field(
+        default="attack_graph.json",
         description=(
             "Relative path to the OA's in-progress sweep file. Defaults to"
-            " ``sweep.json`` (the canonical name written by Run Initial"
+            " ``attack_graph.json`` (the canonical name written by Run Initial"
             " Sweep). Override only when re-inspecting a sweep written"
             " under a different name."
         ),
@@ -95,25 +96,25 @@ class _ReconSubdomainsArgs(BaseModel):
 
 @cyber_tool("Recon Subdomains", args_schema=_ReconSubdomainsArgs)
 def recon_subdomains_tool(
-    sweep_path: str = "sweep.json", host_filter: str | None = None
-) -> list[Hostname]:
+    attack_graph_path: str = "attack_graph.json", host_filter: str | None = None
+) -> list[FQDN]:
     """
     Return the in-scope subdomains in the OA's draft sweep. ``host_filter`` is
     a case-insensitive substring (e.g. "api" returns every subdomain
     containing "api"). Use this to inspect the sweep before deciding which
     hosts to annotate. Each returned hostname is ready to pass straight
-    into ``Annotate Host``, ``Probe Hostnames``, or ``Detect Takeover
+    into ``Annotate Host``, ``Probe FQDNs``, or ``Detect Takeover
     Candidates`` - no further normalisation needed.
     """
-    return [Hostname(h) for h in recon_subdomains(sweep_path, host_filter=host_filter)]
+    return [FQDN(h) for h in recon_subdomains(attack_graph_path, host_filter=host_filter)]
 
 
 class _ReconEndpointsArgs(BaseModel):
     """Explicit args_schema for the OSINT Recon Endpoints tool."""
 
-    sweep_path: str = Field(
-        default="sweep.json",
-        description="Relative path to the OA's sweep file. Defaults to ``sweep.json``.",
+    attack_graph_path: str = Field(
+        default="attack_graph.json",
+        description="Relative path to the OA's sweep file. Defaults to ``attack_graph.json``.",
     )
     status: int | None = Field(
         default=None,
@@ -157,7 +158,7 @@ class _ReconEndpointsArgs(BaseModel):
 
 @cyber_tool("Recon Endpoints", args_schema=_ReconEndpointsArgs)
 def recon_endpoints_tool(
-    sweep_path: str = "sweep.json",
+    attack_graph_path: str = "attack_graph.json",
     status: int | None = None,
     tech: str | None = None,
     host_contains: str | None = None,
@@ -172,7 +173,7 @@ def recon_endpoints_tool(
     before annotating.
     """
     return recon_endpoints(
-        sweep_path,
+        attack_graph_path,
         status=status,
         tech=tech,
         host_contains=host_contains,
@@ -184,11 +185,11 @@ def recon_endpoints_tool(
 class _ReconOpenPortsArgs(BaseModel):
     """Explicit args_schema for the OSINT Recon Open Ports tool."""
 
-    sweep_path: str = Field(
-        default="sweep.json",
-        description="Relative path to the OA's sweep file. Defaults to ``sweep.json``.",
+    attack_graph_path: str = Field(
+        default="attack_graph.json",
+        description="Relative path to the OA's sweep file. Defaults to ``attack_graph.json``.",
     )
-    host: Hostname | None = Field(
+    host: FQDN | None = Field(
         default=None,
         description=(
             "Exact hostname to restrict the result to (no wildcards, no"
@@ -201,7 +202,7 @@ class _ReconOpenPortsArgs(BaseModel):
 
 @cyber_tool("Recon Open Ports", args_schema=_ReconOpenPortsArgs)
 def recon_open_ports_tool(
-    sweep_path: str = "sweep.json", host: Hostname | None = None
+    attack_graph_path: str = "attack_graph.json", host: FQDN | None = None
 ) -> OpenPortsMap:
     """
     Return the open-port map per host from the sweep. Passing a ``host``
@@ -209,13 +210,13 @@ def recon_open_ports_tool(
     services (Redis 6379, Elasticsearch 9200, Mongo 27017, etc.) that an
     annotation should call out.
     """
-    return OpenPortsMap(hosts=recon_open_ports(sweep_path, host=host))
+    return OpenPortsMap(hosts=recon_open_ports(attack_graph_path, host=host))
 
 
 class _CertTransparencyArgs(BaseModel):
     """Explicit args_schema for the Certificate Transparency Lookup tool."""
 
-    domain: TargetHostname = Field(
+    domain: TargetFQDN = Field(
         description=(
             "Apex domain to look up in crt.sh certificate transparency logs"
             " (e.g. 'example.com'). Validated as an RFC 1123 hostname"
@@ -227,11 +228,11 @@ class _CertTransparencyArgs(BaseModel):
 
 
 @cyber_tool("Certificate Transparency Lookup", args_schema=_CertTransparencyArgs)
-def cert_transparency_tool(domain: Hostname) -> list[str]:
+def cert_transparency_tool(domain: FQDN) -> list[str]:
     """
     Query crt.sh certificate transparency logs to discover subdomains not
     found by active enumeration. Returns deduplicated hostnames. Feed
-    newly discovered hosts to Probe Hostnames to determine which are live.
+    newly discovered hosts to Probe FQDNs to determine which are live.
     """
     return cert_transparency(domain)
 
@@ -239,23 +240,23 @@ def cert_transparency_tool(domain: Hostname) -> list[str]:
 class _HistoricalUrlsArgs(BaseModel):
     """Explicit args_schema for the Historical URL Discovery tool."""
 
-    domain: TargetHostname = Field(
+    domain: TargetFQDN = Field(
         description=(
             "Domain to query waybackurls for (apex or subdomain). Validated"
             " as an RFC 1123 hostname (URLs / ports / paths reject"
             " upstream). Returns historical URLs the Wayback Machine has"
             " archived. Many paths will be 404s today; feed candidates to"
-            " Probe Hostnames to confirm liveness before annotating."
+            " Probe FQDNs to confirm liveness before annotating."
         ),
     )
 
 
 @cyber_tool("Historical URL Discovery", args_schema=_HistoricalUrlsArgs)
-def historical_urls_tool(domain: Hostname) -> list[str]:
+def historical_urls_tool(domain: FQDN) -> list[str]:
     """
     Use waybackurls to find historical endpoints for a domain from the
     Wayback Machine. Surfaces paths that may no longer be linked but still
-    exist - candidates for Probe Hostnames.
+    exist - candidates for Probe FQDNs.
     """
     return historical_urls(domain)
 
@@ -290,12 +291,12 @@ def llm_detection_tool(endpoints: list[Endpoint]) -> list[LlmEndpoint]:
     return [LlmEndpoint.model_validate(ep.model_dump()) for ep in detect_llm_endpoints(parsed)]
 
 
-class _ProbeHostnamesArgs(BaseModel):
-    """Explicit args_schema for the Probe Hostnames tool."""
+class _ProbeFQDNsArgs(BaseModel):
+    """Explicit args_schema for the Probe FQDNs tool."""
 
-    hostnames: TargetHostnames = Field(
+    hostnames: TargetFQDNs = Field(
         description=(
-            "Hostnames to re-probe with httpx for liveness, status code,"
+            "FQDNs to re-probe with httpx for liveness, status code,"
             " and technology fingerprinting. Each entry is validated as an"
             " RFC 1123 hostname; URLs / ports / paths reject upstream"
             " (catches the common 'agent handed us a URL when we asked for"
@@ -309,8 +310,8 @@ class _ProbeHostnamesArgs(BaseModel):
     )
 
 
-@cyber_tool("Probe Hostnames", args_schema=_ProbeHostnamesArgs)
-def probe_hostnames_tool(hostnames: list[Hostname]) -> list[Endpoint]:
+@cyber_tool("Probe FQDNs", args_schema=_ProbeFQDNsArgs)
+def probe_hostnames_tool(hostnames: list[FQDN]) -> list[Endpoint]:
     """
     Re-probe a list of hostnames with httpx to confirm liveness, capture
     status codes, and fingerprint technologies. Use this on hostnames
@@ -332,9 +333,9 @@ def probe_hostnames_tool(hostnames: list[Hostname]) -> list[Endpoint]:
 class _DetectTakeoverCandidatesArgs(BaseModel):
     """Explicit args_schema for the Detect Takeover Candidates tool."""
 
-    hostnames: TargetHostnames = Field(
+    hostnames: TargetFQDNs = Field(
         description=(
-            "Hostnames to resolve via dnsx and flag for subdomain takeover."
+            "FQDNs to resolve via dnsx and flag for subdomain takeover."
             " Each entry is validated as an RFC 1123 hostname; URLs / ports"
             " / paths reject upstream. A candidate fires when the CNAME"
             " points to a known-vulnerable provider (AWS S3, Heroku,"
@@ -348,7 +349,7 @@ class _DetectTakeoverCandidatesArgs(BaseModel):
 
 @cyber_tool("Detect Takeover Candidates", args_schema=_DetectTakeoverCandidatesArgs)
 def detect_takeover_candidates_tool(
-    hostnames: list[Hostname],
+    hostnames: list[FQDN],
 ) -> list[TakeoverCandidate]:
     """
     Resolve each hostname via dnsx and flag subdomain-takeover candidates.

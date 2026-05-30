@@ -1,19 +1,19 @@
-"""
-tests/test_squad_penetration_tester.py - exercise the @tool wrappers on
-the Penetration Tester.
+"""tests/squad/penetration_tester/test_cloud_wrappers.py - the typed cloud
+wrappers on the Penetration Tester.
 
-Roughly 55 tools live on this agent; the bodies are near-identical thin
-wrappers, so the per-wrapper bespoke tests at the top cover the unique
-shapes (probes that mock specific helpers) and the parametrize tables
-further down (``TestHostnameWrapperPassThrough`` and
-``TestEndpointWrapperPassThrough``) cover every typed cloud wrapper for
-the wrapper-level scope-filter + helper-forwarding contract at once.
-The underlying helpers are exercised in their own dedicated test files.
+Roughly two dozen near-identical cloud wrappers (S3 / Azure / databases /
+panels / dashboards / service-discovery) each take a typed target and
+scope-filter at the wrapper before forwarding to ``check_X``. Rather than
+a bespoke test per wrapper, the parametrize tables below cover the
+wrapper-level scope-filter + helper-forwarding contract for all of them at
+once, split by body shape (iterating vs list-passing for FQDN inputs;
+endpoint-passing for the rest). The closed-world checks refuse a new cloud
+wrapper landing without being added to its table. The bespoke probe /
+recon / findings wrapper tests live in ``test_tools.py``.
 """
 
 from __future__ import annotations
 
-import json
 from unittest.mock import patch
 
 import pytest
@@ -21,141 +21,8 @@ import pytest
 pytestmark = pytest.mark.unit
 
 
-class TestPenetrationTesterTools:
-    def test_nuclei_scan_tool(self, programme_in_workspace, endpoint, raw_finding_low) -> None:
-        from squad.penetration_tester import nuclei_scan_tool
-
-        with patch(
-            "squad.penetration_tester.probes.external.run_nuclei",
-            return_value=[raw_finding_low],
-        ):
-            result = nuclei_scan_tool.func([endpoint.model_dump(mode="json")], ["wordpress"])
-
-        assert result == [raw_finding_low]
-
-    def test_sqlmap_tool(self, programme_in_workspace, endpoint, raw_finding_low) -> None:
-        from squad.penetration_tester import sqlmap_tool
-
-        with patch(
-            "squad.penetration_tester.probes.injection.run_sqlmap",
-            return_value=[raw_finding_low],
-        ):
-            result = sqlmap_tool.func([endpoint.model_dump(mode="json")])
-
-        assert result == [raw_finding_low]
-
-    def test_cookie_check_tool(self, recon_result, raw_finding_low, run_dir) -> None:
-        from squad.penetration_tester import cookie_check_tool
-
-        (run_dir / "recon.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
-        with patch(
-            "squad.penetration_tester.probes.headers.check_cookies",
-            return_value=[raw_finding_low],
-        ):
-            result = cookie_check_tool.func("recon.json")
-
-        assert result == [raw_finding_low]
-
-    def test_cors_check_tool(self, recon_result, raw_finding_low, run_dir) -> None:
-        from squad.penetration_tester import cors_check_tool
-
-        (run_dir / "recon.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
-        with patch(
-            "squad.penetration_tester.probes.headers.check_cors_misconfiguration",
-            return_value=[raw_finding_low],
-        ):
-            result = cors_check_tool.func("recon.json")
-
-        assert result == [raw_finding_low]
-
-    def test_csrf_check_tool(self, recon_result, raw_finding_low, run_dir) -> None:
-        from squad.penetration_tester import csrf_check_tool
-
-        (run_dir / "recon.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
-        with patch(
-            "squad.penetration_tester.probes.headers.check_csrf",
-            return_value=[raw_finding_low],
-        ):
-            result = csrf_check_tool.func("recon.json")
-
-        assert result == [raw_finding_low]
-
-    def test_ssrf_probe_tool(self, programme_in_workspace, endpoint, raw_finding_low) -> None:
-        from squad.penetration_tester import ssrf_probe_tool
-
-        with patch(
-            "squad.penetration_tester.probes.network.check_ssrf",
-            return_value=[raw_finding_low],
-        ):
-            result = ssrf_probe_tool.func([endpoint.model_dump(mode="json")], None)
-
-        assert result == [raw_finding_low]
-
-    def test_header_injection_tool(self, recon_result, raw_finding_low, run_dir) -> None:
-        from squad.penetration_tester import header_injection_tool
-
-        (run_dir / "recon.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
-        with patch(
-            "squad.penetration_tester.probes.headers.check_header_injection",
-            return_value=[raw_finding_low],
-        ):
-            result = header_injection_tool.func("recon.json")
-
-        assert result == [raw_finding_low]
-
-    def test_host_header_tool(self, recon_result, raw_finding_low, run_dir) -> None:
-        from squad.penetration_tester import host_header_tool
-
-        (run_dir / "recon.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
-        with patch(
-            "squad.penetration_tester.probes.headers.check_host_headers",
-            return_value=[raw_finding_low],
-        ):
-            result = host_header_tool.func("recon.json")
-
-        assert result == [raw_finding_low]
-
-    def test_save_findings_tool(self, raw_finding_low, run_dir) -> None:
-        from models import RawFinding
-        from squad.penetration_tester import save_findings_tool
-
-        result = save_findings_tool.func([raw_finding_low.model_dump(mode="json")])
-
-        assert result == "findings.json"
-        persisted = json.loads((run_dir / "findings.json").read_text(encoding="utf-8"))
-        assert [RawFinding.model_validate(f) for f in persisted] == [raw_finding_low]
-
-    def test_recon_subdomains_tool(self, recon_result, run_dir) -> None:
-        from squad.penetration_tester import recon_subdomains_tool
-
-        (run_dir / "recon.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
-        result = recon_subdomains_tool.func("recon.json")
-        assert result == recon_result.subdomains
-
-    def test_recon_endpoints_tool(self, recon_result, run_dir) -> None:
-        from squad.penetration_tester import recon_endpoints_tool
-
-        (run_dir / "recon.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
-        result = recon_endpoints_tool.func("recon.json", status=200)
-        from models import EndpointPage
-
-        assert isinstance(result, EndpointPage)
-        assert result.total == 1
-        assert result.endpoints[0].url == recon_result.endpoints[0].url
-
-    def test_recon_open_ports_tool(self, recon_result, run_dir) -> None:
-        from squad.penetration_tester import recon_open_ports_tool
-
-        (run_dir / "recon.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
-        from models import OpenPortsMap
-
-        result = recon_open_ports_tool.func("recon.json")
-        assert isinstance(result, OpenPortsMap)
-        assert result.hosts == recon_result.open_ports
-
-
-# Hostname-passing cloud wrappers split by body shape: each takes
-# ``list[Hostname]`` and scope-filters at the wrapper, but the body
+# FQDN-passing cloud wrappers split by body shape: each takes
+# ``list[FQDN]`` and scope-filters at the wrapper, but the body
 # differs in how it forwards to ``check_X``.
 #
 # - Iterating: the databases call ``check_X(host)`` per host inside a
@@ -236,13 +103,13 @@ def test_hostname_wrapper_tables_cover_every_hostname_taking_schema() -> None:
         for var_name, _ in _HOSTNAME_PASSING_ITERATING_WRAPPERS + _HOSTNAME_PASSING_LIST_WRAPPERS
     }
     assert hostname_schemas == table_display_names, (
-        "Hostname-passing wrapper tables drifted from MEMBER.schemas: "
+        "FQDN-passing wrapper tables drifted from MEMBER.schemas: "
         f"in schemas but not tables = {hostname_schemas - table_display_names}; "
         f"in tables but not schemas = {table_display_names - hostname_schemas}"
     )
 
 
-class TestHostnameIteratingWrappers:
+class TestFQDNIteratingWrappers:
     """Databases iterate the supplied hostnames and call
     ``check_X(host)`` per host. The wrapper-level scope_filter drops
     OOS hosts before the loop body runs, so on an empty filtered list
@@ -301,7 +168,7 @@ class TestHostnameIteratingWrappers:
         mcheck.assert_not_called()
 
 
-class TestHostnameListPassingWrappers:
+class TestFQDNListPassingWrappers:
     """Panels / dashboards / consul / storage call ``check_X(hostnames)``
     once with the filtered list. When everything filters out, the
     wrapper calls ``check_X([])`` - the helper handles empty internally
@@ -372,7 +239,7 @@ def test_endpoint_driven_cloud_table_covers_every_cloud_endpoint_wrapper() -> No
     Probe wrappers (Nuclei, SQLMap, SSRF, ...) also take ``endpoints``,
     so the cloud-only subset is selected by ``func.__module__`` starting
     with ``squad.penetration_tester.cloud.``. The split is deliberate -
-    probe wrappers have their own bespoke tests at the top of this file.
+    probe wrappers have their own bespoke tests in ``test_tools.py``.
     """
     import squad.penetration_tester as pt_module
 

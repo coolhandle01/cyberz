@@ -11,10 +11,10 @@ the typed artefact downstream agents (VR research, PT probes) consume.
 from pydantic import BaseModel, Field
 
 from models import (
+    FQDN,
     CWEEntry,
     HostAnnotation,
     HostInsight,
-    Hostname,
     HostPriority,
     HostRole,
     OWASPEntry,
@@ -24,7 +24,7 @@ from squad import cyber_tool
 from squad.workspace_tools import current_programme
 from tools.cwe_data import lookup as cwe_lookup
 from tools.owasp_data import lookup as owasp_lookup
-from tools.recon.scope import TargetHostname
+from tools.recon.scope import TargetFQDN
 from tools.recon_insights import (
     finalise_recon,
     save_insight,
@@ -32,10 +32,10 @@ from tools.recon_insights import (
     validate_insight,
 )
 from tools.recon_insights import (
-    load_insights as load_insights_impl,
+    load_attack_graph as load_attack_graph_impl,
 )
 from tools.recon_insights import (
-    load_sweep as load_sweep_impl,
+    load_insights as load_insights_impl,
 )
 
 
@@ -72,8 +72,8 @@ class _OsintLookupOwaspArgs(BaseModel):
         description=(
             "Free-text query against the OWASP Cheat Sheet index. Matches"
             " on cheatsheet title and topic (case-insensitive substring)."
-            " Use to surface guidance the downstream VR can reason against"
-            " when building the attack plan."
+            " Use to surface guidance the Vulnerability Researcher can"
+            " reason against when building the attack plan."
         ),
     )
 
@@ -82,7 +82,7 @@ class _OsintLookupOwaspArgs(BaseModel):
 def lookup_owasp_tool(query: str) -> list[OWASPEntry]:
     """
     Find OWASP Cheat Sheet entries for a vuln class or topic - hint for
-    the downstream VR's attack-plan reasoning. Returns each match's title,
+    the Vulnerability Researcher's attack-plan reasoning. Returns each match's title,
     key_principles, and the canonical cheatsheetseries.owasp.org URL.
     """
     return list(owasp_lookup(query))
@@ -91,18 +91,18 @@ def lookup_owasp_tool(query: str) -> list[OWASPEntry]:
 class _AnnotateHostArgs(BaseModel):
     """Explicit args_schema for the Annotate Host tool."""
 
-    hostname: TargetHostname = Field(
+    hostname: TargetFQDN = Field(
         description=(
-            "Hostname to annotate. Must already be in the sweep, or have"
+            "FQDN to annotate. Must already be in the sweep, or have"
             " been surfaced by Certificate Transparency / Historical URL"
-            " Discovery / Probe Hostnames. Validated as an RFC 1123"
+            " Discovery / Probe FQDNs. Validated as an RFC 1123"
             " hostname (URLs / ports / paths reject upstream)."
         ),
     )
     role: HostRole = Field(
         description=(
-            "Functional role this host plays. Drives downstream"
-            " prioritisation - admin / auth hosts attract more probe"
+            "Functional role this host plays. Drives the Penetration"
+            " Tester's prioritisation - admin / auth hosts attract more probe"
             " budget than static / cdn ones. The schema enforces the"
             " enum upstream so an unknown role rejects before the"
             " wrapper body runs."
@@ -133,27 +133,27 @@ class _AnnotateHostArgs(BaseModel):
             " of what was seen, not an alternate inventory."
         ),
     )
-    sweep_path: str = Field(
-        default="sweep.json",
-        description="Relative path to the OA's sweep file. Defaults to ``sweep.json``.",
+    attack_graph_path: str = Field(
+        default="attack_graph.json",
+        description="Relative path to the OA's sweep file. Defaults to ``attack_graph.json``.",
     )
 
 
 @cyber_tool("Annotate Host", args_schema=_AnnotateHostArgs)
 def annotate_host_tool(
-    hostname: Hostname,
+    hostname: FQDN,
     role: HostRole,
     priority: HostPriority,
     notes: str,
     detected_tech: list[str] | None = None,
-    sweep_path: str = "sweep.json",
+    attack_graph_path: str = "attack_graph.json",
 ) -> HostAnnotation:
     """
     Author one HostInsight for a single hostname and run the quality gate.
 
     Inputs:
       - hostname: a hostname from the sweep, or one newly discovered via
-        Certificate Transparency / Historical URL Discovery / Probe Hostnames
+        Certificate Transparency / Historical URL Discovery / Probe FQDNs
       - role: one of admin, api, auth, app, cdn, static, mail, infra, dev,
         unknown
       - priority: one of high, medium, low, skip - the curation signal the
@@ -168,7 +168,7 @@ def annotate_host_tool(
     InsightValidationReport. Re-run with the issues addressed when
     validation.ok is false.
     """
-    sweep = load_sweep_impl(sweep_path)
+    sweep = load_attack_graph_impl(attack_graph_path)
     programme = current_programme()
 
     insight = HostInsight(
@@ -188,11 +188,11 @@ def annotate_host_tool(
 class _UncoveredHostsArgs(BaseModel):
     """Explicit args_schema for the Uncovered Hosts tool."""
 
-    sweep_path: str = Field(
-        default="sweep.json",
+    attack_graph_path: str = Field(
+        default="attack_graph.json",
         description=(
             "Relative path to the OA's sweep file. Defaults to"
-            " ``sweep.json``. Returns interesting-status hostnames (200,"
+            " ``attack_graph.json``. Returns interesting-status hostnames (200,"
             " 301, 302, 401, 403, ...) in the sweep that have no insight"
             " yet - use as a checklist before Finalise Recon."
         ),
@@ -200,14 +200,14 @@ class _UncoveredHostsArgs(BaseModel):
 
 
 @cyber_tool("Uncovered Hosts", args_schema=_UncoveredHostsArgs)
-def uncovered_hosts_tool(sweep_path: str = "sweep.json") -> list[str]:
+def uncovered_hosts_tool(attack_graph_path: str = "attack_graph.json") -> list[str]:
     """
     Return interesting-status hostnames in the sweep (200, 301, 302, 401,
     403, ...) that have no insight yet. Use as a checklist before calling
     Finalise Recon - hosts you choose to leave uncovered should at least be
     a deliberate decision.
     """
-    sweep = load_sweep_impl(sweep_path)
+    sweep = load_attack_graph_impl(attack_graph_path)
     insights = load_insights_impl()
     return uncovered_interesting_hosts(sweep, insights)
 
@@ -215,15 +215,15 @@ def uncovered_hosts_tool(sweep_path: str = "sweep.json") -> list[str]:
 class _FinaliseReconArgs(BaseModel):
     """Explicit args_schema for the Finalise Recon tool."""
 
-    sweep_path: str = Field(
-        default="sweep.json",
-        description="Relative path to the OA's sweep file. Defaults to ``sweep.json``.",
+    attack_graph_path: str = Field(
+        default="attack_graph.json",
+        description="Relative path to the OA's sweep file. Defaults to ``attack_graph.json``.",
     )
 
 
 @cyber_tool("Finalise Recon", args_schema=_FinaliseReconArgs)
 def finalise_recon_tool(
-    sweep_path: str = "sweep.json",
+    attack_graph_path: str = "attack_graph.json",
 ) -> str:
     """
     Consolidate the sweep + every authored HostInsight into recon.json for
@@ -234,7 +234,7 @@ def finalise_recon_tool(
     """
     programme = current_programme()
     try:
-        path = finalise_recon(programme, sweep_filename=sweep_path)
+        path = finalise_recon(programme, attack_graph_filename=attack_graph_path)
     except ReconFinalisationError as exc:
         raise ValueError(str(exc)) from exc
     return path.name
