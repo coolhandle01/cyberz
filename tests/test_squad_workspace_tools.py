@@ -91,7 +91,7 @@ class TestCurrentProgramme:
             current_programme()
 
 
-# Scope-guard behavioural coverage lives in ``tests/test_recon_tools.py``
+# Scope-guard behavioural coverage lives in ``tests/tools/recon/test_scope.py``
 # ``TestInScopeTypedAliases`` - it exercises the ``TargetFQDNs`` /
 # ``TargetEndpoints`` / ``TargetFQDN`` / ``TargetEndpoint`` typed
 # aliases that are the scope guard. ``cyber_tool`` itself is a thin

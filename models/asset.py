@@ -76,6 +76,13 @@ class Endpoint(BaseModel):
     # OA's curation pass can promote to net-new in-scope hosts when
     # the SAN matches the programme's apex.
     tls_sans: list[FQDN] = Field(default_factory=list)
+    # The leaf cert observed on this endpoint, as the OAM ``TLSCertificate``
+    # asset shape (issuer / validity / fingerprint / full SAN list). Where
+    # ``tls_sans`` is the FQDN-typed discovery side-channel (wildcards
+    # dropped), this carries the cert faithfully. ``None`` outside
+    # ``WEB_INVENTORY`` / when no cert was grabbed. ``run_recon`` lifts
+    # these off the endpoints into ``AttackGraph.tls_certificates``.
+    tls_certificate: TLSCertificate | None = None
 
 
 class EndpointPage(BaseModel):
@@ -169,6 +176,27 @@ class HostInsight(BaseModel):
     annotated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
+class HostScore(BaseModel):
+    """The OSINT Analyst's scoring of one host - the score/priority half of
+    ``HostInsight``, split out from the prose.
+
+    Pure machine-actionable curation: WHERE a host sits in the attack
+    surface (``role``) and how hard downstream agents should lean on it
+    (``priority``). The WHY - the agent's prose rationale - lives beside it
+    as ``notes.md`` rather than shoehorned into this data shape, so the PT
+    can filter on ``priority`` / ``role`` without parsing free text.
+
+    Materialised per host at ``hosts/<fqdn>/host.json`` - the typed header
+    of that host's OAM-asset directory. Maps toward amass's FQDN asset,
+    with role / priority as ``SimpleProperty`` values when #45 lands.
+    """
+
+    hostname: FQDN
+    role: HostRole
+    priority: HostPriority
+    annotated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
 class OpenPortsMap(BaseModel):
     """The recon-derived port map keyed by host.
 
@@ -178,6 +206,121 @@ class OpenPortsMap(BaseModel):
     """
 
     hosts: dict[FQDN, list[int]] = Field(default_factory=dict)
+
+
+class Service(BaseModel):
+    """The cybersquad shape that maps to amass's ``Service`` asset.
+
+    One open network service on a single host:port, as the OSINT
+    Analyst's deep-scan pass (a focused nmap ``-sC -sV`` against a host's
+    known-open ports) observes it. The OAM-vernacular counterpart to the
+    scanner-internal ``NmapService`` (``models/scanner.py``): where
+    ``NmapService`` mirrors nmap's raw ``<port>`` / ``<service>`` XML,
+    ``Service`` is the asset-graph shape the OA emits for downstream
+    agents - the rich sibling of ``OpenPortsMap``, which carries bare
+    port numbers only.
+
+    When amass lands (#45), each ``Service`` becomes one amass
+    ``Service`` asset node related to its host's ``FQDN`` / ``IPAddress``
+    asset:
+
+    * ``host`` + ``port`` -> the Service asset's identity and the
+      ``port`` edge from the host asset.
+    * ``name`` / ``product`` / ``version`` / ``extra_info`` ->
+      ``SimpleProperty`` values on the Service node (the service-banner
+      detail ``-sV`` recovered).
+    * ``technologies`` -> the same ``SimpleProperty`` / ``VulnProperty``
+      group ``Technology`` already projects (see ``models/technology.py``),
+      attached to the Service rather than the host.
+
+    OAM is a *presence* graph: a ``Service`` exists in the model only
+    when the scan actually observed an open service. A host that is down,
+    or alive with nothing listening, contributes zero ``Service`` nodes -
+    absence carries "nothing here", so there is deliberately no
+    down / filtered / closed state on this shape (that lives in the
+    scanner layer's ``NmapService.state``, below the OA boundary).
+    """
+
+    host: FQDN | IPAddress
+    port: int = Field(ge=1, le=65535)
+    protocol: str = Field(max_length=8)  # "tcp" / "udp"
+
+    # Tool-captured from nmap's service-version (-sV) output, translated
+    # from the scanner layer's ``NmapService`` at the OA tool boundary.
+    # Defence: each field carries the same boundary length cap as its
+    # ``NmapService`` source so a malformed banner cannot smuggle a large
+    # injection across the OA -> PT handoff; the translation also
+    # normalises tech detail into the typed ``technologies`` rows below.
+    name: str | None = Field(default=None, max_length=64)  # nmap "service" field
+    product: str | None = Field(default=None, max_length=128)
+    version: str | None = Field(default=None, max_length=64)
+    extra_info: str | None = Field(default=None, max_length=255)
+
+    # Typed tech rows derived from the service banner via the recon-side
+    # ``coerce_technologies`` coercer - the per-service slice of what
+    # ``NmapHostResult.detected_technologies`` carries host-wide.
+    technologies: list[Technology] = Field(default_factory=list)
+
+
+class TLSCertificate(BaseModel):
+    """The cybersquad shape that maps to amass's ``TLSCertificate`` asset.
+
+    One X.509 leaf certificate as observed on a host's HTTPS service -
+    what httpx's ``-tls-grab`` and testssl.sh surface during the OSINT
+    Analyst's sweep. Today only the SAN list is harvested (into
+    ``Endpoint.tls_sans``, for in-scope-FQDN discovery) and posture
+    problems become ``RawFinding`` rows; the cert itself is never
+    persisted as an asset. This model is that asset node.
+
+    Carries the cert's *identity and properties*, not its posture:
+    subject / issuer / serial / fingerprint / validity window / SANs.
+    Posture judgements (self-signed, expired, weak cipher) stay in the
+    testssl ``RawFinding`` path - this shape answers "what cert is
+    this", the findings answer "what is wrong with it".
+
+    When amass lands (#45), each ``TLSCertificate`` becomes one amass
+    ``TLSCertificate`` asset node:
+
+    * ``fingerprint_sha256`` / ``serial`` -> the node's stable identity
+      and the natural join key for a Censys / Shodan ``cert hash`` pivot.
+    * ``subject_common_name`` / ``issuer`` / ``not_before`` /
+      ``not_after`` -> ``SimpleProperty`` values on the node.
+    * ``subject_alt_names`` -> ``SAN_FOR`` edges to the ``FQDN`` assets
+      the cert vouches for; a multi-SAN cert is the densest single-asset
+      FQDN-discovery surface recon produces.
+    * ``host`` -> the edge back to the ``FQDN`` / ``IPAddress`` the cert
+      was observed on (provenance), mirroring ``Service.host``.
+
+    All fields beyond ``host`` default to None / empty - a cert is
+    useful with whatever subset the grab recovered.
+    """
+
+    host: FQDN | IPAddress
+
+    # Tool-captured from the leaf cert the *target* presents - i.e.
+    # attacker-controlled text. Defence on every field below: a boundary
+    # length cap (the cert owner picks these strings, so they are not
+    # trustworthy); none are re-issued to an LLM as instruction context,
+    # they flow to the asset graph and the human-facing report only.
+    subject_common_name: str | None = Field(default=None, max_length=255)
+    issuer: str | None = Field(default=None, max_length=255)  # issuing CA CN / org
+    serial: str | None = Field(default=None, max_length=128)  # hex serial number
+    fingerprint_sha256: str | None = Field(default=None, max_length=128)
+
+    not_before: datetime | None = None  # validity window start
+    not_after: datetime | None = None  # validity window end (expiry signal)
+
+    # Subject Alternative Names exactly as the cert lists them. Bare
+    # ``list[str]`` (not ``list[FQDN]`` like ``Endpoint.tls_sans``) on
+    # purpose: a cert's SANs routinely include wildcards (``*.example.com``)
+    # and occasionally ``iPAddress`` entries, which the FQDN validator
+    # rejects - and the cert asset must represent the SANs faithfully
+    # rather than drop the non-RFC-1123 ones the way the discovery-side
+    # ``Endpoint.tls_sans`` does. Same defence posture as
+    # ``Endpoint.technologies``: raw external strings, filtered through
+    # ``filter_in_scope`` before any are promoted to in-scope hosts, and
+    # never fed back to an LLM as instructions.
+    subject_alt_names: list[str] = Field(default_factory=list)
 
 
 class LlmEndpoint(BaseModel):
@@ -231,4 +374,11 @@ class AttackGraph(BaseModel):
     # amass IPAddress asset + its hanging SimpleProperty values. Empty when
     # the resolve / enrichment pass did not run.
     ip_assets: list[IpAsset] = Field(default_factory=list)
+    # Leaf TLS certificates observed during the httpx WEB_INVENTORY pass,
+    # lifted off the endpoints by ``run_recon`` - one per HTTPS endpoint
+    # that presented a cert. The cybersquad equivalent of amass's
+    # TLSCertificate asset nodes; the per-host copy lives at
+    # ``hosts/<fqdn>/tls.json``. Populated OA-side, read by the PT/VR
+    # (additive: empty when the WEB_INVENTORY pass did not run).
+    tls_certificates: list[TLSCertificate] = Field(default_factory=list)
     completed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

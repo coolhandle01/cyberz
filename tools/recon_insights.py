@@ -35,7 +35,7 @@ import re
 from pathlib import Path
 
 import runtime
-from models import AttackGraph, HostInsight, HostPriority
+from models import AttackGraph, HostInsight, HostPriority, HostScore, RawFinding
 from models.h1 import Programme
 
 # The insight shapes (HostAnnotation, InsightValidationIssue,
@@ -49,18 +49,35 @@ from models.insight import (
     InsightValidationReport,
     ReconFinalisationError,
 )
-from models.primitives import FQDN
 from tools.recon.scope import filter_in_scope
 
-_HOSTS_SUBDIR = "hosts"
+# Per-host workspace I/O moved to tools.recon_host_store. Imported here
+# both for finalise's own use and re-exported (via __all__) so existing
+# ``from tools.recon_insights import save_insight`` consumers (the
+# Annotate Host tool) keep working unchanged.
+from tools.recon_host_store import (
+    findings_path,
+    host_dir,
+    host_score_path,
+    insight_path,
+    load_host_findings,
+    load_host_ports,
+    load_host_scores,
+    load_insights,
+    load_tls_certificates,
+    notes_path,
+    ports_path,
+    save_host_findings,
+    save_host_notes,
+    save_host_ports,
+    save_host_score,
+    save_insight,
+    save_tls_certificate,
+    tls_path,
+)
+
 _ATTACK_GRAPH_FILENAME = "attack_graph.json"
 _RECON_FILENAME = "recon.json"
-
-# FQDNs must be made filesystem-safe before persisting under
-# ``hosts/<fqdn>/``. The replacement is reversible because we never
-# reverse it - the persisted artefacts carry the original hostname in
-# their body.
-_HOSTNAME_SANITISE = re.compile(r"[^A-Za-z0-9.\-_]")
 
 
 # Validation
@@ -199,65 +216,6 @@ def _strip_version(tech: str) -> str:
     return re.sub(r"\s*[0-9][\w.\-]*$", "", tech).strip().lower()
 
 
-# Persistence
-
-
-def _hosts_dir() -> Path:
-    return runtime.run_dir() / _HOSTS_SUBDIR
-
-
-def host_dir(hostname: FQDN) -> Path:
-    """Return the per-host evidence directory under ``<run_dir>/hosts/``.
-
-    Each in-scope FQDN gets its own directory; ``insight_path`` writes
-    ``insight.json`` here, and future evidence-writing tools (httpx
-    screenshots, nmap output, response bodies) hang their per-host
-    artefacts off the same dir. The layout maps cleanly onto an amass
-    FQDN asset's worth of input: one directory = one node's evidence
-    trail.
-
-    Sanitises the hostname for filesystem use. The replacement is
-    reversible because we never reverse it - the persisted artefacts
-    inside carry the original hostname in their body.
-    """
-    safe = _HOSTNAME_SANITISE.sub("_", hostname.strip().lower())
-    if not safe or safe.strip("_") == "":
-        raise ValueError("hostname is empty after sanitisation")
-    return _hosts_dir() / safe
-
-
-def insight_path(hostname: FQDN) -> Path:
-    """Return the on-disk path of the insight for ``hostname``.
-
-    The insight lives at ``<host_dir>/insight.json`` - one file inside
-    the host's per-FQDN directory. Sibling files (screenshots, scan
-    output, response bodies) land alongside as recon tools write them.
-    """
-    return host_dir(hostname) / "insight.json"
-
-
-def save_insight(insight: HostInsight) -> Path:
-    """Persist an insight to ``<run_dir>/hosts/<host>/insight.json``."""
-    path = insight_path(insight.hostname)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(insight.model_dump_json(indent=2), encoding="utf-8")
-    return path
-
-
-def load_insights() -> list[HostInsight]:
-    """Load every insight in the current run, ordered by hostname."""
-    dir_ = _hosts_dir()
-    if not dir_.is_dir():
-        return []
-    return sorted(
-        (
-            HostInsight.model_validate_json(p.read_text(encoding="utf-8"))
-            for p in dir_.glob("*/insight.json")
-        ),
-        key=lambda i: i.hostname,
-    )
-
-
 def load_attack_graph(attack_graph_filename: str = _ATTACK_GRAPH_FILENAME) -> AttackGraph:
     """Load the OA's internal sweep artefact."""
     path = runtime.run_dir() / attack_graph_filename
@@ -272,6 +230,55 @@ def load_attack_graph(attack_graph_filename: str = _ATTACK_GRAPH_FILENAME) -> At
 # 3xx redirects often hide gates, 401/403 confirm an auth-gated surface
 # worth probing. Pure 404/500 we let slide.
 _INTERESTING_STATUSES = {200, 201, 204, 301, 302, 307, 308, 401, 403}
+
+
+def _finding_host(target: str) -> str:
+    """Best-effort hostname from a ``RawFinding`` target (URL or bare host)."""
+    from urllib.parse import urlparse
+
+    candidate = target if "://" in target else f"//{target}"
+    return (urlparse(candidate).hostname or target).strip().lower()
+
+
+def _materialise_host_dirs(sweep: AttackGraph, insights: list[HostInsight]) -> None:
+    """Write each host's OAM-node directory under ``hosts/<fqdn>/``.
+
+    The OA's per-node handoff, split into typed facets so #45 can swap each
+    JSON write for an amass insert one day:
+
+    * ``host.json`` / ``notes.md`` - the curation: the typed score+priority,
+      and the prose "look here, because ..." lifted out of the data shape.
+    * ``ports.json`` / ``findings.json`` / ``tls.json`` - the recon facts,
+      read back off the sweep.
+
+    Dormant facets stay unwritten (empty ports, no certs) rather than
+    littering empty files.
+    """
+    for insight in insights:
+        save_host_score(
+            HostScore(
+                hostname=insight.hostname,
+                role=insight.role,
+                priority=insight.priority,
+                annotated_at=insight.annotated_at,
+            )
+        )
+        save_host_notes(insight.hostname, insight.notes)
+
+    for hostname, ports in sweep.open_ports.items():
+        if ports:
+            save_host_ports(hostname, ports)
+
+    findings_by_host: dict[str, list[RawFinding]] = {}
+    for finding in sweep.passive_findings:
+        host = _finding_host(finding.target)
+        if host:
+            findings_by_host.setdefault(host, []).append(finding)
+    for hostname, host_findings in findings_by_host.items():
+        save_host_findings(hostname, host_findings)
+
+    for certificate in sweep.tls_certificates:
+        save_tls_certificate(certificate)
 
 
 def finalise_recon(
@@ -327,6 +334,8 @@ def finalise_recon(
             "needs at least one focus target on a non-empty surface"
         )
 
+    _materialise_host_dirs(sweep, insights)
+
     final = AttackGraph(
         programme=sweep.programme,
         subdomains=sweep.subdomains,
@@ -335,6 +344,11 @@ def finalise_recon(
         technologies=sweep.technologies,
         passive_findings=sweep.passive_findings,
         network_hops=sweep.network_hops,
+        # Carry the sweep's enrichment forward - finalise previously dropped
+        # ip_assets (and would drop tls_certificates), losing it from the
+        # PT-facing recon.json even though the sweep gathered it.
+        ip_assets=sweep.ip_assets,
+        tls_certificates=sweep.tls_certificates,
         host_insights=insights,
         notes=_build_notes(sweep, insights),
     )
@@ -381,11 +395,25 @@ __all__ = [
     "InsightValidationReport",
     "ReconFinalisationError",
     "finalise_recon",
+    "findings_path",
     "host_dir",
+    "host_score_path",
     "insight_path",
     "load_attack_graph",
+    "load_host_findings",
+    "load_host_ports",
+    "load_host_scores",
     "load_insights",
+    "load_tls_certificates",
+    "notes_path",
+    "ports_path",
+    "save_host_findings",
+    "save_host_notes",
+    "save_host_ports",
+    "save_host_score",
     "save_insight",
+    "save_tls_certificate",
+    "tls_path",
     "uncovered_interesting_hosts",
     "validate_insight",
 ]

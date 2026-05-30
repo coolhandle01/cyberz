@@ -1,11 +1,4 @@
-"""tests/tools/recon/test_httpx.py - unit tests for the rich httpx surface.
-
-Covers ``httpx_scan`` (mode-driven flag composition, JSON parsing,
-mode-dependent Endpoint field population, defensive degradation, the
-evidence-dir toggles ``with_screenshots`` / ``with_responses``) + the
-legacy ``probe_endpoints`` shim. Subprocess invocations are mocked;
-no live httpx queries.
-"""
+"""tests/tools/recon/httpx/test_scanner.py - unit tests for tools/recon/httpx/scanner.py."""
 
 from __future__ import annotations
 
@@ -16,8 +9,7 @@ import pytest
 
 from models import Endpoint
 from models.scanner import HttpxMode, HttpxScanResult
-from tools.recon.httpx import httpx_scan, probe_endpoints
-from tools.recon.httpx.flags import _assemble_flags
+from tools.recon.httpx import httpx_scan
 
 pytestmark = pytest.mark.unit
 
@@ -25,113 +17,6 @@ pytestmark = pytest.mark.unit
 def _ndjson_line(**kwargs) -> str:
     """Build one httpx NDJSON output line from the kwargs as fields."""
     return json.dumps(kwargs)
-
-
-class TestAssembleFlags:
-    def test_live_minimal(self):
-        flags = _assemble_flags(HttpxMode.LIVE)
-        assert "-silent" in flags
-        assert "-json" in flags
-        assert "-status-code" in flags
-        # The tech-detect-bundle flags do NOT appear at LIVE mode.
-        assert "-tech-detect" not in flags
-        assert "-favicon" not in flags
-        assert "-tls-grab" not in flags
-
-    def test_tech_detect_adds_signal_flags(self):
-        flags = _assemble_flags(HttpxMode.TECH_DETECT)
-        assert "-tech-detect" in flags
-        assert "-server" in flags
-        assert "-title" in flags
-        # The web-inventory-only flags stay absent.
-        assert "-favicon" not in flags
-        assert "-tls-grab" not in flags
-
-    def test_web_inventory_adds_favicon_and_tls(self):
-        flags = _assemble_flags(HttpxMode.WEB_INVENTORY)
-        # Everything tech-detect has, plus the heavy flags.
-        assert "-tech-detect" in flags
-        assert "-favicon" in flags
-        assert "-tls-grab" in flags
-        assert "-content-type" in flags
-        assert "-method" in flags
-
-    def test_timeout_always_present(self):
-        for mode in HttpxMode:
-            flags = _assemble_flags(mode)
-            assert "-timeout" in flags
-
-    def test_rate_retries_threads_from_scan_config(self, monkeypatch):
-        """httpx picks ``-rate-limit`` / ``-retries`` / ``-threads`` off
-        ``config.scan`` so the operator's stealth dial flows through.
-
-        Patches the singleton via the same import alias ``flags.py``
-        binds. ``TestAdaptiveSleep`` reloads ``config``, leaving older
-        modules referencing the pre-reload singleton; targeting the
-        consumer's alias makes the patch robust to that.
-        """
-        from tools.recon.httpx import flags as httpx_flags
-
-        monkeypatch.setattr(httpx_flags.config.scan, "httpx_rate_limit", 13)
-        monkeypatch.setattr(httpx_flags.config.scan, "httpx_retries", 4)
-        monkeypatch.setattr(httpx_flags.config.scan, "httpx_threads", 7)
-        flags = _assemble_flags(HttpxMode.LIVE)
-        assert flags[flags.index("-rate-limit") + 1] == "13"
-        assert flags[flags.index("-retries") + 1] == "4"
-        assert flags[flags.index("-threads") + 1] == "7"
-
-    def test_rate_retries_threads_present_in_every_mode(self):
-        """The caps apply to every mode, not just LIVE."""
-        for mode in HttpxMode:
-            flags = _assemble_flags(mode)
-            assert "-rate-limit" in flags, f"{mode.value} missing -rate-limit"
-            assert "-retries" in flags, f"{mode.value} missing -retries"
-            assert "-threads" in flags, f"{mode.value} missing -threads"
-
-    def test_no_overlapping_recon_flags(self):
-        # Skipping -asn (defers to asn.py / Cymru) and -cname (defers
-        # to dnsx). Pin the omission so a future "let's just throw all
-        # the httpx flags in" patch can't sneak them past review.
-        for mode in HttpxMode:
-            flags = _assemble_flags(mode)
-            assert "-asn" not in flags, f"-asn appears in {mode.value} mode"
-            assert "-cname" not in flags, f"-cname appears in {mode.value} mode"
-
-    def test_screenshot_toggle_adds_evidence_flags(self):
-        flags = _assemble_flags(
-            HttpxMode.WEB_INVENTORY,
-            with_screenshots=True,
-            evidence_dir="/tmp/evidence",
-        )
-        assert "-screenshot" in flags
-        assert "-srd" in flags
-        # -srd takes the directory as its argument.
-        assert flags[flags.index("-srd") + 1] == "/tmp/evidence"
-        # -store-response NOT requested -> absent.
-        assert "-store-response" not in flags
-
-    def test_responses_toggle_adds_store_response(self):
-        flags = _assemble_flags(
-            HttpxMode.TECH_DETECT,
-            with_responses=True,
-            evidence_dir="/tmp/evidence",
-        )
-        assert "-store-response" in flags
-        assert "-srd" in flags
-        assert "-screenshot" not in flags
-
-    def test_evidence_flags_omitted_when_dir_is_none(self):
-        # Toggles set but no evidence_dir bound (no pipeline run) -> the
-        # scan still runs, just no file-on-disk evidence flags.
-        flags = _assemble_flags(
-            HttpxMode.WEB_INVENTORY,
-            with_screenshots=True,
-            with_responses=True,
-            evidence_dir=None,
-        )
-        assert "-screenshot" not in flags
-        assert "-store-response" not in flags
-        assert "-srd" not in flags
 
 
 class TestHttpxScanCore:
@@ -337,6 +222,74 @@ class TestHttpxScanWebInventoryMode:
         assert result.endpoints[0].status_code == 200
         assert result.endpoints[0].tls_sans == []
 
+    def test_captures_tls_certificate(self, target_url, target_apex):
+        # The tls block becomes a full TLSCertificate asset on the endpoint:
+        # issuer / validity / fingerprint / SANs, not just the SAN side-channel.
+        mock_result = MagicMock(
+            stdout=_ndjson_line(
+                url=target_url,
+                status_code=200,
+                tech=["nginx:1.18.0"],
+                tls={
+                    "subject_cn": target_apex,
+                    "issuer_cn": "Let's Encrypt",
+                    "not_after": "2026-09-01T00:00:00Z",
+                    "fingerprint_hash": {"sha256": "ab" * 32},
+                    "subject_alt_names": [target_apex, f"api.{target_apex}"],
+                },
+            ),
+            returncode=0,
+            stderr="",
+        )
+        with (
+            patch("tools.recon.httpx.scanner._require_binary", return_value="/usr/bin/httpx"),
+            patch("tools.recon.httpx.scanner._run", return_value=mock_result),
+        ):
+            result = httpx_scan([target_url], mode=HttpxMode.WEB_INVENTORY)
+        cert = result.endpoints[0].tls_certificate
+        assert cert is not None
+        assert cert.issuer == "Let's Encrypt"
+        assert cert.fingerprint_sha256 == "ab" * 32
+        assert cert.not_after is not None
+        assert cert.subject_alt_names == [target_apex, f"api.{target_apex}"]
+
+    def test_no_tls_block_yields_no_certificate(self, target_url):
+        mock_result = MagicMock(
+            stdout=_ndjson_line(url=target_url, status_code=200, tech=[]),
+            returncode=0,
+            stderr="",
+        )
+        with (
+            patch("tools.recon.httpx.scanner._require_binary", return_value="/usr/bin/httpx"),
+            patch("tools.recon.httpx.scanner._run", return_value=mock_result),
+        ):
+            result = httpx_scan([target_url], mode=HttpxMode.WEB_INVENTORY)
+        assert result.endpoints[0].tls_certificate is None
+
+    def test_cert_keeps_wildcard_san_that_tls_sans_drops(self, target_url, target_apex):
+        # A wildcard SAN trips the FQDN-typed tls_sans (whole batch degraded
+        # to []), but the cert's list[str] SANs capture it faithfully - the
+        # exact reason TLSCertificate.subject_alt_names is not list[FQDN].
+        mock_result = MagicMock(
+            stdout=_ndjson_line(
+                url=target_url,
+                status_code=200,
+                tech=["nginx"],
+                tls={"subject_alt_names": [f"*.{target_apex}", target_apex]},
+            ),
+            returncode=0,
+            stderr="",
+        )
+        with (
+            patch("tools.recon.httpx.scanner._require_binary", return_value="/usr/bin/httpx"),
+            patch("tools.recon.httpx.scanner._run", return_value=mock_result),
+        ):
+            result = httpx_scan([target_url], mode=HttpxMode.WEB_INVENTORY)
+        ep = result.endpoints[0]
+        assert ep.tls_sans == []
+        assert ep.tls_certificate is not None
+        assert f"*.{target_apex}" in ep.tls_certificate.subject_alt_names
+
 
 class TestHttpxScanEvidence:
     def test_no_evidence_dir_when_toggles_off(self, target_url):
@@ -416,30 +369,3 @@ class TestHttpxScanEvidence:
         # Different mode -> different dirname (keeps evidence sets disjoint).
         name_c = _evidence_dirname(["a.example.com", "b.example.com"], HttpxMode.WEB_INVENTORY)
         assert name_a != name_c
-
-
-class TestProbeEndpointsLegacyShim:
-    def test_runs_tech_detect_mode_under_the_hood(self, target_url):
-        # The historical entry point must remain a drop-in for the
-        # recon orchestrator + legacy tests. probe_endpoints == httpx_scan
-        # with mode=TECH_DETECT, returning ``list[Endpoint]`` not the
-        # rich result.
-        mock_result = MagicMock(
-            stdout=_ndjson_line(url=target_url, status_code=200, tech=["Django:4.2"]),
-            returncode=0,
-            stderr="",
-        )
-        with (
-            patch("tools.recon.httpx.scanner._require_binary", return_value="/usr/bin/httpx"),
-            patch("tools.recon.httpx.scanner._run", return_value=mock_result) as mock_run,
-        ):
-            endpoints = probe_endpoints([target_url])
-
-        # Shim returns ``list[Endpoint]`` (not HttpxScanResult).
-        assert isinstance(endpoints, list)
-        assert len(endpoints) == 1
-        assert endpoints[0].technologies == ["Django:4.2"]
-        assert {t.name for t in endpoints[0].detected_technologies} == {"django"}
-        # The flags include -tech-detect (i.e. TECH_DETECT mode, not LIVE).
-        cmd = mock_run.call_args.args[0]
-        assert "-tech-detect" in cmd

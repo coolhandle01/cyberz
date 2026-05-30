@@ -172,5 +172,9 @@ def run_recon(programme: Programme) -> AttackGraph:
         passive_findings=passive_findings,
         network_hops=network_hops,
         ip_assets=ip_assets,
+        # Cert aggregate for the sweep; per-host materialisation happens at
+        # finalise (the bound handoff point), not here - run_recon stays
+        # side-effect-free.
+        tls_certificates=[ep.tls_certificate for ep in endpoints if ep.tls_certificate],
         notes=f"Seeded from {seed_domains}. {len(in_scope_hosts)} in-scope hosts.",
     )

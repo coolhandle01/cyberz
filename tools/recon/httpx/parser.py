@@ -21,12 +21,63 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime
+from urllib.parse import urlparse
 
-from models.asset import Endpoint
+from models.asset import Endpoint, TLSCertificate
 from models.scanner import HttpxMode
 from tools.recon.technology import coerce_technologies
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_cert_datetime(value: object) -> datetime | None:
+    """Coerce an httpx RFC-3339 validity timestamp to ``datetime``.
+
+    Returns ``None`` for a missing / non-string / unparseable value so a
+    single malformed date degrades only that field rather than dropping
+    the whole cert.
+    """
+    if not isinstance(value, str):
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _build_tls_certificate(tls_block: object, sans: list[str], url: str) -> TLSCertificate | None:
+    """Build the OAM ``TLSCertificate`` asset from httpx's ``tls`` block.
+
+    Returns ``None`` when no cert was grabbed (non-WEB_INVENTORY modes,
+    plain HTTP) or the host cannot be derived. Defensive: httpx versions
+    vary in which cert fields they emit, so every field beyond ``host``
+    is best-effort, and a boundary-cap rejection drops the cert rather
+    than the row. ``subject_alt_names`` is passed through verbatim as the
+    cert's own ``list[str]``: wildcards / IP SANs that the FQDN-typed
+    ``Endpoint.tls_sans`` rejected are captured faithfully here.
+    """
+    if not isinstance(tls_block, dict) or not tls_block:
+        return None
+    host = urlparse(url).hostname
+    if not host:
+        return None
+    fingerprint = tls_block.get("fingerprint_hash")
+    sha256 = fingerprint.get("sha256") if isinstance(fingerprint, dict) else None
+    try:
+        return TLSCertificate(
+            host=host,
+            subject_common_name=tls_block.get("subject_cn"),
+            issuer=tls_block.get("issuer_cn") or tls_block.get("issuer_org"),
+            serial=tls_block.get("serial"),
+            fingerprint_sha256=sha256,
+            not_before=_parse_cert_datetime(tls_block.get("not_before")),
+            not_after=_parse_cert_datetime(tls_block.get("not_after")),
+            subject_alt_names=sans,
+        )
+    except ValueError as exc:
+        logger.debug("tls cert dropped (%s)", exc)
+        return None
 
 
 def _parse_ndjson(stdout: str, mode: HttpxMode) -> list[Endpoint]:
@@ -75,6 +126,13 @@ def _parse_ndjson(stdout: str, mode: HttpxMode) -> list[Endpoint]:
             except ValueError as exc2:
                 logger.debug("httpx row skipped: %s", exc2)
                 continue
+        # Attach the full cert (independent of the tls_sans degrade above:
+        # the cert's SANs are list[str], so it survives wildcards the
+        # FQDN-typed tls_sans rejected). model_copy avoids re-validating
+        # the already-built Endpoint.
+        cert = _build_tls_certificate(tls_block, sans_filtered, ep.url)
+        if cert is not None:
+            ep = ep.model_copy(update={"tls_certificate": cert})
         endpoints.append(ep)
     return endpoints
 
