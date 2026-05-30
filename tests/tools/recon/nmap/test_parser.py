@@ -1,0 +1,128 @@
+"""tests/tools/recon/nmap/test_parser.py - unit tests for tools/recon/nmap/parser.py."""
+
+from __future__ import annotations
+
+import pytest
+
+from tools.recon.nmap.parser import _parse_xml
+
+pytestmark = pytest.mark.unit
+
+
+class TestParseXml:
+    def test_parses_multi_host_with_banners(self, nmap_xml_two_hosts):
+        results = _parse_xml(nmap_xml_two_hosts)
+        assert len(results) == 2
+
+        first = results[0]
+        assert first.host == "93.184.216.34"
+        assert len(first.services) == 2
+        ports = {s.port for s in first.services}
+        assert ports == {80, 22}
+
+        nginx_svc = next(s for s in first.services if s.port == 80)
+        assert nginx_svc.product == "nginx"
+        assert nginx_svc.version == "1.18.0"
+
+        ssh_svc = next(s for s in first.services if s.port == 22)
+        assert ssh_svc.product == "OpenSSH"
+        assert ssh_svc.version == "7.6p1"
+        assert ssh_svc.extra_info == "Ubuntu"
+
+    def test_emits_typed_technologies_from_banners(self, nmap_xml_two_hosts):
+        results = _parse_xml(nmap_xml_two_hosts)
+        # nginx + OpenSSH are in the seed catalogue; the parser routes
+        # them through coerce_technologies and lands typed Technology
+        # rows on the result.
+        nginx_host = next(r for r in results if r.host == "93.184.216.34")
+        names = {t.name for t in nginx_host.detected_technologies}
+        assert "nginx" in names
+        assert "openssh" in names
+
+    def test_redis_falls_back_to_service_name(self, nmap_xml_two_hosts):
+        # Second host has only a service name (no product banner). The
+        # parser falls back to the service name as the coerce input,
+        # which is enough to land Redis as a typed Technology.
+        results = _parse_xml(nmap_xml_two_hosts)
+        redis_host = next(r for r in results if r.host == "93.184.216.35")
+        names = {t.name for t in redis_host.detected_technologies}
+        assert "redis" in names
+
+    def test_empty_xml_returns_empty(self):
+        assert _parse_xml("") == []
+
+    def test_no_hosts_xml_returns_empty(self, nmap_xml_no_hosts):
+        assert _parse_xml(nmap_xml_no_hosts) == []
+
+    def test_malformed_xml_returns_empty(self):
+        # Defensive - mid-scan truncation / nmap crash mid-output -> the
+        # parser returns an empty list rather than raising.
+        assert _parse_xml("this is not xml") == []
+
+    def test_skips_host_without_address(self):
+        # <host> with no <address> child - skip rather than raise.
+        xml = "<?xml version='1.0'?><nmaprun><host></host></nmaprun>"
+        assert _parse_xml(xml) == []
+
+    def test_skips_host_with_empty_addr_attribute(self):
+        # <address> exists but addr="" - we have no host identifier to
+        # land the row against, so the host is skipped.
+        xml = (
+            "<?xml version='1.0'?><nmaprun>"
+            '<host><address addr="" addrtype="ipv4"/></host>'
+            "</nmaprun>"
+        )
+        assert _parse_xml(xml) == []
+
+    def test_skips_port_with_out_of_range_portid(self):
+        # NmapService.port is constrained to 1..65535. A nmap row with
+        # portid=70000 trips the validator; the port is dropped but the
+        # host row is kept.
+        xml = (
+            "<?xml version='1.0'?><nmaprun>"
+            '<host><address addr="1.1.1.1" addrtype="ipv4"/>'
+            '<ports><port protocol="tcp" portid="70000">'
+            '<state state="open"/></port></ports>'
+            "</host></nmaprun>"
+        )
+        results = _parse_xml(xml)
+        assert len(results) == 1
+        assert results[0].services == []
+
+    def test_service_name_only_used_when_product_absent(self):
+        # When nmap emits a service name but no product, the parser
+        # uses the service name as the banner string (port-number guess
+        # rather than banner-grabbed).
+        xml = (
+            "<?xml version='1.0'?><nmaprun>"
+            '<host><address addr="1.1.1.1" addrtype="ipv4"/>'
+            '<ports><port protocol="tcp" portid="22">'
+            '<state state="open"/><service name="ssh"/></port></ports>'
+            "</host></nmaprun>"
+        )
+        results = _parse_xml(xml)
+        assert len(results) == 1
+        assert results[0].services[0].service == "ssh"
+        assert results[0].services[0].product is None
+
+    def test_skips_host_when_host_validator_rejects_addr(self):
+        # NmapHostResult.host is typed FQDN | IPAddress; a non-routable
+        # string trips the validator and the row drops on the floor.
+        xml = (
+            "<?xml version='1.0'?><nmaprun>"
+            '<host><address addr="not a valid host" addrtype="ipv4"/></host>'
+            "</nmaprun>"
+        )
+        assert _parse_xml(xml) == []
+
+    def test_skips_port_with_non_numeric_portid(self):
+        xml = (
+            "<?xml version='1.0'?><nmaprun>"
+            '<host><address addr="1.1.1.1" addrtype="ipv4"/>'
+            '<ports><port protocol="tcp" portid="not-a-number">'
+            '<state state="open"/></port></ports>'
+            "</host></nmaprun>"
+        )
+        results = _parse_xml(xml)
+        assert len(results) == 1
+        assert results[0].services == []

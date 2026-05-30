@@ -23,6 +23,44 @@ from models import AttackGraph, Endpoint, HostInsight, HostPriority, HostRole
 
 
 @pytest.fixture()
+def nmap_xml_two_hosts() -> str:
+    """Real-shape nmap ``-oX`` output: two IPv4 hosts, banners on the first
+    (http/nginx, ssh/OpenSSH), a bare redis service on the second."""
+    return """<?xml version="1.0"?>
+<nmaprun>
+  <host>
+    <address addr="93.184.216.34" addrtype="ipv4"/>
+    <ports>
+      <port protocol="tcp" portid="80">
+        <state state="open"/>
+        <service name="http" product="nginx" version="1.18.0"/>
+      </port>
+      <port protocol="tcp" portid="22">
+        <state state="open"/>
+        <service name="ssh" product="OpenSSH" version="7.6p1" extrainfo="Ubuntu"/>
+      </port>
+    </ports>
+  </host>
+  <host>
+    <address addr="93.184.216.35" addrtype="ipv4"/>
+    <ports>
+      <port protocol="tcp" portid="6379">
+        <state state="open"/>
+        <service name="redis"/>
+      </port>
+    </ports>
+  </host>
+</nmaprun>
+"""
+
+
+@pytest.fixture()
+def nmap_xml_no_hosts() -> str:
+    """nmap ``-oX`` output with zero hosts (host down / nothing matched)."""
+    return '<?xml version="1.0"?>\n<nmaprun></nmaprun>\n'
+
+
+@pytest.fixture()
 def make_host_insight(target_apex: str) -> Callable[..., HostInsight]:
     """Factory for a well-formed ``HostInsight`` (api.<apex>, HIGH, valid notes).
 
