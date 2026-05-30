@@ -10,9 +10,9 @@ fields rather than failing the whole scan. Real-world runs occasionally
 produce truncated output (timeout mid-scan, host going down mid-probe)
 and the parser should land what's parseable rather than reject the lot.
 
-Banner strings (service / product / version) are routed through
-``coerce_technologies`` so each NmapHostResult arrives with typed
-``Technology`` rows alongside its raw services list.
+Each ``<service>``'s ``<cpe>`` children (the NIST product identifier nmap
+matched) are normalised to the CPE 2.3 formatted string via ``tools.cpe``
+and carried on the ``NmapService``.
 """
 
 from __future__ import annotations
@@ -23,7 +23,6 @@ from defusedxml import ElementTree as ET
 
 from models.scanner import NmapHostResult, NmapService
 from tools.cpe import pick_application_cpe
-from tools.recon.technology import coerce_technologies
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +54,6 @@ def _parse_xml(xml_text: str) -> list[NmapHostResult]:
             continue
 
         services: list[NmapService] = []
-        banner_strings: list[str] = []
         for port_el in host_el.findall("ports/port"):
             try:
                 port_num = int(port_el.get("portid") or "")
@@ -95,22 +93,11 @@ def _parse_xml(xml_text: str) -> list[NmapHostResult]:
                 logger.debug("nmap port row skipped: %s", exc)
                 continue
 
-            # Build a Wappalyzer-shape string for the coercer. Prefer
-            # ``product:version`` (richer); fall back to ``service`` (the
-            # nmap-side guess from the port number when no banner ran).
-            if product:
-                banner_strings.append(f"{product}:{version}" if version else product)
-            elif service_name:
-                banner_strings.append(service_name)
-
-        detected = coerce_technologies(banner_strings)
-
         try:
             results.append(
                 NmapHostResult(
                     host=host_addr,
                     services=services,
-                    detected_technologies=detected,
                 )
             )
         except ValueError as exc:

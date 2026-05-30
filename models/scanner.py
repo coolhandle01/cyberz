@@ -23,7 +23,6 @@ from pydantic import BaseModel, Field
 
 from models.asset import Endpoint
 from models.primitives import FQDN, IPAddress
-from models.technology import Technology
 
 
 class NmapMode(StrEnum):
@@ -88,8 +87,7 @@ class NmapService(BaseModel):
 
     # Tool-captured from nmap's service-version output. Defence: each
     # field carries a boundary length cap so a malformed banner cannot
-    # smuggle a large injection through. ``coerce_technologies`` further
-    # normalises to typed ``Technology`` rows at the call boundary.
+    # smuggle a large injection through the OA -> Service translation.
     service: str | None = Field(default=None, max_length=64)
     product: str | None = Field(default=None, max_length=128)
     version: str | None = Field(default=None, max_length=64)
@@ -104,7 +102,7 @@ class NmapService(BaseModel):
     #
     # FIXME(#45 / amass-integration): promote to a typed ``Cpe`` primitive in
     # ``models.primitives`` once the CVE-lookup workflow lands - CPE now sits
-    # on two fields (here + ``Technology.cpe``), the multi-field threshold the
+    # on two fields (here + ``Service.cpe``), the multi-field threshold the
     # cybersquad-models skill sets for a primitive. Deferred alongside the
     # existing ``CvssVector`` / ``CweId`` primitive plans.
     cpe: str | None = Field(default=None, max_length=255)
@@ -113,15 +111,15 @@ class NmapService(BaseModel):
 class NmapHostResult(BaseModel):
     """The per-host slice of an nmap scan result.
 
-    Carries the host identity (the FQDN or IP nmap was asked to scan;
-    the parser surfaces whichever address it returned), the list of
-    discovered services, and the typed ``Technology`` rows derived
-    from the service-version banners via ``coerce_technologies``.
+    Carries the host identity (the FQDN or IP nmap was asked to scan; the
+    parser surfaces whichever address it returned) and the list of
+    discovered services. A scanner-internal shape: the OA tool boundary
+    translates these into OAM ``Service`` assets before anything crosses
+    to the agent.
     """
 
     host: FQDN | IPAddress
     services: list[NmapService] = Field(default_factory=list)
-    detected_technologies: list[Technology] = Field(default_factory=list)
 
 
 class NmapScanResult(BaseModel):

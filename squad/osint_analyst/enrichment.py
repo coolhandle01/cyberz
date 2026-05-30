@@ -139,8 +139,8 @@ def deep_scan_host_tool(host: FQDN, ports: list[int]) -> NmapHostResult:
     NSE script category, ``-sC``) against one host's known-open ports.
     This is the naabu-then-nmap second leg: the sweep's quick port scan
     found *which* ports are open; this finds *what is listening* on them -
-    service names, version banners, and the typed ``Technology`` rows
-    derived from them.
+    service names, version banners, and the NIST CPE nmap matched per
+    service.
 
     The host is scope-filtered at the args_schema boundary; an
     out-of-scope host never reaches this body. Reach for this when the
@@ -148,12 +148,11 @@ def deep_scan_host_tool(host: FQDN, ports: list[int]) -> NmapHostResult:
     SSH / RDP / SMTP banner worth fingerprinting) on an in-scope host -
     the HTTP surface is already covered by ``Probe FQDNs`` / httpx.
 
-    Returns the single ``NmapHostResult`` ({host, services,
-    detected_technologies}) for the queried host. When nmap returns no
-    rows (host down, scan blocked), returns an empty ``NmapHostResult``
-    for that host rather than ``None`` - the OA always gets a typed
-    result back. Evidence is not persisted: this is an interactive pivot,
-    not a recon-artefact write.
+    Returns the single ``NmapHostResult`` ({host, services}) for the
+    queried host. When nmap returns no rows (host down, scan blocked),
+    returns an empty ``NmapHostResult`` for that host rather than ``None``
+    - the OA always gets a typed result back. Evidence is not persisted:
+    this is an interactive pivot, not a recon-artefact write.
     """
     result = nmap_scan(
         [host],

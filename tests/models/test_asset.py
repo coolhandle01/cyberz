@@ -99,21 +99,22 @@ class TestIpAsset:
 
 class TestService:
     def test_minimal_record(self):
-        # host + port + protocol is the floor; the -sV banner fields and
-        # the technology rows populate only when the scan recovered them.
+        # host + port + protocol is the floor; the -sV banner fields, the
+        # CPE and the detection-tool provenance populate only when the scan
+        # recovered them.
 
         svc = Service(host="8.8.8.8", port=443, protocol="tcp")
         assert svc.host == "8.8.8.8"
         assert svc.port == 443
         assert svc.name is None
         assert svc.product is None
-        assert svc.technologies == []
+        assert svc.cpe is None
+        assert svc.detected_by is None
 
-    def test_composes_typed_technologies(self, target_apex):
-        # The OA-boundary translation coerces banner detail into typed
-        # ``Technology`` rows hanging off the Service node.
-        from models.technology import Technology
-
+    def test_carries_cpe_and_provenance(self, target_apex):
+        # The OA-boundary translation stamps the NIST CPE nmap matched and
+        # the detecting tool onto the Service - no separate Technology rows;
+        # the service's own product / version / cpe IS the technology.
         svc = Service(
             host=f"api.{target_apex}",
             port=443,
@@ -121,10 +122,12 @@ class TestService:
             name="http",
             product="nginx",
             version="1.25.3",
-            technologies=[Technology(name="nginx", version="1.25.3")],
+            cpe="cpe:2.3:a:nginx:nginx:1.25.3:*:*:*:*:*:*:*",
+            detected_by="nmap",
         )
         assert svc.product == "nginx"
-        assert svc.technologies[0].name == "nginx"
+        assert svc.cpe == "cpe:2.3:a:nginx:nginx:1.25.3:*:*:*:*:*:*:*"
+        assert svc.detected_by == "nmap"
 
     def test_serialise_roundtrip(self):
 

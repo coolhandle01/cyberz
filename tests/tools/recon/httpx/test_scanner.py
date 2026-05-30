@@ -110,11 +110,10 @@ class TestHttpxScanLiveMode:
         # LIVE mode does NOT request -tech-detect, so even if httpx
         # echoed a tech field we discard it.
         assert ep.technologies == []
-        assert ep.detected_technologies == []
 
 
 class TestHttpxScanTechDetectMode:
-    def test_populates_technologies_and_typed_channel(self, target_url):
+    def test_populates_technologies(self, target_url):
         mock_result = MagicMock(
             stdout=_ndjson_line(
                 url=target_url,
@@ -131,7 +130,6 @@ class TestHttpxScanTechDetectMode:
             result = httpx_scan([target_url], mode=HttpxMode.TECH_DETECT)
         ep = result.endpoints[0]
         assert ep.technologies == ["Django:4.2", "nginx:1.18.0"]
-        assert {t.name for t in ep.detected_technologies} == {"django", "nginx"}
 
 
 class TestHttpxScanWebInventoryMode:

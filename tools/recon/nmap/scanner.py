@@ -4,7 +4,7 @@ Two callable surfaces re-exported through ``tools/recon/nmap/__init__.py``:
 
 * ``nmap_scan(hosts, mode, banner, scripts, persist_evidence, ports)``
   - the rich entry point. Returns ``NmapScanResult`` with per-host
-  services, derived ``Technology`` rows, and (optional) evidence-XML
+  services (each carrying its matched CPE) and an optional evidence-XML
   path. ``ports`` focuses the scan on an explicit ``-p`` list.
 * ``port_scan(hosts)`` - backwards-compatible shim for the historical
   ``dict[host, list[ports]]`` shape consumed by ``run_recon`` and the
@@ -65,7 +65,7 @@ def nmap_scan(
     Composes the final flag list from ``(mode, banner, scripts,
     config.scan.scan_mode)`` - the OA reasons in modes, the wrapper
     handles the CLI shape. Returns a typed ``NmapScanResult`` carrying
-    per-host services + derived ``Technology`` rows.
+    per-host services, each with its matched CPE.
 
     ``ports`` is the optional focused-target list: when non-empty it
     swaps the mode's ``-F`` (top-100) for an explicit ``-p <csv>`` so a

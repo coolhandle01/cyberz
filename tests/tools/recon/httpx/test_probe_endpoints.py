@@ -48,7 +48,6 @@ class TestProbeEndpoints:
         assert isinstance(endpoints, list)
         assert len(endpoints) == 1
         assert endpoints[0].technologies == ["Django:4.2"]
-        assert {t.name for t in endpoints[0].detected_technologies} == {"django"}
         # The flags include -tech-detect (i.e. TECH_DETECT mode, not LIVE).
         cmd = mock_run.call_args.args[0]
         assert "-tech-detect" in cmd
