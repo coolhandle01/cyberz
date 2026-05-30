@@ -9,7 +9,7 @@ import pytest
 
 from models import Endpoint
 from models.scanner import HttpxMode, HttpxScanResult
-from tools.recon.httpx import httpx_scan, probe_endpoints
+from tools.recon.httpx import httpx_scan
 
 pytestmark = pytest.mark.unit
 
@@ -369,93 +369,3 @@ class TestHttpxScanEvidence:
         # Different mode -> different dirname (keeps evidence sets disjoint).
         name_c = _evidence_dirname(["a.example.com", "b.example.com"], HttpxMode.WEB_INVENTORY)
         assert name_a != name_c
-
-
-class TestProbeEndpoints:
-    """``probe_endpoints`` is the slim ``list[Endpoint]`` entry point the
-    recon orchestrator calls - ``httpx_scan`` in TECH_DETECT mode without
-    the rich result. Covers the mode/flag behaviour plus output handling:
-    NDJSON parsing, malformed-line tolerance, the host list reaching the
-    binary via stdin, and the missing-binary raise."""
-
-    def test_runs_tech_detect_mode(self, target_url):
-        # probe_endpoints == httpx_scan with mode=TECH_DETECT, returning
-        # ``list[Endpoint]`` not the rich HttpxScanResult.
-        mock_result = MagicMock(
-            stdout=_ndjson_line(url=target_url, status_code=200, tech=["Django:4.2"]),
-            returncode=0,
-            stderr="",
-        )
-        with (
-            patch("tools.recon.httpx.scanner._require_binary", return_value="/usr/bin/httpx"),
-            patch("tools.recon.httpx.scanner._run", return_value=mock_result) as mock_run,
-        ):
-            endpoints = probe_endpoints([target_url])
-
-        assert isinstance(endpoints, list)
-        assert len(endpoints) == 1
-        assert endpoints[0].technologies == ["Django:4.2"]
-        assert {t.name for t in endpoints[0].detected_technologies} == {"django"}
-        # The flags include -tech-detect (i.e. TECH_DETECT mode, not LIVE).
-        cmd = mock_run.call_args.args[0]
-        assert "-tech-detect" in cmd
-
-    def test_parses_httpx_json_output(self, target_apex):
-        mock_result = MagicMock()
-        mock_result.stdout = "\n".join(
-            [
-                json.dumps(
-                    {"url": f"https://api.{target_apex}", "status_code": 200, "tech": ["nginx"]}
-                ),
-                json.dumps({"url": f"https://admin.{target_apex}", "status_code": 403, "tech": []}),
-            ]
-        )
-        mock_result.returncode = 0
-
-        with (
-            patch("shutil.which", return_value="/usr/bin/httpx"),
-            patch("subprocess.run", return_value=mock_result),
-        ):
-            result = probe_endpoints(["api.example.com", "admin.example.com"])
-
-        assert len(result) == 2
-        assert result[0].url == f"https://api.{target_apex}"
-        assert result[0].status_code == 200
-        assert "nginx" in result[0].technologies
-
-    def test_skips_malformed_json_lines(self, target_apex):
-        mock_result = MagicMock()
-        mock_result.stdout = (
-            f'not json\n{{"url": "https://api.{target_apex}", "status_code": 200, "tech": []}}'
-        )
-        mock_result.returncode = 0
-
-        with (
-            patch("shutil.which", return_value="/usr/bin/httpx"),
-            patch("subprocess.run", return_value=mock_result),
-        ):
-            result = probe_endpoints(["api.example.com"])
-
-        assert len(result) == 1
-
-    def test_stdin_receives_host_list(self):
-        """Regression: probe_endpoints previously discarded the host list entirely."""
-        mock_result = MagicMock()
-        mock_result.stdout = ""
-        mock_result.returncode = 0
-
-        with (
-            patch("shutil.which", return_value="/usr/bin/httpx"),
-            patch("subprocess.run", return_value=mock_result) as mock_run,
-        ):
-            probe_endpoints(["api.example.com", "admin.example.com"])
-
-        call_kwargs = mock_run.call_args.kwargs
-        assert "input" in call_kwargs, "host list must be passed via stdin (input=)"
-        assert "api.example.com" in call_kwargs["input"]
-        assert "admin.example.com" in call_kwargs["input"]
-
-    def test_raises_if_binary_missing(self):
-        with patch("shutil.which", return_value=None):
-            with pytest.raises(EnvironmentError, match="httpx"):
-                probe_endpoints(["example.com"])
