@@ -86,6 +86,32 @@ class TestRunRecon:
         mock_compose.assert_called_once_with(["8.8.8.8"])
         assert attack_graph.ip_assets == [ip_asset]
 
+    def test_port_scan_receives_hostnames_not_urls(self, programme, target_apex):
+        # Regression: nmap scans hosts, not URLs. run_recon must extract the
+        # hostname from each live Endpoint.url before handing it to
+        # port_scan - feeding the full ``https://.../`` URL makes nmap fail
+        # to resolve the target and keys open_ports by URL instead of host.
+        from tools.recon import run_recon
+
+        live = Endpoint(url=f"https://api.{target_apex}/admin", status_code=200)
+        dead = Endpoint(url=f"https://down.{target_apex}/", status_code=503)
+        with (
+            patch("tools.recon.enumerate_subdomains", return_value=[f"api.{target_apex}"]),
+            patch("tools.recon.probe_endpoints", return_value=[live, dead]),
+            patch("tools.recon.port_scan", return_value={}) as mock_port_scan,
+            patch("tools.recon.discover_paths", return_value=[]),
+            patch("tools.recon.check_tls", return_value=[]),
+            patch("tools.recon.check_dns_email_security", return_value=[]),
+            patch("tools.recon.run_traceroute", return_value={}),
+            patch("tools.recon.resolve_records", return_value=[]),
+            patch("tools.recon.compose_ip_assets", return_value=[]),
+        ):
+            run_recon(programme)
+
+        # Bare hostname extracted (scheme + path stripped); the 5xx endpoint
+        # is filtered out, so only the live host reaches nmap.
+        mock_port_scan.assert_called_once_with([f"api.{target_apex}"])
+
     def test_promotes_in_scope_tls_sans_to_subdomains(self, programme, target_apex):
         # When httpx runs in WEB_INVENTORY mode, Endpoint.tls_sans carries
         # the SAN-leaked hostnames. run_recon promotes the ones the scope

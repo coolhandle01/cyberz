@@ -24,6 +24,7 @@ from pathlib import Path
 
 import runtime
 from config import config
+from models import FQDN
 from models.scanner import NmapBanner, NmapMode, NmapScanResult, NmapScripts
 from tools._helpers import _require_binary, _run
 from tools.recon.nmap.flags import _assemble_flags
@@ -52,7 +53,7 @@ def _resolve_evidence_path(filename: str) -> Path | None:
 
 
 def nmap_scan(
-    hosts: list[str],
+    hosts: list[FQDN],
     mode: NmapMode = NmapMode.QUICK_PORTS,
     banner: NmapBanner = NmapBanner.NONE,
     scripts: NmapScripts = NmapScripts.NONE,
@@ -118,7 +119,7 @@ def nmap_scan(
     return NmapScanResult(mode=mode, hosts=parsed, evidence_path=evidence_rel)
 
 
-def port_scan(hosts: list[str]) -> dict[str, list[int]]:
+def port_scan(hosts: list[FQDN]) -> dict[str, list[int]]:
     """Backwards-compatible thin shim over ``nmap_scan``.
 
     Calls ``nmap_scan(mode=QUICK_PORTS, persist_evidence=False)`` and

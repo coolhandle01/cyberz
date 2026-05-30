@@ -137,7 +137,16 @@ def run_recon(programme: Programme) -> AttackGraph:
         promoted = filter_in_scope(san_candidates, programme)
         in_scope_hosts = list(dict.fromkeys(in_scope_hosts + promoted))
 
-    live_hosts = [ep.url for ep in endpoints if ep.status_code and ep.status_code < 500]
+    # nmap scans hosts, not URLs - extract the hostname from each live
+    # endpoint (``host_of`` returns "" for a hostless URL, which the
+    # ``if host`` clause drops) so ``open_ports`` keys by FQDN, matching
+    # the host-keyed lookups the ``Recon Open Ports`` slicer does downstream.
+    live_hosts = [
+        host
+        for ep in endpoints
+        if ep.status_code and ep.status_code < 500
+        if (host := host_of(ep.url))
+    ]
     open_ports = port_scan(live_hosts[:20])
 
     discovered = discover_paths(_dirfuzz_targets(endpoints, seed_domains))
