@@ -82,3 +82,48 @@ class TestEnumerateSubdomainsFlags:
             enumerate_subdomains(target_apex)
 
         assert "-active" not in captured[0]
+
+
+class TestEnumerateSubdomainsParsing:
+    """Output handling: stdout lines become hostnames, duplicates collapse,
+    a missing binary raises, and empty stdout yields an empty list. The
+    flag plumbing lives in ``TestEnumerateSubdomainsFlags`` above."""
+
+    def test_returns_parsed_subdomains(self):
+        with (
+            patch("shutil.which", return_value="/usr/bin/subfinder"),
+            patch(
+                "tools.recon.subfinder._run",
+                return_value=_completed("api.example.com\nadmin.example.com\n"),
+            ),
+        ):
+            result = enumerate_subdomains("example.com")
+
+        assert "api.example.com" in result
+        assert "admin.example.com" in result
+
+    def test_deduplicates_results(self):
+        with (
+            patch("shutil.which", return_value="/usr/bin/subfinder"),
+            patch(
+                "tools.recon.subfinder._run",
+                return_value=_completed("api.example.com\napi.example.com\nadmin.example.com\n"),
+            ),
+        ):
+            result = enumerate_subdomains("example.com")
+
+        assert result.count("api.example.com") == 1
+
+    def test_raises_if_binary_missing(self):
+        with patch("shutil.which", return_value=None):
+            with pytest.raises(EnvironmentError, match="subfinder"):
+                enumerate_subdomains("example.com")
+
+    def test_empty_output(self):
+        with (
+            patch("shutil.which", return_value="/usr/bin/subfinder"),
+            patch("tools.recon.subfinder._run", return_value=_completed("")),
+        ):
+            result = enumerate_subdomains("example.com")
+
+        assert result == []

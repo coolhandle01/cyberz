@@ -13,7 +13,7 @@ from models.scanner import (
     NmapScanResult,
     NmapScripts,
 )
-from tools.recon.nmap import nmap_scan
+from tools.recon.nmap import nmap_scan, port_scan
 from tools.recon.nmap.scanner import _evidence_filename
 
 pytestmark = pytest.mark.unit
@@ -165,3 +165,46 @@ class TestNmapScan:
         assert "-oX" in cmd
         idx = cmd.index("-oX")
         assert cmd[idx + 1] == "-"
+
+
+class TestPortScan:
+    """``port_scan`` is the slim entry point the recon orchestrator calls:
+    it runs ``nmap_scan`` under the hood and flattens the XML result to the
+    ``{host: [open_ports]}`` shape callers expect."""
+
+    def test_parses_open_ports(self):
+        # nmap_scan emits -oX XML; port_scan parses the same XML and
+        # flattens it to the {host: [open_ports]} shape.
+        mock_result = MagicMock()
+        mock_result.stdout = (
+            '<?xml version="1.0"?>\n'
+            "<nmaprun>"
+            '<host><address addr="example.com" addrtype="ipv4"/>'
+            "<ports>"
+            '<port protocol="tcp" portid="80"><state state="open"/></port>'
+            '<port protocol="tcp" portid="443"><state state="open"/></port>'
+            "</ports>"
+            "</host>"
+            "</nmaprun>"
+        )
+        mock_result.returncode = 0
+        mock_result.stderr = ""
+
+        with (
+            patch("shutil.which", return_value="/usr/bin/nmap"),
+            patch("subprocess.run", return_value=mock_result),
+        ):
+            result = port_scan(["example.com"])
+
+        assert 80 in result["example.com"]
+        assert 443 in result["example.com"]
+
+    def test_empty_host_list(self):
+        with patch("shutil.which", return_value="/usr/bin/nmap"):
+            result = port_scan([])
+        assert result == {}
+
+    def test_raises_if_binary_missing(self):
+        with patch("shutil.which", return_value=None):
+            with pytest.raises(EnvironmentError, match="nmap"):
+                port_scan(["example.com"])
