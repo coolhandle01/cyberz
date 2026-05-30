@@ -115,6 +115,36 @@ class TestParseXml:
         )
         assert _parse_xml(xml) == []
 
+    def test_captures_application_cpe_from_service(self):
+        # nmap emits one or more <cpe> children per service; the parser
+        # captures the application CPE, normalised to the 2.3 formatted
+        # string, on NmapService.cpe (preferring it over the host-OS CPE).
+        xml = (
+            "<?xml version='1.0'?><nmaprun>"
+            '<host><address addr="1.1.1.1" addrtype="ipv4"/>'
+            '<ports><port protocol="tcp" portid="22">'
+            '<state state="open"/>'
+            '<service name="ssh" product="OpenSSH" version="7.4">'
+            "<cpe>cpe:/o:linux:linux_kernel</cpe>"
+            "<cpe>cpe:/a:openbsd:openssh:7.4</cpe>"
+            "</service></port></ports>"
+            "</host></nmaprun>"
+        )
+        results = _parse_xml(xml)
+        assert results[0].services[0].cpe == "cpe:2.3:a:openbsd:openssh:7.4:*:*:*:*:*:*:*"
+
+    def test_cpe_is_none_when_service_emits_no_cpe(self):
+        # A service-name-only row (no -sV banner, no <cpe>) leaves cpe None.
+        xml = (
+            "<?xml version='1.0'?><nmaprun>"
+            '<host><address addr="1.1.1.1" addrtype="ipv4"/>'
+            '<ports><port protocol="tcp" portid="22">'
+            '<state state="open"/><service name="ssh"/></port></ports>'
+            "</host></nmaprun>"
+        )
+        results = _parse_xml(xml)
+        assert results[0].services[0].cpe is None
+
     def test_skips_port_with_non_numeric_portid(self):
         xml = (
             "<?xml version='1.0'?><nmaprun>"

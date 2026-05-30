@@ -95,6 +95,20 @@ class NmapService(BaseModel):
     version: str | None = Field(default=None, max_length=64)
     extra_info: str | None = Field(default=None, max_length=255)
 
+    # Tool-captured CPE 2.3 string, normalised from nmap's ``<cpe>`` 2.2 URI
+    # output via ``tools.cpe.normalize_cpe``. The product's NIST identifier
+    # and the high-confidence join key for the VR's CVE lookup. ``None`` when
+    # nmap emitted no CPE for the port (no ``-sV`` match, or a service-name-
+    # only guess from the port number). Same boundary length cap as the
+    # banner fields above.
+    #
+    # FIXME(#45 / amass-integration): promote to a typed ``Cpe`` primitive in
+    # ``models.primitives`` once the CVE-lookup workflow lands - CPE now sits
+    # on two fields (here + ``Technology.cpe``), the multi-field threshold the
+    # cybersquad-models skill sets for a primitive. Deferred alongside the
+    # existing ``CvssVector`` / ``CweId`` primitive plans.
+    cpe: str | None = Field(default=None, max_length=255)
+
 
 class NmapHostResult(BaseModel):
     """The per-host slice of an nmap scan result.

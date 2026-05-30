@@ -22,6 +22,7 @@ import logging
 from defusedxml import ElementTree as ET
 
 from models.scanner import NmapHostResult, NmapService
+from tools.cpe import pick_application_cpe
 from tools.recon.technology import coerce_technologies
 
 logger = logging.getLogger(__name__)
@@ -69,6 +70,13 @@ def _parse_xml(xml_text: str) -> list[NmapHostResult]:
             product = svc_el.get("product") if svc_el is not None else None
             version = svc_el.get("version") if svc_el is not None else None
             extra = svc_el.get("extrainfo") if svc_el is not None else None
+            # nmap emits one or more ``<cpe>`` children (2.2 URI binding) per
+            # service when -sV matches; prefer the application CPE and
+            # normalise to the 2.3 formatted string.
+            cpe_raws = (
+                [el.text for el in svc_el.findall("cpe") if el.text] if svc_el is not None else []
+            )
+            service_cpe = pick_application_cpe(cpe_raws)
 
             try:
                 services.append(
@@ -80,6 +88,7 @@ def _parse_xml(xml_text: str) -> list[NmapHostResult]:
                         product=product,
                         version=version,
                         extra_info=extra,
+                        cpe=service_cpe,
                     )
                 )
             except ValueError as exc:
