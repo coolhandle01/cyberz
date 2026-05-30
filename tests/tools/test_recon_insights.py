@@ -10,9 +10,7 @@ from pydantic import ValidationError
 from models import (
     AttackGraph,
     Endpoint,
-    HostInsight,
     HostPriority,
-    HostRole,
     TLSCertificate,
 )
 from tools.recon_insights import (
@@ -63,86 +61,75 @@ def sweep(programme, target_apex) -> AttackGraph:
     )
 
 
-def _good_insight(**overrides) -> HostInsight:
-    base: dict = {
-        "hostname": "api.example.com",
-        "role": HostRole.API,
-        "priority": HostPriority.HIGH,
-        "notes": (
-            "Public REST API gateway running Spring Boot 2.6 behind Nginx; "
-            "primary target for the programme."
-        ),
-        "detected_tech": ["Nginx", "Spring Boot 2.6"],
-    }
-    base.update(overrides)
-    return HostInsight(**base)
-
-
 # Validation
 
 
 class TestValidateInsight:
-    def test_clean_insight_passes(self, sweep, programme):
-        report = validate_insight(_good_insight(), sweep, programme)
+    def test_clean_insight_passes(self, make_host_insight, sweep, programme):
+        report = validate_insight(make_host_insight(), sweep, programme)
         assert report.ok is True
         assert all(i.severity != "error" for i in report.issues)
 
-    def test_rejects_empty_hostname(self):
+    def test_rejects_empty_hostname(self, make_host_insight):
         # FQDN is a typed-string with an upstream validator now, so the
         # empty-hostname check fires at HostInsight construction time rather
         # than inside validate_insight. The test asserts the contract has
         # moved one layer up rather than re-asserting the (now-redundant)
         # validate_insight branch.
         with pytest.raises(ValidationError):
-            _good_insight(hostname="")
+            make_host_insight(hostname="")
 
-    def test_rejects_out_of_scope_hostname(self, sweep, programme, bystander_url):
+    def test_rejects_out_of_scope_hostname(
+        self, make_host_insight, sweep, programme, bystander_url
+    ):
         from urllib.parse import urlparse
 
         oos_host = urlparse(bystander_url).hostname
-        report = validate_insight(_good_insight(hostname=oos_host), sweep, programme)
+        report = validate_insight(make_host_insight(hostname=oos_host), sweep, programme)
         assert report.ok is False
         assert any(
             i.section == "hostname" and "not in programme scope" in i.message for i in report.issues
         )
 
-    def test_rejects_thin_notes(self, sweep, programme):
-        report = validate_insight(_good_insight(notes="too short"), sweep, programme)
+    def test_rejects_thin_notes(self, make_host_insight, sweep, programme):
+        report = validate_insight(make_host_insight(notes="too short"), sweep, programme)
         assert report.ok is False
         assert any(i.section == "notes" for i in report.issues)
 
-    def test_rejects_thin_notes_on_high_priority(self, sweep, programme):
+    def test_rejects_thin_notes_on_high_priority(self, make_host_insight, sweep, programme):
         # 35 chars is >= 30 (so not the basic floor) but < 60 (the high-priority floor)
         thirty_five = "Public API gateway hosting v2 routes."
-        report = validate_insight(_good_insight(notes=thirty_five), sweep, programme)
+        report = validate_insight(make_host_insight(notes=thirty_five), sweep, programme)
         assert report.ok is False
         assert any(
             i.section == "notes" and "high-priority hosts" in i.message for i in report.issues
         )
 
-    def test_rejects_thin_notes_on_skip(self, sweep, programme):
+    def test_rejects_thin_notes_on_skip(self, make_host_insight, sweep, programme):
         report = validate_insight(
-            _good_insight(priority=HostPriority.SKIP, notes="skip"),
+            make_host_insight(priority=HostPriority.SKIP, notes="skip"),
             sweep,
             programme,
         )
         assert report.ok is False
         assert any(i.section == "notes" for i in report.issues)
 
-    def test_warns_when_agent_drops_sweep_tech(self, sweep, programme):
+    def test_warns_when_agent_drops_sweep_tech(self, make_host_insight, sweep, programme):
         # sweep saw ['Nginx', 'Spring Boot 2.6']; agent only carries 'Nginx'
         report = validate_insight(
-            _good_insight(detected_tech=["Nginx"]),
+            make_host_insight(detected_tech=["Nginx"]),
             sweep,
             programme,
         )
         assert report.ok is True
         assert any(i.section == "detected_tech" and i.severity == "warning" for i in report.issues)
 
-    def test_accepts_when_agent_adds_version_to_sweep_tech(self, sweep, programme):
+    def test_accepts_when_agent_adds_version_to_sweep_tech(
+        self, make_host_insight, sweep, programme
+    ):
         # sweep saw 'Spring Boot 2.6'; agent carries 'Spring Boot 2.6.3' (more specific)
         report = validate_insight(
-            _good_insight(detected_tech=["Nginx", "Spring Boot 2.6.3"]),
+            make_host_insight(detected_tech=["Nginx", "Spring Boot 2.6.3"]),
             sweep,
             programme,
         )
@@ -150,9 +137,9 @@ class TestValidateInsight:
         # exact comparison may still warn. Either way, no errors.
         assert report.ok is True
 
-    def test_rejects_trivial_tech_entry(self, sweep, programme):
+    def test_rejects_trivial_tech_entry(self, make_host_insight, sweep, programme):
         report = validate_insight(
-            _good_insight(detected_tech=["X"]),
+            make_host_insight(detected_tech=["X"]),
             sweep,
             programme,
         )
@@ -174,10 +161,10 @@ class TestUncoveredInterestingHosts:
             "cdn.example.com",
         }
 
-    def test_drops_hosts_with_insights(self, sweep):
+    def test_drops_hosts_with_insights(self, make_host_insight, sweep):
         uncovered = uncovered_interesting_hosts(
             sweep,
-            [_good_insight(hostname="api.example.com")],
+            [make_host_insight(hostname="api.example.com")],
         )
         assert "api.example.com" not in uncovered
         assert "admin.example.com" in uncovered
@@ -195,9 +182,11 @@ def _write_sweep(run_dir, sweep: AttackGraph) -> None:
 
 
 class TestFinaliseRecon:
-    def test_writes_recon_json_for_clean_insights(self, sweep, programme, run_dir):
+    def test_writes_recon_json_for_clean_insights(
+        self, make_host_insight, sweep, programme, run_dir
+    ):
         _write_sweep(run_dir, sweep)
-        save_insight(_good_insight())
+        save_insight(make_host_insight())
         path = finalise_recon(programme)
         assert path == run_dir / "recon.json"
         data = json.loads(path.read_text())
@@ -209,10 +198,10 @@ class TestFinaliseRecon:
         with pytest.raises(ReconFinalisationError, match="no host insights"):
             finalise_recon(programme)
 
-    def test_refuses_when_no_high_priority(self, sweep, programme, run_dir):
+    def test_refuses_when_no_high_priority(self, make_host_insight, sweep, programme, run_dir):
         _write_sweep(run_dir, sweep)
         save_insight(
-            _good_insight(
+            make_host_insight(
                 priority=HostPriority.MEDIUM,
                 notes="Standard public API with no version disclosed yet.",
             )
@@ -220,20 +209,20 @@ class TestFinaliseRecon:
         with pytest.raises(ReconFinalisationError, match="HIGH priority"):
             finalise_recon(programme)
 
-    def test_refuses_on_validation_errors(self, sweep, programme, run_dir):
+    def test_refuses_on_validation_errors(self, make_host_insight, sweep, programme, run_dir):
         _write_sweep(run_dir, sweep)
-        save_insight(_good_insight(notes="too short"))
+        save_insight(make_host_insight(notes="too short"))
         with pytest.raises(ReconFinalisationError, match="unresolved errors"):
             finalise_recon(programme)
 
-    def test_refuses_without_sweep(self, programme, run_dir):
-        save_insight(_good_insight())
+    def test_refuses_without_sweep(self, make_host_insight, programme, run_dir):
+        save_insight(make_host_insight())
         with pytest.raises(FileNotFoundError, match=r"attack_graph\.json"):
             finalise_recon(programme)
 
-    def test_carries_sweep_fields_through(self, sweep, programme, run_dir):
+    def test_carries_sweep_fields_through(self, make_host_insight, sweep, programme, run_dir):
         _write_sweep(run_dir, sweep)
-        save_insight(_good_insight())
+        save_insight(make_host_insight())
         path = finalise_recon(programme)
         data = json.loads(path.read_text())
         assert data["subdomains"] == sweep.subdomains
@@ -241,7 +230,7 @@ class TestFinaliseRecon:
 
 
 class TestFinaliseMaterialisesHostDirs:
-    def test_writes_every_facet(self, sweep, programme, run_dir, target_apex):
+    def test_writes_every_facet(self, make_host_insight, sweep, programme, run_dir, target_apex):
         from models import RawFinding
         from tools.recon_insights import (
             host_score_path,
@@ -270,7 +259,7 @@ class TestFinaliseMaterialisesHostDirs:
             }
         )
         _write_sweep(run_dir, enriched)
-        save_insight(_good_insight())  # api.example.com, HIGH
+        save_insight(make_host_insight())  # api.example.com, HIGH
         finalise_recon(programme)
 
         # curation facets (from the insight)
@@ -282,7 +271,9 @@ class TestFinaliseMaterialisesHostDirs:
         assert [f.title for f in load_host_findings(f"api.{target_apex}")] == ["weak TLS"]
         assert len(load_tls_certificates()) == 1
 
-    def test_carries_enrichment_into_recon_json(self, sweep, programme, run_dir, target_apex):
+    def test_carries_enrichment_into_recon_json(
+        self, make_host_insight, sweep, programme, run_dir, target_apex
+    ):
         from models import IpAsset
 
         enriched = sweep.model_copy(
@@ -292,7 +283,7 @@ class TestFinaliseMaterialisesHostDirs:
             }
         )
         _write_sweep(run_dir, enriched)
-        save_insight(_good_insight())
+        save_insight(make_host_insight())
         out = finalise_recon(programme)
         final = AttackGraph.model_validate_json(out.read_text(encoding="utf-8"))
         assert len(final.ip_assets) == 1

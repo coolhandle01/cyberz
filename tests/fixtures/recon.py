@@ -19,7 +19,34 @@ from collections.abc import Callable
 
 import pytest
 
-from models import AttackGraph, Endpoint
+from models import AttackGraph, Endpoint, HostInsight, HostPriority, HostRole
+
+
+@pytest.fixture()
+def make_host_insight(target_apex: str) -> Callable[..., HostInsight]:
+    """Factory for a well-formed ``HostInsight`` (api.<apex>, HIGH, valid notes).
+
+    ``make_host_insight()`` -> the canonical in-scope insight;
+    ``make_host_insight(hostname=f"admin.{target_apex}", priority=...)`` for
+    variants. Shared so the recon_insights / recon_host_store suites build
+    one insight instead of each redefining a local ``_good_insight``.
+    """
+
+    def _make(**overrides: object) -> HostInsight:
+        base: dict = {
+            "hostname": f"api.{target_apex}",
+            "role": HostRole.API,
+            "priority": HostPriority.HIGH,
+            "notes": (
+                "Public REST API gateway running Spring Boot 2.6 behind Nginx; "
+                "primary target for the programme."
+            ),
+            "detected_tech": ["Nginx", "Spring Boot 2.6"],
+        }
+        base.update(overrides)
+        return HostInsight(**base)
+
+    return _make
 
 
 @pytest.fixture()

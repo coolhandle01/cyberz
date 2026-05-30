@@ -36,24 +36,9 @@ from tools.recon_host_store import (
 pytestmark = pytest.mark.unit
 
 
-def _good_insight(**overrides) -> HostInsight:
-    base: dict = {
-        "hostname": "api.example.com",
-        "role": HostRole.API,
-        "priority": HostPriority.HIGH,
-        "notes": (
-            "Public REST API gateway running Spring Boot 2.6 behind Nginx; "
-            "primary target for the programme."
-        ),
-        "detected_tech": ["Nginx", "Spring Boot 2.6"],
-    }
-    base.update(overrides)
-    return HostInsight(**base)
-
-
 class TestInsightPersistence:
-    def test_save_insight_writes_per_host_file(self, run_dir):
-        path = save_insight(_good_insight())
+    def test_save_insight_writes_per_host_file(self, make_host_insight, run_dir):
+        path = save_insight(make_host_insight())
         assert path == run_dir / "hosts" / "api.example.com" / "insight.json"
         assert path.exists()
         loaded = HostInsight.model_validate_json(path.read_text())
@@ -74,9 +59,9 @@ class TestInsightPersistence:
         assert path.parent.parent.name == "hosts"
         assert path.name == "insight.json"
 
-    def test_load_insights_orders_by_hostname(self, run_dir):
-        save_insight(_good_insight(hostname="zebra.example.com"))
-        save_insight(_good_insight(hostname="aardvark.example.com"))
+    def test_load_insights_orders_by_hostname(self, make_host_insight, run_dir):
+        save_insight(make_host_insight(hostname="zebra.example.com"))
+        save_insight(make_host_insight(hostname="aardvark.example.com"))
         loaded = load_insights()
         assert [i.hostname for i in loaded] == ["aardvark.example.com", "zebra.example.com"]
 

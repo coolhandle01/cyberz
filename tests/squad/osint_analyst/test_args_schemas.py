@@ -252,7 +252,7 @@ class TestSchemaAcceptReject:
     # FQDN-typed fields. Every schema below
     # carries at least one ``FQDN`` field; passing a URL / port / path
     # rejects upstream, before the scope filter sees the value.
-    # test_models.py's TestFQDN covers the validator exhaustively;
+    # tests/models/test_primitives.py TestFQDN covers the validator exhaustively;
     # this method asserts the OSINT schemas actually wire it, with each
     # malformed case derived from ``target_url`` so the deliberately broken
     # input is recognisably "the in-scope target, mis-shaped" rather than
