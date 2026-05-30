@@ -60,7 +60,8 @@ def run_initial_sweep_tool() -> str:
 
     This is the inventory step. Annotate the interesting hosts with
     Annotate Host and call Finalise Recon to produce the canonical
-    ``recon.json`` that downstream agents consume.
+    ``recon.json`` that the Vulnerability Researcher and Penetration
+    Tester consume.
     """
     programme = current_programme()
     result = run_recon(programme)

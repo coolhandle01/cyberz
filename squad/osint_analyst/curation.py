@@ -72,8 +72,8 @@ class _OsintLookupOwaspArgs(BaseModel):
         description=(
             "Free-text query against the OWASP Cheat Sheet index. Matches"
             " on cheatsheet title and topic (case-insensitive substring)."
-            " Use to surface guidance the downstream VR can reason against"
-            " when building the attack plan."
+            " Use to surface guidance the Vulnerability Researcher can"
+            " reason against when building the attack plan."
         ),
     )
 
@@ -82,7 +82,7 @@ class _OsintLookupOwaspArgs(BaseModel):
 def lookup_owasp_tool(query: str) -> list[OWASPEntry]:
     """
     Find OWASP Cheat Sheet entries for a vuln class or topic - hint for
-    the downstream VR's attack-plan reasoning. Returns each match's title,
+    the Vulnerability Researcher's attack-plan reasoning. Returns each match's title,
     key_principles, and the canonical cheatsheetseries.owasp.org URL.
     """
     return list(owasp_lookup(query))
@@ -101,8 +101,8 @@ class _AnnotateHostArgs(BaseModel):
     )
     role: HostRole = Field(
         description=(
-            "Functional role this host plays. Drives downstream"
-            " prioritisation - admin / auth hosts attract more probe"
+            "Functional role this host plays. Drives the Penetration"
+            " Tester's prioritisation - admin / auth hosts attract more probe"
             " budget than static / cdn ones. The schema enforces the"
             " enum upstream so an unknown role rejects before the"
             " wrapper body runs."
