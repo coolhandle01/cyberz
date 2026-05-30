@@ -20,14 +20,15 @@ boundary, not the IP one - see the per-tool notes below.
 
 from pydantic import BaseModel, Field
 
-from models import IPAddress, IpAsset, RdapRecord
+from models import IPAddress, IpAsset, RdapRecord, Service
 from models.primitives import FQDN
-from models.scanner import NmapHostResult, NmapMode, NmapScripts
+from models.scanner import NmapMode, NmapScripts
 from squad import cyber_tool
 from tools.recon.ip_asset import compose_ip_assets
-from tools.recon.nmap import nmap_scan
+from tools.recon.nmap import nmap_scan, services_from_nmap
 from tools.recon.rdap import lookup_rdap_for_asn
 from tools.recon.scope import TargetFQDN
+from tools.recon_host_store import save_host_services
 
 
 class _LookupIpAssetsArgs(BaseModel):
@@ -133,7 +134,7 @@ class _DeepScanHostArgs(BaseModel):
 
 
 @cyber_tool("Deep Scan Host", args_schema=_DeepScanHostArgs)
-def deep_scan_host_tool(host: FQDN, ports: list[int]) -> NmapHostResult:
+def deep_scan_host_tool(host: FQDN, ports: list[int]) -> list[Service]:
     """
     Run a focused nmap service / version scan (``-sV`` plus the default
     NSE script category, ``-sC``) against one host's known-open ports.
@@ -148,11 +149,14 @@ def deep_scan_host_tool(host: FQDN, ports: list[int]) -> NmapHostResult:
     SSH / RDP / SMTP banner worth fingerprinting) on an in-scope host -
     the HTTP surface is already covered by ``Probe FQDNs`` / httpx.
 
-    Returns the single ``NmapHostResult`` ({host, services}) for the
-    queried host. When nmap returns no rows (host down, scan blocked),
-    returns an empty ``NmapHostResult`` for that host rather than ``None``
-    - the OA always gets a typed result back. Evidence is not persisted:
-    this is an interactive pivot, not a recon-artefact write.
+    Returns the host's open ``Service`` assets (one per open port nmap
+    fingerprinted), each carrying its banner detail, the NIST CPE nmap
+    matched, and ``detected_by="nmap"``. Empty list when nmap found
+    nothing (host down / scan blocked) - the OA always gets a typed
+    result back. The services are also written to the host's
+    ``services.json`` so the finalised recon (and the future amass
+    upsert) carry them; the raw nmap XML is not persisted - this is a
+    focused pivot, not an evidence artefact.
     """
     result = nmap_scan(
         [host],
@@ -161,13 +165,18 @@ def deep_scan_host_tool(host: FQDN, ports: list[int]) -> NmapHostResult:
         persist_evidence=False,
         ports=ports,
     )
-    for host_result in result.hosts:
-        if host_result.host == host:
-            return host_result
-    # nmap surfaced no row for the queried host (down / blocked / parse
-    # miss) - hand back an empty typed result keyed to the host rather
-    # than None, so the agent reasons over a shape it always gets.
-    return result.hosts[0] if result.hosts else NmapHostResult(host=host)
+    host_result = next((h for h in result.hosts if h.host == host), None)
+    if host_result is None:
+        # nmap surfaced no row for the queried host (down / blocked /
+        # parse miss) - fall back to the first row if any, else nothing.
+        host_result = result.hosts[0] if result.hosts else None
+    services = services_from_nmap(host_result) if host_result is not None else []
+    if services:
+        # Persist the Service-asset facet to the host's directory - the
+        # on-disk form of what #45 upserts as amass Service nodes. Skip
+        # the write when empty (presence graph: no services -> no node).
+        save_host_services(host, services)
+    return services
 
 
 __all__ = [
