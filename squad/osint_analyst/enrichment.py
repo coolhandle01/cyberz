@@ -21,9 +21,13 @@ boundary, not the IP one - see the per-tool notes below.
 from pydantic import BaseModel, Field
 
 from models import IPAddress, IpAsset, RdapRecord
+from models.primitives import FQDN
+from models.scanner import NmapHostResult, NmapMode, NmapScripts
 from squad import cyber_tool
 from tools.recon.ip_asset import compose_ip_assets
+from tools.recon.nmap import nmap_scan
 from tools.recon.rdap import lookup_rdap_for_asn
+from tools.recon.scope import TargetFQDN
 
 
 class _LookupIpAssetsArgs(BaseModel):
@@ -102,9 +106,76 @@ def lookup_rdap_asn_tool(asn: int) -> RdapRecord | None:
     return lookup_rdap_for_asn(asn)
 
 
+class _DeepScanHostArgs(BaseModel):
+    """Explicit args_schema for the Deep Scan Host tool."""
+
+    host: TargetFQDN = Field(
+        description=(
+            "A single in-scope hostname to deep-scan, validated as an RFC"
+            " 1123 hostname (URLs / ports / paths reject upstream). This is"
+            " the commit-to-one target: an out-of-scope host raises rather"
+            " than being silently dropped, since deep-scanning is louder"
+            " than a passive lookup. Pick a host the sweep already surfaced"
+            " whose open-port map shows a non-HTTP service worth a focused"
+            " service / banner scan."
+        ),
+    )
+    ports: list[int] = Field(
+        description=(
+            "The known-open ports to focus the scan on - read them off the"
+            " sweep's open-port map for this host. The scan runs ``-sV``"
+            " (service / version detection) against exactly these ports"
+            " rather than re-sweeping the top-100, so pass the ports the"
+            " sweep already found open. An empty list falls back to the"
+            " mode's default breadth."
+        ),
+    )
+
+
+@cyber_tool("Deep Scan Host", args_schema=_DeepScanHostArgs)
+def deep_scan_host_tool(host: FQDN, ports: list[int]) -> NmapHostResult:
+    """
+    Run a focused nmap service / version scan (``-sV`` plus the default
+    NSE script category, ``-sC``) against one host's known-open ports.
+    This is the naabu-then-nmap second leg: the sweep's quick port scan
+    found *which* ports are open; this finds *what is listening* on them -
+    service names, version banners, and the typed ``Technology`` rows
+    derived from them.
+
+    The host is scope-filtered at the args_schema boundary; an
+    out-of-scope host never reaches this body. Reach for this when the
+    sweep's open-port map shows a non-HTTP service (a database port, an
+    SSH / RDP / SMTP banner worth fingerprinting) on an in-scope host -
+    the HTTP surface is already covered by ``Probe FQDNs`` / httpx.
+
+    Returns the single ``NmapHostResult`` ({host, services,
+    detected_technologies}) for the queried host. When nmap returns no
+    rows (host down, scan blocked), returns an empty ``NmapHostResult``
+    for that host rather than ``None`` - the OA always gets a typed
+    result back. Evidence is not persisted: this is an interactive pivot,
+    not a recon-artefact write.
+    """
+    result = nmap_scan(
+        [host],
+        mode=NmapMode.SERVICE_VERSION,
+        scripts=NmapScripts.DEFAULT,
+        persist_evidence=False,
+        ports=ports,
+    )
+    for host_result in result.hosts:
+        if host_result.host == host:
+            return host_result
+    # nmap surfaced no row for the queried host (down / blocked / parse
+    # miss) - hand back an empty typed result keyed to the host rather
+    # than None, so the agent reasons over a shape it always gets.
+    return result.hosts[0] if result.hosts else NmapHostResult(host=host)
+
+
 __all__ = [
+    "_DeepScanHostArgs",
     "_LookupIpAssetsArgs",
     "_LookupRdapAsnArgs",
+    "deep_scan_host_tool",
     "lookup_ip_assets_tool",
     "lookup_rdap_asn_tool",
 ]

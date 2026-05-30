@@ -21,9 +21,12 @@ import pytest
 
 from models.asset import IpAsset
 from models.network import RdapRecord
+from models.scanner import NmapHostResult, NmapMode, NmapScanResult, NmapScripts
 from squad.osint_analyst import (
+    _DeepScanHostArgs,
     _LookupIpAssetsArgs,
     _LookupRdapAsnArgs,
+    deep_scan_host_tool,
     lookup_ip_assets_tool,
     lookup_rdap_asn_tool,
 )
@@ -126,3 +129,84 @@ class TestLookupRdapAsn:
         result = invoke_tool(lookup_rdap_asn_tool, asn=64512)
 
         assert result is None
+
+
+class TestDeepScanHost:
+    """``Deep Scan Host`` wraps ``nmap_scan`` in SERVICE_VERSION mode - this
+    one DOES scope-filter.
+
+    Unlike the IP / ASN lookups, the target is an FQDN, and the programme
+    scope model is FQDN-shaped, so ``host`` is a ``TargetFQDN`` (single,
+    loud-reject). An out-of-scope host raises at validation before any
+    nmap subprocess fires. The wrapper deep-scans one host's known-open
+    ports, returning the single ``NmapHostResult`` for it.
+    """
+
+    def test_schema_accepts_in_scope_host(self, programme_in_workspace, target_apex) -> None:
+        """An in-scope hostname + port list validates without raising."""
+        instance = _DeepScanHostArgs.model_validate(
+            {"host": f"api.{target_apex}", "ports": [22, 443]}
+        )
+        assert instance.host == f"api.{target_apex}"
+        assert instance.ports == [22, 443]
+
+    def test_schema_rejects_out_of_scope_host(self, programme_in_workspace, bystander_url) -> None:
+        """A ``TargetFQDN`` host outside the programme scope rejects loudly."""
+        from urllib.parse import urlparse
+
+        from pydantic import ValidationError
+
+        oos_host = urlparse(bystander_url).hostname
+        with pytest.raises(ValidationError, match="not in the selected programme's scope"):
+            _DeepScanHostArgs.model_validate({"host": oos_host, "ports": [443]})
+
+    def test_schema_rejects_url_in_host(self, programme_in_workspace, target_url) -> None:
+        """A URL where a bare hostname is expected trips the FQDN primitive."""
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            _DeepScanHostArgs.model_validate({"host": target_url, "ports": [443]})
+
+    def test_runs_service_version_scan_on_host(
+        self, invoke_tool, programme_in_workspace, target_apex, monkeypatch
+    ) -> None:
+        """The wrapper runs nmap in SERVICE_VERSION mode with the supplied
+        ports and returns the single host result."""
+        host = f"api.{target_apex}"
+        host_result = NmapHostResult(host=host)
+        captured_hosts: list[str] = []
+        captured_kwargs: dict[str, object] = {}
+
+        def _fake_nmap_scan(hosts, **kwargs):
+            captured_hosts.extend(hosts)
+            captured_kwargs.update(kwargs)
+            return NmapScanResult(mode=NmapMode.SERVICE_VERSION, hosts=[host_result])
+
+        monkeypatch.setattr("squad.osint_analyst.enrichment.nmap_scan", _fake_nmap_scan)
+
+        result = invoke_tool(deep_scan_host_tool, host=host, ports=[22, 443])
+
+        assert result == host_result
+        assert captured_hosts == [host]
+        assert captured_kwargs["mode"] == NmapMode.SERVICE_VERSION
+        assert captured_kwargs["scripts"] == NmapScripts.DEFAULT
+        assert captured_kwargs["ports"] == [22, 443]
+
+    def test_returns_empty_host_result_when_nmap_finds_nothing(
+        self, invoke_tool, programme_in_workspace, target_apex, monkeypatch
+    ) -> None:
+        """When nmap returns no host rows (host down / scan failed), the
+        wrapper returns an empty ``NmapHostResult`` for the queried host
+        rather than ``None`` - the OA always gets a typed result back."""
+        host = f"api.{target_apex}"
+
+        monkeypatch.setattr(
+            "squad.osint_analyst.enrichment.nmap_scan",
+            lambda hosts, **kwargs: NmapScanResult(mode=NmapMode.SERVICE_VERSION, hosts=[]),
+        )
+
+        result = invoke_tool(deep_scan_host_tool, host=host, ports=[443])
+
+        assert isinstance(result, NmapHostResult)
+        assert result.host == host
+        assert result.services == []
