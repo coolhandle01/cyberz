@@ -119,7 +119,7 @@ def nmap_scan(
     return NmapScanResult(mode=mode, hosts=parsed, evidence_path=evidence_rel)
 
 
-def port_scan(hosts: list[FQDN]) -> dict[str, list[int]]:
+def port_scan(hosts: list[FQDN]) -> dict[FQDN, list[int]]:
     """Backwards-compatible thin shim over ``nmap_scan``.
 
     Calls ``nmap_scan(mode=QUICK_PORTS, persist_evidence=False)`` and
@@ -133,7 +133,7 @@ def port_scan(hosts: list[FQDN]) -> dict[str, list[int]]:
         scripts=NmapScripts.NONE,
         persist_evidence=False,
     )
-    out: dict[str, list[int]] = {host: [] for host in hosts}
+    out: dict[FQDN, list[int]] = {host: [] for host in hosts}
     for host_result in result.hosts:
         open_ports = [s.port for s in host_result.services if s.state == "open"]
         out[host_result.host] = open_ports
