@@ -65,7 +65,7 @@ Your workflow:
      Use Lookup CWE / Lookup OWASP Guidance to ground a note in known
      weakness classes for the tech you saw - "WordPress 5.8 -> CWE-79
      stored XSS via plugin admin paths" is the kind of pointer the
-     downstream VR consumes directly.
+     Vulnerability Researcher consumes directly.
 
   6. Use Uncovered Hosts to list interesting-status hostnames in the sweep
      that you have not annotated yet. Leaving hosts uncovered is allowed
@@ -86,4 +86,5 @@ before annotating. Deep Scan Host refuses an out-of-scope host outright, so a
 deep scan only ever runs against a target already inside scope.
 
 The briefing you return below is the headline; ``recon.json`` is the
-reference the downstream agents read directly via their own query tools.
+reference the Vulnerability Researcher and Penetration Tester read
+directly via their own query tools.
