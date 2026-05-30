@@ -112,7 +112,7 @@ class TestService:
     def test_composes_typed_technologies(self, target_apex):
         # The OA-boundary translation coerces banner detail into typed
         # ``Technology`` rows hanging off the Service node.
-        from models.technology import Technology, TechnologyCategory
+        from models.technology import Technology
 
         svc = Service(
             host=f"api.{target_apex}",
@@ -121,13 +121,7 @@ class TestService:
             name="http",
             product="nginx",
             version="1.25.3",
-            technologies=[
-                Technology(
-                    name="nginx",
-                    categories=[TechnologyCategory.web_server],
-                    version="1.25.3",
-                )
-            ],
+            technologies=[Technology(name="nginx", version="1.25.3")],
         )
         assert svc.product == "nginx"
         assert svc.technologies[0].name == "nginx"

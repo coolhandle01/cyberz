@@ -1,156 +1,72 @@
 """
-models/technology.py - typed shape for a detected technology on an asset.
+models/technology.py - one detected technology on an asset.
 
-The cybersquad recon vocabulary for "what software is running here". One
-canonical shape replaces the earlier per-bucket enums (web framework /
-cloud / service) that were never going to factor cleanly past a handful
-of members.
+A ``Technology`` is a single piece of software fingerprinted on a host or
+endpoint: a canonical name, an optional version, and an optional CPE 2.3
+identifier for CVE matching.
 
-Modelled on **Wappalyzer**'s taxonomy: an open-source catalogue of
-fingerprints for ~3,000 web technologies, grouped into ~78 categories.
-Wappalyzer is the de-facto standard the recon ecosystem aligns with -
-httpx's ``-tech-detect`` flag uses ProjectDiscovery's
-``wappalyzergo`` (https://github.com/projectdiscovery/wappalyzergo)
-which ships a derivative of the catalogue, and nuclei's tech-detect
-templates do the same. The strings ``Endpoint.technologies`` already
-carries are Wappalyzer-shape; this module gives them a typed home.
+cybersquad classifies nothing and maintains no catalogue. The ``name`` is
+whatever the *detecting tool's own vocabulary* returned - a wappalyzer slug
+from httpx ``-tech-detect`` (via ProjectDiscovery's ``wappalyzergo``), or a
+service / product banner from nmap ``-sV``. The externally-owned string IS
+the identifier; a parallel taxonomy would be a maintenance burden that
+drifts from the tools and re-derives data wappalyzer / NIST already own.
 
-For CVE matching, ``Technology`` carries an optional ``cpe`` field
-(CPE 2.3 URI). CPE is NIST/MITRE's standard for identifying software in
-the NVD CVE database - the right format at the CVE-lookup boundary, but
-not what the agent reasons about day-to-day. The agent reads
-``name`` / ``categories`` / ``version``; the VR's CVE lookup builds a
-CPE string to query NVD against. Two layers, one type.
+For CVE matching, ``Technology`` carries an optional ``cpe`` field (CPE 2.3
+URI - NIST's product identifier, the key into the NVD CVE database). nmap
+emits a CPE per matched service; httpx emits only a name (a name -> CPE
+resolution is best-effort, deferred). ``None`` when no tool handed us one.
+
+Persisted shape: when amass lands (#45) each ``Technology`` becomes a group
+of properties on the FQDN / IPAddress / Service asset it was observed on,
+stamped with the detecting tool as provenance. This module is the in-memory
+carrier; the amass Property is the persisted form.
 
 References:
-- Wappalyzer catalogue: https://www.wappalyzer.com/technologies/
-- Wappalyzer technology / category schema:
-  https://github.com/wappalyzer/wappalyzer/blob/master/src/drivers/npm/technologies.json
+- Wappalyzer catalogue (name vocabulary): https://www.wappalyzer.com/technologies/
 - CPE 2.3 spec (NIST IR 7695): https://csrc.nist.gov/pubs/ir/7695/final
 """
 
 from __future__ import annotations
 
-from enum import StrEnum
-
 from pydantic import BaseModel, Field
 
 
-class TechnologyCategory(StrEnum):
-    """Wappalyzer-aligned categorisation of detected software.
-
-    Append-only. Member values are the kebab-case slug shapes Wappalyzer
-    uses in its public catalogue (https://www.wappalyzer.com/categories/),
-    lower-cased and hyphen-separated.
-
-    The catalogue is deliberately narrower than Wappalyzer's full 78
-    categories - we only add a member when at least one recon binary
-    (nmap, httpx, nuclei) or one probe targets it. Append as gaps surface.
-    """
-
-    # Web-stack frameworks (server-side)
-    web_framework = "web-framework"
-    web_server = "web-server"
-
-    # Web-stack frameworks (client-side)
-    js_framework = "js-framework"
-    js_library = "js-library"
-    css_framework = "css-framework"
-
-    # Content management
-    cms = "cms"
-
-    # Data layer
-    database = "database"
-    message_queue = "message-queue"
-
-    # Cloud / hosting
-    paas = "paas"  # platform-as-a-service: AWS, GCP, Heroku, Vercel
-    iaas = "iaas"  # infrastructure: bare cloud VMs, K8s control planes
-    cdn = "cdn"
-
-    # System / network services nmap surfaces
-    operating_system = "operating-system"
-    programming_language = "programming-language"
-    ssh_server = "ssh-server"
-    mail_server = "mail-server"
-    ftp_server = "ftp-server"
-
-    # Operations / observability
-    monitoring = "monitoring"
-    service_discovery = "service-discovery"
-    hosting_panel = "hosting-panel"
-
-    # AI / LLM-backed services - the detection slot for the
-    # ``LlmEndpoint`` -> ``DiscoveredMCP`` lineage (see ``models/asset.py``).
-    # Wappalyzer added an LLM category as model-backed services
-    # proliferated; the slug mirrors it. No ``_CATALOGUE`` entries map to
-    # this yet (tools/recon/technology.py) - the category exists ahead of
-    # the coercer rows / MCP-detection probe that will populate it.
-    llm = "llm"
-
-
 class Technology(BaseModel):
-    """One detected technology on an asset.
+    """One detected technology on an asset: name + optional version + CPE.
 
-    Mirrors the per-app row in Wappalyzer's catalogue: a canonical
-    name, the categories it belongs to, optionally a version string
-    when banners / fingerprints carry one, and optionally a CPE 2.3
-    URI for CVE matching at the VR boundary.
-
-    ``name`` is the canonical lowercase identifier ("django", "redis",
-    "wordpress", "nginx") - the recon-side coercer normalises raw
-    strings (nmap banners, httpx tech-detect output) before constructing
-    a Technology, so the name is always catalogue-shape by the time it
-    reaches a consumer. Bare ``str`` (not a primitive) because the
-    canonical-name catalogue is 3,000+ entries and grows - a fixed-shape
-    validator does not fit. ``max_length`` caps blast radius if a
-    coercer ever lets a malformed name through.
-
-    Multiple categories are valid: WordPress is both ``cms`` and (via
-    plugins) ``web_framework``-adjacent; Next.js is both ``js_framework``
-    and a hosting platform. List, not enum, so the catalogue is not
-    forced to pick.
+    ``name`` is the detecting tool's own canonical string, lowercased
+    ("django", "redis", "nginx", "openssh") - the recon-side coercer
+    (``tools.recon.technology.coerce_technologies``) normalises raw output
+    before constructing a Technology. Bare ``str`` (not a primitive): the
+    space of technology names is open and tool-owned, so a fixed-shape
+    validator does not fit. ``max_length`` caps blast radius if a coercer
+    ever lets a malformed name through.
     """
 
     # Tool-captured from external recon (nmap banner / httpx tech-detect).
-    # Defence: coerce-time strip (recon-side ``coerce_technologies``
-    # normalises and rejects anomalous strings) + boundary length cap
-    # below.
+    # Defence: coerce-time strip + boundary length cap below.
     name: str = Field(max_length=64)
 
-    categories: list[TechnologyCategory]
-
-    # Tool-captured: nmap banner "2.4.41 ((Ubuntu))", httpx-tech-detect
-    # "Django:4.2". Defence: coerce-time normalise + length cap. Kept
-    # narrow so an injection has no room to manoeuvre if the coercer is
-    # ever bypassed.
+    # Tool-captured version: nmap banner "2.4.41", httpx "Django:4.2".
+    # Defence: coerce-time normalise + length cap. Kept narrow so an
+    # injection has no room to manoeuvre if the coercer is ever bypassed.
     version: str | None = Field(default=None, max_length=64)
 
     # CPE 2.3 URI for CVE matching, e.g.
-    # "cpe:2.3:a:djangoproject:django:4.2:*:*:*:*:*:*:*". Populated when
-    # the coercer can confidently build one; left None when only the
-    # name / category are known (the VR's CVE lookup can still fuzzy-
-    # match by name + version when CPE is absent).
+    # "cpe:2.3:a:djangoproject:django:4.2:*:*:*:*:*:*:*". Populated when a
+    # tool hands us one (nmap -sV emits CPEs; httpx does not) or a name ->
+    # CPE resolution succeeds; ``None`` otherwise (the VR's CVE lookup can
+    # still fuzzy-match by name + version).
     #
-    # FIXME(#45 / amass-integration): when amass lands, Technology
-    # instances persist as amass Property values attached to the FQDN /
-    # IPAddress asset they describe. Upstream amass's Open Asset Model
-    # plans a typed tech-stack PropertyType
-    # (https://github.com/owasp-amass/open-asset-model - README
-    # "Additional types are planned, including certificates and tech
-    # stacks"); until then cybersquad-side coercion emits
-    # SimpleProperty{Name: "technology", Value: "<name>:<version>"} for
-    # detection rows and a sibling VulnProperty for CVE-bearing
-    # entries. The Wappalyzer-canonical slug IS the join key - there is
-    # no separate Wappalyzer-rows table in either cybersquad or amass;
-    # reader code (VR's CVE lookup, PT's exploit-filter query) knows the
-    # catalogue out-of-band. This module's ``Technology`` stays the
-    # runtime / in-memory shape; the amass-side Property is the
-    # persisted shape. Drop the standalone ``Cpe`` primitive plan once
-    # amass holds the canonical CVE-keying for us (a VulnProperty
-    # carrying the CVE id alongside the Technology Property suffices;
-    # CPE strings stop earning their keep at our boundary).
+    # FIXME(#45 / amass-integration): when amass lands, a Technology persists
+    # as amass Property values on the FQDN / IPAddress / Service asset it
+    # describes - SimpleProperty{Name: "technology", Value: "<name>:<version>"}
+    # plus a sibling VulnProperty for CVE-bearing entries. Also promote ``cpe``
+    # to a typed ``Cpe`` primitive in ``models.primitives`` at that point - CPE
+    # sits on two fields (here + ``NmapService.cpe``), the multi-field
+    # threshold the cybersquad-models skill sets for a primitive; deferred
+    # alongside the existing ``CvssVector`` / ``CweId`` primitive plans.
     cpe: str | None = Field(
         default=None,
         max_length=255,
@@ -163,4 +79,4 @@ class Technology(BaseModel):
     )
 
 
-__all__ = ["Technology", "TechnologyCategory"]
+__all__ = ["Technology"]

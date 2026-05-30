@@ -30,7 +30,7 @@ across every consumer.
 |                   | ``AttackForestFinalisationError`` |
 | ``models.triage`` | ``AuthoredAssessment``, ``SeverityDecision`` |
 | ``models.report`` | ``AuthoredDraft`` |
-| ``models.technology`` | ``Technology``, ``TechnologyCategory`` |
+| ``models.technology`` | ``Technology`` |
 
 The per-domain modules import only from layers below them in the
 dependency graph: primitives -> finding -> h1 -> asset. No module imports
@@ -86,7 +86,7 @@ from models.scanner import (
     NmapScripts,
     NmapService,
 )
-from models.technology import Technology, TechnologyCategory
+from models.technology import Technology
 from models.triage import AuthoredAssessment, SeverityDecision
 from models.workspace import RunFile, RunFileContent
 
@@ -143,6 +143,5 @@ __all__ = [
     "TLSCertificate",
     "TakeoverCandidate",
     "Technology",
-    "TechnologyCategory",
     "VerifiedVulnerability",
 ]
