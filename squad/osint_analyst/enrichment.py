@@ -107,8 +107,8 @@ def lookup_rdap_asn_tool(asn: int) -> RdapRecord | None:
     return lookup_rdap_for_asn(asn)
 
 
-class _DeepScanHostArgs(BaseModel):
-    """Explicit args_schema for the Deep Scan Host tool."""
+class _DiscoverHostServicesArgs(BaseModel):
+    """Explicit args_schema for the Discover Host Services tool."""
 
     host: TargetFQDN = Field(
         description=(
@@ -133,8 +133,8 @@ class _DeepScanHostArgs(BaseModel):
     )
 
 
-@cyber_tool("Deep Scan Host", args_schema=_DeepScanHostArgs)
-def deep_scan_host_tool(host: FQDN, ports: list[int]) -> list[Service]:
+@cyber_tool("Discover Host Services", args_schema=_DiscoverHostServicesArgs)
+def discover_host_services_tool(host: FQDN, ports: list[int]) -> list[Service]:
     """
     Run a focused nmap service / version scan (``-sV`` plus the default
     NSE script category, ``-sC``) against one host's known-open ports.
@@ -147,7 +147,7 @@ def deep_scan_host_tool(host: FQDN, ports: list[int]) -> list[Service]:
     out-of-scope host never reaches this body. Reach for this when the
     sweep's open-port map shows a non-HTTP service (a database port, an
     SSH / RDP / SMTP banner worth fingerprinting) on an in-scope host -
-    the HTTP surface is already covered by ``Probe FQDNs`` / httpx.
+    the HTTP surface is already covered by ``Discover Webpages`` / httpx.
 
     Returns the host's open ``Service`` assets (one per open port nmap
     fingerprinted), each carrying its banner detail, the NIST CPE nmap
@@ -180,10 +180,10 @@ def deep_scan_host_tool(host: FQDN, ports: list[int]) -> list[Service]:
 
 
 __all__ = [
-    "_DeepScanHostArgs",
+    "_DiscoverHostServicesArgs",
     "_LookupIpAssetsArgs",
     "_LookupRdapAsnArgs",
-    "deep_scan_host_tool",
+    "discover_host_services_tool",
     "lookup_ip_assets_tool",
     "lookup_rdap_asn_tool",
 ]

@@ -71,8 +71,8 @@ def run_initial_sweep_tool() -> str:
     return "attack_graph.json"
 
 
-class _ReconSubdomainsArgs(BaseModel):
-    """Explicit args_schema for the OSINT Recon Subdomains tool."""
+class _ListSubdomainsArgs(BaseModel):
+    """Explicit args_schema for the OSINT List Subdomains tool."""
 
     attack_graph_path: str = Field(
         default="attack_graph.json",
@@ -94,8 +94,8 @@ class _ReconSubdomainsArgs(BaseModel):
     )
 
 
-@cyber_tool("Recon Subdomains", args_schema=_ReconSubdomainsArgs)
-def recon_subdomains_tool(
+@cyber_tool("List Subdomains", args_schema=_ListSubdomainsArgs)
+def list_subdomains_tool(
     attack_graph_path: str = "attack_graph.json", host_filter: str | None = None
 ) -> list[FQDN]:
     """
@@ -103,14 +103,14 @@ def recon_subdomains_tool(
     a case-insensitive substring (e.g. "api" returns every subdomain
     containing "api"). Use this to inspect the sweep before deciding which
     hosts to annotate. Each returned hostname is ready to pass straight
-    into ``Annotate Host``, ``Probe FQDNs``, or ``Detect Takeover
+    into ``Annotate Host``, ``Discover Webpages``, or ``Discover Takeover
     Candidates`` - no further normalisation needed.
     """
     return [FQDN(h) for h in recon_subdomains(attack_graph_path, host_filter=host_filter)]
 
 
-class _ReconEndpointsArgs(BaseModel):
-    """Explicit args_schema for the OSINT Recon Endpoints tool."""
+class _ListEndpointsArgs(BaseModel):
+    """Explicit args_schema for the OSINT List Endpoints tool."""
 
     attack_graph_path: str = Field(
         default="attack_graph.json",
@@ -156,8 +156,8 @@ class _ReconEndpointsArgs(BaseModel):
     )
 
 
-@cyber_tool("Recon Endpoints", args_schema=_ReconEndpointsArgs)
-def recon_endpoints_tool(
+@cyber_tool("List Endpoints", args_schema=_ListEndpointsArgs)
+def list_endpoints_tool(
     attack_graph_path: str = "attack_graph.json",
     status: int | None = None,
     tech: str | None = None,
@@ -182,8 +182,8 @@ def recon_endpoints_tool(
     )
 
 
-class _ReconOpenPortsArgs(BaseModel):
-    """Explicit args_schema for the OSINT Recon Open Ports tool."""
+class _ListOpenPortsArgs(BaseModel):
+    """Explicit args_schema for the OSINT List Open Ports tool."""
 
     attack_graph_path: str = Field(
         default="attack_graph.json",
@@ -200,8 +200,8 @@ class _ReconOpenPortsArgs(BaseModel):
     )
 
 
-@cyber_tool("Recon Open Ports", args_schema=_ReconOpenPortsArgs)
-def recon_open_ports_tool(
+@cyber_tool("List Open Ports", args_schema=_ListOpenPortsArgs)
+def list_open_ports_tool(
     attack_graph_path: str = "attack_graph.json", host: FQDN | None = None
 ) -> OpenPortsMap:
     """
@@ -213,8 +213,8 @@ def recon_open_ports_tool(
     return OpenPortsMap(hosts=recon_open_ports(attack_graph_path, host=host))
 
 
-class _CertTransparencyArgs(BaseModel):
-    """Explicit args_schema for the Certificate Transparency Lookup tool."""
+class _DiscoverSubdomainsArgs(BaseModel):
+    """Explicit args_schema for the Discover Subdomains tool."""
 
     domain: TargetFQDN = Field(
         description=(
@@ -227,18 +227,18 @@ class _CertTransparencyArgs(BaseModel):
     )
 
 
-@cyber_tool("Certificate Transparency Lookup", args_schema=_CertTransparencyArgs)
-def cert_transparency_tool(domain: FQDN) -> list[str]:
+@cyber_tool("Discover Subdomains", args_schema=_DiscoverSubdomainsArgs)
+def discover_subdomains_tool(domain: FQDN) -> list[str]:
     """
     Query crt.sh certificate transparency logs to discover subdomains not
     found by active enumeration. Returns deduplicated hostnames. Feed
-    newly discovered hosts to Probe FQDNs to determine which are live.
+    newly discovered hosts to Discover Webpages to determine which are live.
     """
     return cert_transparency(domain)
 
 
-class _HistoricalUrlsArgs(BaseModel):
-    """Explicit args_schema for the Historical URL Discovery tool."""
+class _DiscoverHistoricalUrlsArgs(BaseModel):
+    """Explicit args_schema for the Discover Historical URLs tool."""
 
     domain: TargetFQDN = Field(
         description=(
@@ -246,42 +246,42 @@ class _HistoricalUrlsArgs(BaseModel):
             " as an RFC 1123 hostname (URLs / ports / paths reject"
             " upstream). Returns historical URLs the Wayback Machine has"
             " archived. Many paths will be 404s today; feed candidates to"
-            " Probe FQDNs to confirm liveness before annotating."
+            " Discover Webpages to confirm liveness before annotating."
         ),
     )
 
 
-@cyber_tool("Historical URL Discovery", args_schema=_HistoricalUrlsArgs)
-def historical_urls_tool(domain: FQDN) -> list[str]:
+@cyber_tool("Discover Historical URLs", args_schema=_DiscoverHistoricalUrlsArgs)
+def discover_historical_urls_tool(domain: FQDN) -> list[str]:
     """
     Use waybackurls to find historical endpoints for a domain from the
     Wayback Machine. Surfaces paths that may no longer be linked but still
-    exist - candidates for Probe FQDNs.
+    exist - candidates for Discover Webpages.
     """
     return historical_urls(domain)
 
 
-class _LlmDetectionArgs(BaseModel):
-    """Explicit args_schema for the LLM Endpoint Detection tool."""
+class _DiscoverLlmEndpointsArgs(BaseModel):
+    """Explicit args_schema for the Discover LLM Endpoints tool."""
 
     endpoints: TargetEndpoints = Field(
         description=(
             "Live endpoint objects from the sweep (or a filtered subset)."
             " Each entry needs ``url`` and ideally ``technologies``;"
             " ``status_code`` is honoured if present. Pass the typed list"
-            " straight through from Recon Endpoints - do not stringify."
+            " straight through from List Endpoints - do not stringify."
         ),
     )
 
 
-@cyber_tool("LLM Endpoint Detection", args_schema=_LlmDetectionArgs)
-def llm_detection_tool(endpoints: list[Endpoint]) -> list[LlmEndpoint]:
+@cyber_tool("Discover LLM Endpoints", args_schema=_DiscoverLlmEndpointsArgs)
+def discover_llm_endpoints_tool(endpoints: list[Endpoint]) -> list[LlmEndpoint]:
     """
     Scan a set of live endpoints for signals that they are backed by an LLM
     or AI assistant (URL path heuristics, OpenAI-format response keys,
     EventSource content-type, self-identification phrases). Pass the
     sweep's endpoint list (or a filtered subset) straight through from
-    Recon Endpoints. Returned hits deserve a HIGH-priority annotation and
+    List Endpoints. Returned hits deserve a HIGH-priority annotation and
     a note pointing the Penetration Tester at prompt-injection probes.
     """
     # CrewAI's args_schema validation produces list[dict] from the LLM JSON
@@ -291,8 +291,8 @@ def llm_detection_tool(endpoints: list[Endpoint]) -> list[LlmEndpoint]:
     return [LlmEndpoint.model_validate(ep.model_dump()) for ep in detect_llm_endpoints(parsed)]
 
 
-class _ProbeFQDNsArgs(BaseModel):
-    """Explicit args_schema for the Probe FQDNs tool."""
+class _DiscoverWebpagesArgs(BaseModel):
+    """Explicit args_schema for the Discover Webpages tool."""
 
     hostnames: TargetFQDNs = Field(
         description=(
@@ -301,8 +301,8 @@ class _ProbeFQDNsArgs(BaseModel):
             " RFC 1123 hostname; URLs / ports / paths reject upstream"
             " (catches the common 'agent handed us a URL when we asked for"
             " a hostname' case before the scope filter silently drops it)."
-            " Typically the net-new ones surfaced by Certificate"
-            " Transparency or Historical URL Discovery that were missed by"
+            " Typically the net-new ones surfaced by Discover"
+            " Subdomains or Discover Historical URLs that were missed by"
             " the initial sweep. The wrapper's scope filter drops any"
             " hostname outside the selected programme's structured scope"
             " before HTTP traffic fires."
@@ -310,12 +310,12 @@ class _ProbeFQDNsArgs(BaseModel):
     )
 
 
-@cyber_tool("Probe FQDNs", args_schema=_ProbeFQDNsArgs)
-def probe_hostnames_tool(hostnames: list[FQDN]) -> list[Endpoint]:
+@cyber_tool("Discover Webpages", args_schema=_DiscoverWebpagesArgs)
+def discover_webpages_tool(hostnames: list[FQDN]) -> list[Endpoint]:
     """
     Re-probe a list of hostnames with httpx to confirm liveness, capture
     status codes, and fingerprint technologies. Use this on hostnames
-    surfaced by Certificate Transparency or Historical URL Discovery that
+    surfaced by Discover Subdomains or Discover Historical URLs that
     were not in the initial sweep.
 
     The wrapper scope-filters the hostnames against the selected
@@ -330,8 +330,8 @@ def probe_hostnames_tool(hostnames: list[FQDN]) -> list[Endpoint]:
     return list(probe_endpoints_impl(hostnames))
 
 
-class _DetectTakeoverCandidatesArgs(BaseModel):
-    """Explicit args_schema for the Detect Takeover Candidates tool."""
+class _DiscoverTakeoverCandidatesArgs(BaseModel):
+    """Explicit args_schema for the Discover Takeover Candidates tool."""
 
     hostnames: TargetFQDNs = Field(
         description=(
@@ -347,8 +347,8 @@ class _DetectTakeoverCandidatesArgs(BaseModel):
     )
 
 
-@cyber_tool("Detect Takeover Candidates", args_schema=_DetectTakeoverCandidatesArgs)
-def detect_takeover_candidates_tool(
+@cyber_tool("Discover Takeover Candidates", args_schema=_DiscoverTakeoverCandidatesArgs)
+def discover_takeover_candidates_tool(
     hostnames: list[FQDN],
 ) -> list[TakeoverCandidate]:
     """

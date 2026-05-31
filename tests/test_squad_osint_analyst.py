@@ -17,34 +17,34 @@ pytestmark = pytest.mark.unit
 
 
 class TestOsintAnalystTools:
-    def test_recon_subdomains_tool_wraps_hostnames_as_fqdn(self) -> None:
+    def test_list_subdomains_tool_wraps_hostnames_as_fqdn(self) -> None:
         # Thin wrapper: list[str] from the impl becomes list[FQDN] for the
         # agent so the typed primitive's validator fires at the wrapper
         # boundary, not inside the consumer.
-        from squad.osint_analyst import recon_subdomains_tool
+        from squad.osint_analyst import list_subdomains_tool
 
         with patch(
             "squad.osint_analyst.discovery.recon_subdomains",
             return_value=["api.example.com", "admin.example.com"],
         ) as mimpl:
-            result = recon_subdomains_tool.func(
+            result = list_subdomains_tool.func(
                 attack_graph_path="attack_graph.json", host_filter="api"
             )
 
         assert result == ["api.example.com", "admin.example.com"]
         mimpl.assert_called_once_with("attack_graph.json", host_filter="api")
 
-    def test_recon_open_ports_tool_wraps_dict_as_open_ports_map(self) -> None:
+    def test_list_open_ports_tool_wraps_dict_as_open_ports_map(self) -> None:
         # Wrapper turns the impl's ``{host: [ports]}`` into the typed
         # ``OpenPortsMap`` the agent reads back.
         from models import OpenPortsMap
-        from squad.osint_analyst import recon_open_ports_tool
+        from squad.osint_analyst import list_open_ports_tool
 
         with patch(
             "squad.osint_analyst.discovery.recon_open_ports",
             return_value={"api.example.com": [80, 443]},
         ) as mimpl:
-            result = recon_open_ports_tool.func(
+            result = list_open_ports_tool.func(
                 attack_graph_path="attack_graph.json", host="api.example.com"
             )
 
@@ -112,11 +112,11 @@ class TestOsintAnalystTools:
         sections = {i.section for i in result.validation.issues}
         assert "notes" in sections
 
-    def test_uncovered_hosts_tool_returns_missing(self, programme, recon_result, run_dir) -> None:
-        from squad.osint_analyst import uncovered_hosts_tool
+    def test_list_uncovered_hosts_tool_returns_missing(self, programme, recon_result, run_dir) -> None:
+        from squad.osint_analyst import list_uncovered_hosts_tool
 
         (run_dir / "attack_graph.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
-        result = uncovered_hosts_tool.func()
+        result = list_uncovered_hosts_tool.func()
 
         assert isinstance(result, list)
         # recon_result fixture has https://api.example.com with status 200 -> interesting
@@ -154,7 +154,7 @@ class TestOsintAnalystTools:
         with pytest.raises(ValueError, match="no host insights"):
             finalise_recon_tool.func()
 
-    def test_probe_hostnames_tool(self, programme_in_workspace, endpoint) -> None:
+    def test_discover_webpages_tool(self, programme_in_workspace, endpoint) -> None:
         """Happy path: in-scope hostname passes the wrapper's scope filter,
         the body fires, the endpoint is returned.
 
@@ -163,25 +163,25 @@ class TestOsintAnalystTools:
         ``api.example.com`` matches the wildcard, so the wrapper hands
         the body the cleaned hostname.
         """
-        from squad.osint_analyst import probe_hostnames_tool
+        from squad.osint_analyst import discover_webpages_tool
 
         with patch(
             "squad.osint_analyst.discovery.probe_endpoints_impl",
             return_value=[endpoint],
         ):
-            result = probe_hostnames_tool.func(["api.example.com"])
+            result = discover_webpages_tool.func(["api.example.com"])
 
         assert isinstance(result, list)
         assert result[0].url == endpoint.url
 
-    def test_probe_hostnames_tool_empty_list(self) -> None:
+    def test_discover_webpages_tool_empty_list(self) -> None:
         """Empty input short-circuits in the body without touching the
         workspace - no ``current_programme()`` lookup, no run dir read."""
-        from squad.osint_analyst import probe_hostnames_tool
+        from squad.osint_analyst import discover_webpages_tool
 
-        assert probe_hostnames_tool.func([]) == []
+        assert discover_webpages_tool.func([]) == []
 
-    def test_probe_hostnames_tool_drops_out_of_scope(
+    def test_discover_webpages_tool_drops_out_of_scope(
         self, programme_in_workspace, bystander_url, invoke_tool
     ) -> None:
         """Out-of-scope hostnames are dropped at args_schema validation
@@ -195,18 +195,18 @@ class TestOsintAnalystTools:
         """
         from urllib.parse import urlparse
 
-        from squad.osint_analyst import probe_hostnames_tool
+        from squad.osint_analyst import discover_webpages_tool
 
         oos_host = urlparse(bystander_url).hostname
         mprobe = MagicMock()
         with patch("squad.osint_analyst.discovery.probe_endpoints_impl", mprobe):
-            result = invoke_tool(probe_hostnames_tool, hostnames=[oos_host])
+            result = invoke_tool(discover_webpages_tool, hostnames=[oos_host])
 
         assert result == []
         mprobe.assert_not_called()
 
-    def test_detect_takeover_candidates_tool(self, programme_in_workspace) -> None:
-        from squad.osint_analyst import detect_takeover_candidates_tool
+    def test_discover_takeover_candidates_tool(self, programme_in_workspace) -> None:
+        from squad.osint_analyst import discover_takeover_candidates_tool
         from tools.recon.dnsx import TakeoverCandidate
 
         candidate = TakeoverCandidate(
@@ -219,31 +219,31 @@ class TestOsintAnalystTools:
             "squad.osint_analyst.discovery.detect_takeover_candidates",
             return_value=[candidate],
         ):
-            result = detect_takeover_candidates_tool.func(["legacy.example.com"])
+            result = discover_takeover_candidates_tool.func(["legacy.example.com"])
 
         assert isinstance(result, list)
         assert result == [candidate]
 
-    def test_detect_takeover_candidates_tool_empty(self) -> None:
-        from squad.osint_analyst import detect_takeover_candidates_tool
+    def test_discover_takeover_candidates_tool_empty(self) -> None:
+        from squad.osint_analyst import discover_takeover_candidates_tool
 
-        assert detect_takeover_candidates_tool.func([]) == []
+        assert discover_takeover_candidates_tool.func([]) == []
 
-    def test_detect_takeover_candidates_tool_drops_out_of_scope(
+    def test_discover_takeover_candidates_tool_drops_out_of_scope(
         self, programme_in_workspace, bystander_url, invoke_tool
     ) -> None:
-        """Same scope-guard contract as ``test_probe_hostnames_tool_drops_out_of_scope``,
+        """Same scope-guard contract as ``test_discover_webpages_tool_drops_out_of_scope``,
         on the DNS side: the ``TargetFQDNs`` validator drops the
         out-of-scope hostname at args_schema time, before any DNS
         traffic fires."""
         from urllib.parse import urlparse
 
-        from squad.osint_analyst import detect_takeover_candidates_tool
+        from squad.osint_analyst import discover_takeover_candidates_tool
 
         oos_host = urlparse(bystander_url).hostname
         mdetect = MagicMock()
         with patch("squad.osint_analyst.discovery.detect_takeover_candidates", mdetect):
-            result = invoke_tool(detect_takeover_candidates_tool, hostnames=[oos_host])
+            result = invoke_tool(discover_takeover_candidates_tool, hostnames=[oos_host])
 
         assert result == []
         mdetect.assert_not_called()
@@ -267,35 +267,35 @@ class TestOsintAnalystTools:
         assert all(isinstance(r, OWASPEntry) for r in result)
         assert any("SQL_Injection_Prevention" in r.url for r in result)
 
-    def test_cert_transparency_tool(self) -> None:
-        from squad.osint_analyst import cert_transparency_tool
+    def test_discover_subdomains_tool(self) -> None:
+        from squad.osint_analyst import discover_subdomains_tool
 
         sentinel = ["api.example.com", "admin.example.com"]
         with patch(
             "squad.osint_analyst.discovery.cert_transparency",
             return_value=sentinel,
         ) as m:
-            result = cert_transparency_tool.func("example.com")
+            result = discover_subdomains_tool.func("example.com")
 
         assert result == sentinel
         m.assert_called_once_with("example.com")
 
-    def test_historical_urls_tool(self, target_apex) -> None:
-        from squad.osint_analyst import historical_urls_tool
+    def test_discover_historical_urls_tool(self, target_apex) -> None:
+        from squad.osint_analyst import discover_historical_urls_tool
 
         sentinel = [f"https://{target_apex}/old"]
         with patch(
             "squad.osint_analyst.discovery.historical_urls",
             return_value=sentinel,
         ) as m:
-            result = historical_urls_tool.func("example.com")
+            result = discover_historical_urls_tool.func("example.com")
 
         assert result == sentinel
         m.assert_called_once_with("example.com")
 
-    def test_llm_detection_tool(self, programme_in_workspace, endpoint) -> None:
+    def test_discover_llm_endpoints_tool(self, programme_in_workspace, endpoint) -> None:
         from models import LlmEndpoint
-        from squad.osint_analyst import llm_detection_tool
+        from squad.osint_analyst import discover_llm_endpoints_tool
 
         # CrewAI's args_schema validation hands us list[dict] at runtime;
         # the both-shape adapter inside the wrapper accepts either Endpoint
@@ -305,7 +305,7 @@ class TestOsintAnalystTools:
             "squad.osint_analyst.discovery.detect_llm_endpoints",
             return_value=[endpoint],
         ) as m:
-            result = llm_detection_tool.func(endpoints_payload)
+            result = discover_llm_endpoints_tool.func(endpoints_payload)
 
         assert result == [LlmEndpoint.model_validate(endpoint.model_dump())]
         assert len(m.call_args[0][0]) == 1

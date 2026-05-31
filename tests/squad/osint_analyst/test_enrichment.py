@@ -3,8 +3,8 @@ tests/squad/osint_analyst/test_enrichment.py - contract + invocation tests
 for the OSINT Analyst's post-sweep pivot tools in
 ``squad/osint_analyst/enrichment.py``.
 
-The pivot tools (``Lookup IP Assets``, ``Lookup RDAP for ASN``, ``Deep
-Scan Host``) are the "explore, don't just record" surface from #181:
+The pivot tools (``Lookup IP Assets``, ``Lookup RDAP for ASN``, ``Discover
+Host Services``) are the "explore, don't just record" surface from #181:
 the agent reaches for them *after* the initial sweep to enrich IPs it
 surfaced, pivot on an ASN, or deep-scan a single host's open ports.
 
@@ -23,10 +23,10 @@ from models.asset import IpAsset, Service
 from models.network import RdapRecord
 from models.scanner import NmapHostResult, NmapMode, NmapScanResult, NmapScripts, NmapService
 from squad.osint_analyst import (
-    _DeepScanHostArgs,
+    _DiscoverHostServicesArgs,
     _LookupIpAssetsArgs,
     _LookupRdapAsnArgs,
-    deep_scan_host_tool,
+    discover_host_services_tool,
     lookup_ip_assets_tool,
     lookup_rdap_asn_tool,
 )
@@ -132,8 +132,8 @@ class TestLookupRdapAsn:
 
 
 class TestDeepScanHost:
-    """``Deep Scan Host`` wraps ``nmap_scan`` in SERVICE_VERSION mode - this
-    one DOES scope-filter.
+    """``Discover Host Services`` wraps ``nmap_scan`` in SERVICE_VERSION mode -
+    this one DOES scope-filter.
 
     Unlike the IP / ASN lookups, the target is an FQDN, and the programme
     scope model is FQDN-shaped, so ``host`` is a ``TargetFQDN`` (single,
@@ -145,7 +145,7 @@ class TestDeepScanHost:
 
     def test_schema_accepts_in_scope_host(self, programme_in_workspace, target_apex) -> None:
         """An in-scope hostname + port list validates without raising."""
-        instance = _DeepScanHostArgs.model_validate(
+        instance = _DiscoverHostServicesArgs.model_validate(
             {"host": f"api.{target_apex}", "ports": [22, 443]}
         )
         assert instance.host == f"api.{target_apex}"
@@ -159,14 +159,14 @@ class TestDeepScanHost:
 
         oos_host = urlparse(bystander_url).hostname
         with pytest.raises(ValidationError, match="not in the selected programme's scope"):
-            _DeepScanHostArgs.model_validate({"host": oos_host, "ports": [443]})
+            _DiscoverHostServicesArgs.model_validate({"host": oos_host, "ports": [443]})
 
     def test_schema_rejects_url_in_host(self, programme_in_workspace, target_url) -> None:
         """A URL where a bare hostname is expected trips the FQDN primitive."""
         from pydantic import ValidationError
 
         with pytest.raises(ValidationError):
-            _DeepScanHostArgs.model_validate({"host": target_url, "ports": [443]})
+            _DiscoverHostServicesArgs.model_validate({"host": target_url, "ports": [443]})
 
     def test_runs_service_version_scan_and_persists_services(
         self, invoke_tool, programme_in_workspace, target_apex, monkeypatch
@@ -204,7 +204,7 @@ class TestDeepScanHost:
 
         monkeypatch.setattr("squad.osint_analyst.enrichment.nmap_scan", _fake_nmap_scan)
 
-        result = invoke_tool(deep_scan_host_tool, host=host, ports=[22, 443])
+        result = invoke_tool(discover_host_services_tool, host=host, ports=[22, 443])
 
         # nmap invoked correctly
         assert captured_hosts == [host]
@@ -242,7 +242,7 @@ class TestDeepScanHost:
             lambda hosts, **kwargs: NmapScanResult(mode=NmapMode.SERVICE_VERSION, hosts=[]),
         )
 
-        result = invoke_tool(deep_scan_host_tool, host=host, ports=[443])
+        result = invoke_tool(discover_host_services_tool, host=host, ports=[443])
 
         assert result == []
         assert load_host_services(host) == []

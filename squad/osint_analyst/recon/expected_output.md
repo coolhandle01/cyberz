@@ -20,8 +20,8 @@ The briefing must call out:
   - Any hosts you deliberately marked SKIP and the reason
 
 The full inventory and every authored insight live in ``recon.json`` -
-the Vulnerability Researcher and Penetration Tester use Recon Subdomains
-/ Recon Endpoints / Recon Open Ports and Read Run File to drill into it
+the Vulnerability Researcher and Penetration Tester use List Subdomains
+/ List Endpoints / List Open Ports and Read Run File to drill into it
 on demand. The briefing tells them where to look first.
 
 Return the briefing followed on a separate line by the filename string
