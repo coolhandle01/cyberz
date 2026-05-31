@@ -16,7 +16,7 @@ pytestmark = pytest.mark.unit
 class TestDnsAssetsFromDnsx:
     def test_a_record_becomes_property_and_relation(self, target_apex):
         assets = dns_assets_from_dnsx(
-            [DNSRecord(hostname=f"api.{target_apex}", a_records=["8.8.8.8"], cname=[])]
+            [DNSRecord(hostname=f"api.{target_apex}", a_records=["8.8.8.8"], cname=[], ttl=300)]
         )
         # property: the record content hung off the FQDN node.
         assert len(assets.records) == 1
@@ -24,6 +24,7 @@ class TestDnsAssetsFromDnsx:
         assert prop.property_name == f"api.{target_apex}"
         assert prop.header.rr_type == 1  # A
         assert prop.header.rr_class == 1  # IN
+        assert prop.header.ttl == 300  # dnsx's reported response TTL
         assert prop.data == "8.8.8.8"
         # relation: the BasicDNSRelation edge FQDN -> IP.
         assert len(assets.relations) == 1
@@ -33,6 +34,7 @@ class TestDnsAssetsFromDnsx:
         assert rel.from_key == f"api.{target_apex}"
         assert rel.to_key == "8.8.8.8"
         assert rel.header is not None and rel.header.rr_type == 1
+        assert rel.header.ttl == 300
 
     def test_cname_becomes_property_and_relation(self, target_apex):
         assets = dns_assets_from_dnsx(

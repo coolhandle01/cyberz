@@ -38,16 +38,15 @@ def dns_assets_from_dnsx(records: list[DNSRecord]) -> DnsAssets:
 
     One ``DNSRecordProperty`` and one ``BasicDNSRelation`` per A answer
     (rr_type 1, edge ``a_record``: FQDN -> IP) and per CNAME answer (rr_type 5,
-    edge ``cname_record``: FQDN -> target). ``ttl`` is 0 - dnsx's forward output
-    as parsed into ``DNSRecord`` does not carry a per-record TTL; the field is
-    modelled faithfully and populates if TTL capture is wired into
-    ``resolve_records`` later.
+    edge ``cname_record``: FQDN -> target). The ``RRHeader`` carries dnsx's
+    reported response ``ttl`` (one value per host response, so the host's A /
+    CNAME answers share it).
     """
     properties: list[DNSRecordProperty] = []
     relations: list[Relation] = []
     for record in records:
         for ip in record.a_records:
-            header = RRHeader(rr_type=_RR_TYPE_A, rr_class=_RR_CLASS_IN)
+            header = RRHeader(rr_type=_RR_TYPE_A, rr_class=_RR_CLASS_IN, ttl=record.ttl)
             properties.append(
                 DNSRecordProperty(property_name=record.hostname, header=header, data=ip)
             )
@@ -61,7 +60,7 @@ def dns_assets_from_dnsx(records: list[DNSRecord]) -> DnsAssets:
                 )
             )
         for cname in record.cname:
-            header = RRHeader(rr_type=_RR_TYPE_CNAME, rr_class=_RR_CLASS_IN)
+            header = RRHeader(rr_type=_RR_TYPE_CNAME, rr_class=_RR_CLASS_IN, ttl=record.ttl)
             properties.append(
                 DNSRecordProperty(property_name=record.hostname, header=header, data=cname)
             )

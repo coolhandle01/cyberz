@@ -62,7 +62,7 @@ class TestResolveRecords:
 
     def test_parses_dnsx_json_output(self):
         out = (
-            json.dumps({"host": "api.example.com", "a": ["1.2.3.4"], "cname": []})
+            json.dumps({"host": "api.example.com", "a": ["1.2.3.4"], "cname": [], "ttl": 300})
             + "\n"
             + json.dumps(
                 {
@@ -80,9 +80,12 @@ class TestResolveRecords:
             records = resolve_records(["api.example.com", "legacy.example.com"])
 
         assert {r.hostname for r in records} == {"api.example.com", "legacy.example.com"}
+        api = next(r for r in records if r.hostname == "api.example.com")
+        assert api.ttl == 300  # dnsx's reported response TTL is captured
         legacy = next(r for r in records if r.hostname == "legacy.example.com")
         assert legacy.cname == ["legacy.example.com.s3.amazonaws.com"]
         assert legacy.a_records == []
+        assert legacy.ttl == 0  # omitted by dnsx -> defaults to 0
 
     def test_skips_malformed_lines(self):
         out = "not-json-at-all\n" + json.dumps({"host": "x.example.com", "a": ["1.1.1.1"]}) + "\n"

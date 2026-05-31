@@ -96,6 +96,10 @@ class DNSRecord(BaseModel):
     hostname: str
     a_records: list[str] = []
     cname: list[str] = []
+    # The response TTL dnsx reports (retryabledns ``ttl``); one value per host
+    # response, carried onto the OAM DNSRecordProperty / RRHeader. 0 when dnsx
+    # omitted it.
+    ttl: int = 0
 
 
 def _match_fingerprint(cname: str) -> str | None:
@@ -155,6 +159,7 @@ def resolve_records(hostnames: list[str]) -> list[DNSRecord]:
                 hostname=hostname,
                 a_records=entry.get("a") or [],
                 cname=entry.get("cname") or [],
+                ttl=max(0, int(entry.get("ttl") or 0)),
             )
         )
     logger.info("dnsx resolved %d/%d hosts", len(records), len(hostnames))
