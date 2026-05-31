@@ -60,6 +60,17 @@ When #45 lands, the OSINT Analyst writes these records into the OAM
 graph (Postgres-backed). Downstream agents query the graph for context
 per decision.
 
+The properties layer is mostly deferred to that landing - `SimpleProperty`,
+`DNSRecordProperty`, and `SourceProperty` only become load-bearing once the
+graph database exists to hang them on. `VulnProperty` is the exception: it
+lands ahead of the graph (modelled as a cybersquad-native shape in
+`models/asset.py`, drop-in for amass later, the same way `IpAsset` mirrors
+the IPAddress asset today) because it has a pre-#45 consumer. The
+Vulnerability Researcher emits it when an NVD CVE lookup matches a
+recon-observed product, and the Penetration Tester reads it at handoff -
+the vulnerability annotation is the first property the VR contributes back
+onto the OA's asset nodes, and it is needed now, not when the graph lands.
+
 A canonical link to the OWASP Amass team's design essays on OAM is
 pending; the spec repository linked above is the authoritative
 reference for the model itself.

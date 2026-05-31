@@ -337,6 +337,81 @@ class TLSCertificate(BaseModel):
     subject_alt_names: list[str] = Field(default_factory=list)
 
 
+class VulnProperty(BaseModel):
+    """The cybersquad shape that maps to amass's ``VulnProperty``.
+
+    One vulnerability annotation hung off an asset - what the Vulnerability
+    Researcher emits when an NVD CVE lookup matches a recon-observed product
+    (a ``Service``'s ``cpe``, a host's detected technology). Where the OSINT
+    Analyst's recon fills the OAM graph with *asset* nodes, this is the
+    first *property* the VR contributes back onto those nodes: "this asset
+    carries this known vulnerability".
+
+    OAM models a vulnerability not as a standalone asset but as a property
+    attached to the vulnerable asset (a ``Service`` / ``FQDN`` /
+    ``ProductRelease``). This mirrors amass's ``VulnProperty`` field for
+    field (OAM json tag in parentheses):
+
+    * ``id`` (``id``) -> the vulnerability identifier, e.g. "CVE-2022-22965".
+    * ``description`` (``desc``) -> the human-readable summary.
+    * ``source`` (``source``) -> the feed / tool that produced the fact
+      ("nvd"); OAM's provenance slot, the property-level sibling of the
+      ``SourceProperty`` stamped on asset nodes.
+    * ``category`` (``category``) -> the weakness class (a CWE id / name
+      where the lookup carried one).
+    * ``enumeration`` (``enum``) -> the scheme ``id`` is drawn from: "CVE",
+      "CWE", "GHSA".
+    * ``reference`` (``ref``) -> a canonical URL for the entry.
+
+    When amass lands (#45), each ``VulnProperty`` becomes one amass
+    ``VulnProperty`` hung off the asset its lookup was keyed on - the
+    ``Service`` whose ``cpe`` matched, or the ``FQDN`` whose detected
+    technology matched. Until then it lands ahead of the graph, like every
+    other cybersquad-native OAM shape, because it has a pre-#45 consumer:
+    the VR's research handoff to the PT.
+    """
+
+    # The vulnerability identifier - "CVE-2022-22965", "CWE-89". The asset's
+    # join key into NVD / MITRE, and the one field a vuln annotation cannot
+    # be useful without, so it is required. Bare ``str`` for now: id-shape
+    # validation is the natural home for the deferred ``CweId`` primitive the
+    # cybersquad-models skill tracks (alongside ``CvssVector``), promoted with
+    # the amass-integration work rather than guessed at per-scheme here.
+    id: str = Field(min_length=1, max_length=64)
+
+    # Tool-captured from the NVD feed (an external source surfaced through
+    # NVD CVE Lookup), not agent-authored. Defence (cybersquad-models skill,
+    # tool-captured text): a boundary length cap so a poisoned upstream
+    # description cannot smuggle a large injection across the VR -> PT
+    # handoff. Mirrors ``CveEntry.description``, capped here for the same
+    # reason ``Service`` caps its nmap-banner fields.
+    description: str = Field(default="", max_length=2000)
+
+    # Provenance: the feed / tool that produced this fact ("nvd"). OAM's
+    # property-level source slot. A tool-named closed vocabulary, not free
+    # text from an external source, so no injection guard needed; length-
+    # capped defensively. Mirrors ``Service.detected_by`` / ``RawFinding.tool``.
+    source: str = Field(default="", max_length=32)
+
+    # The weakness class this vuln belongs to - a CWE id or name where the
+    # lookup carried one. Feed-populated; length-capped, same posture as
+    # ``description`` (not re-issued to an LLM as instruction context).
+    category: str = Field(default="", max_length=128)
+
+    # The identifier scheme ``id`` is drawn from: "CVE", "CWE", "GHSA". A
+    # small closed vocabulary in practice, kept a ``str`` to stay faithful to
+    # OAM's open ``enum`` field rather than freezing a ``StrEnum`` membership
+    # the amass work will own.
+    enumeration: str = Field(default="", max_length=32)
+
+    # Canonical URL for the entry (the NVD / MITRE page). Left a capped
+    # ``str`` rather than the ``HttpUrl`` primitive because OAM's ``ref`` is
+    # an open string that must round-trip empty, and the feed occasionally
+    # carries a non-URL advisory reference; same no-LLM-instruction posture
+    # as the fields above.
+    reference: str = Field(default="", max_length=255)
+
+
 class LlmEndpoint(BaseModel):
     """An endpoint flagged as LLM-backed by ``detect_llm_endpoints``.
 
