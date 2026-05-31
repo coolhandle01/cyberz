@@ -8,12 +8,14 @@ from pydantic import ValidationError
 from models import (
     AttackGraph,
     Endpoint,
+    HostInsight,
     HostPriority,
     HostRole,
     HostScore,
     IpAsset,
     Service,
     TLSCertificate,
+    VulnProperty,
 )
 
 pytestmark = pytest.mark.unit
@@ -204,6 +206,87 @@ class TestTLSCertificate:
 
         with pytest.raises(ValidationError):
             TLSCertificate(host=f"www.{target_apex}", issuer="x" * 256)
+
+
+class TestVulnProperty:
+    def test_minimal_record(self):
+        # id is the only floor: the OA / VR can hang a bare CVE annotation off
+        # an asset and let description / source / category populate from the
+        # NVD lookup that produced it.
+        vuln = VulnProperty(id="CVE-2022-22965")
+        assert vuln.id == "CVE-2022-22965"
+        assert vuln.description == ""
+        assert vuln.source == ""
+        assert vuln.enumeration == ""
+
+    def test_carries_full_nvd_annotation(self):
+        vuln = VulnProperty(
+            id="CVE-2022-22965",
+            description="Spring Framework RCE via data binding (Spring4Shell).",
+            source="nvd",
+            category="CWE-94",
+            enumeration="CVE",
+            reference="https://nvd.nist.gov/vuln/detail/CVE-2022-22965",
+        )
+        assert vuln.source == "nvd"
+        assert vuln.category == "CWE-94"
+        assert vuln.enumeration == "CVE"
+
+    def test_serialise_roundtrip(self):
+
+        original = VulnProperty(id="CVE-2021-44228", source="nvd", enumeration="CVE")
+        restored = VulnProperty.model_validate_json(original.model_dump_json())
+        assert restored.id == "CVE-2021-44228"
+        assert restored.source == "nvd"
+
+    def test_rejects_empty_id(self):
+
+        with pytest.raises(ValidationError):
+            VulnProperty(id="")
+
+    def test_rejects_oversize_description(self):
+
+        with pytest.raises(ValidationError):
+            VulnProperty(id="CVE-2022-22965", description="x" * 2001)
+
+
+class TestOamAssetsTakeVulns:
+    """The OAM asset shapes the OA / VR deal in carry hanging VulnProperty."""
+
+    def test_endpoint_vulns_default_empty(self, target_apex):
+        ep = Endpoint(url=f"https://{target_apex}")
+        assert ep.vulns == []
+
+    def test_service_carries_vulns(self, target_apex):
+        svc = Service(
+            host=f"api.{target_apex}",
+            port=443,
+            protocol="tcp",
+            cpe="cpe:2.3:a:nginx:nginx:1.25.3:*:*:*:*:*:*:*",
+            vulns=[VulnProperty(id="CVE-2021-23017", source="nvd", enumeration="CVE")],
+        )
+        assert svc.vulns[0].id == "CVE-2021-23017"
+
+    def test_host_insight_carries_vulns(self, target_apex):
+        insight = HostInsight(
+            hostname=f"blog.{target_apex}",
+            role=HostRole.APP,
+            priority=HostPriority.HIGH,
+            notes="WordPress 5.8.1 blog host - dated core, worth a CVE pass here.",
+            detected_tech=["WordPress 5.8.1"],
+            vulns=[VulnProperty(id="CVE-2021-44223", source="nvd", enumeration="CVE")],
+        )
+        assert insight.vulns[0].id == "CVE-2021-44223"
+
+    def test_roundtrip_preserves_vulns(self, target_apex):
+        svc = Service(
+            host=f"api.{target_apex}",
+            port=8080,
+            protocol="tcp",
+            vulns=[VulnProperty(id="CVE-2022-22965", enumeration="CVE")],
+        )
+        restored = Service.model_validate_json(svc.model_dump_json())
+        assert restored.vulns[0].id == "CVE-2022-22965"
 
 
 class TestHostScore:

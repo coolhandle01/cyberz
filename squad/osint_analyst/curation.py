@@ -19,6 +19,7 @@ from models import (
     HostRole,
     OWASPEntry,
     ReconFinalisationError,
+    VulnProperty,
 )
 from squad import cyber_tool
 from squad.workspace_tools import current_programme
@@ -137,6 +138,18 @@ class _AnnotateHostArgs(BaseModel):
             " of what was seen, not an alternate inventory."
         ),
     )
+    vulns: list[VulnProperty] | None = Field(
+        default=None,
+        description=(
+            "OAM VulnProperty annotations to hang off this host - known"
+            " vulnerabilities attributed to its detected tech (e.g. a CVE"
+            " from NVD CVE Lookup matched against 'WordPress 5.8.1'). Each"
+            " carries ``id`` (e.g. 'CVE-2022-22965'), and optionally"
+            " ``description``, ``source`` ('nvd'), ``category`` (a CWE),"
+            " ``enumeration`` ('CVE'), and a ``reference`` URL. Omit when"
+            " the host carries no known vulns."
+        ),
+    )
     attack_graph_path: str = Field(
         default="attack_graph.json",
         description="Relative path to the OA's sweep file. Defaults to ``attack_graph.json``.",
@@ -150,6 +163,7 @@ def annotate_host_tool(
     priority: HostPriority,
     notes: str,
     detected_tech: list[str] | None = None,
+    vulns: list[VulnProperty] | None = None,
     attack_graph_path: str = "attack_graph.json",
 ) -> HostAnnotation:
     """
@@ -181,6 +195,7 @@ def annotate_host_tool(
         priority=HostPriority(priority),
         notes=notes.strip(),
         detected_tech=[t.strip() for t in (detected_tech or []) if t.strip()],
+        vulns=[VulnProperty.model_validate(v) for v in (vulns or [])],
     )
     path = save_insight(insight)
     return HostAnnotation(

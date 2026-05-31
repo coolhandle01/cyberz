@@ -24,6 +24,59 @@ from models.network import AsnRecord, RdapRecord
 from models.primitives import FQDN, HttpUrl, IPAddress
 
 
+class VulnProperty(BaseModel):
+    """The cybersquad shape that maps to amass's OAM ``VulnProperty``.
+
+    OAM models a vulnerability not as a standalone asset but as a property
+    hung off the vulnerable asset - an ``FQDN`` / ``Service`` / ``Endpoint``.
+    This mirrors amass's ``VulnProperty`` field for field (OAM json tag in
+    parentheses):
+
+    * ``id`` (``id``) -> the vulnerability identifier, e.g. "CVE-2022-22965".
+    * ``description`` (``desc``) -> the human-readable summary.
+    * ``source`` (``source``) -> the feed / tool that produced the fact
+      ("nvd"); OAM's provenance slot.
+    * ``category`` (``category``) -> the weakness class (a CWE id / name).
+    * ``enumeration`` (``enum``) -> the scheme ``id`` is drawn from: "CVE",
+      "CWE", "GHSA".
+    * ``reference`` (``ref``) -> a canonical URL for the entry.
+
+    The OSINT Analyst and Vulnerability Researcher attach these onto the
+    asset shapes below (``Endpoint`` / ``Service`` / ``HostInsight``) when an
+    NVD CVE lookup matches a recon-observed technology or service - the
+    cybersquad-native stand-in for the amass hanging property until #45.
+    """
+
+    # The vulnerability identifier - "CVE-2022-22965", "CWE-89". The asset's
+    # join key into NVD / MITRE, required (a vuln annotation with no id names
+    # nothing). Bare str: id-shape validation is deferred to the amass-
+    # integration work alongside the planned CweId / CvssVector primitives.
+    id: str = Field(min_length=1, max_length=64)
+
+    # Tool-captured from the NVD feed (an external source surfaced through NVD
+    # CVE Lookup), not agent-authored. Defence (cybersquad-models skill,
+    # tool-captured text): a boundary length cap so a poisoned upstream
+    # description cannot smuggle a large injection downstream.
+    description: str = Field(default="", max_length=2000)
+
+    # Provenance: the feed / tool that produced this fact ("nvd"). A tool-
+    # named closed vocabulary, not free external text, so no injection guard
+    # needed; length-capped defensively.
+    source: str = Field(default="", max_length=32)
+
+    # The weakness class - a CWE id or name where the lookup carried one.
+    category: str = Field(default="", max_length=128)
+
+    # The identifier scheme ``id`` is drawn from: "CVE", "CWE", "GHSA". Kept a
+    # str to stay faithful to OAM's open ``enum`` field.
+    enumeration: str = Field(default="", max_length=32)
+
+    # Canonical URL for the entry (the NVD / MITRE page). A capped str rather
+    # than HttpUrl because OAM's ``ref`` is an open string that round-trips
+    # empty and may carry a non-URL advisory reference.
+    reference: str = Field(default="", max_length=255)
+
+
 class Endpoint(BaseModel):
     """A discovered HTTP/S endpoint.
 
@@ -74,6 +127,13 @@ class Endpoint(BaseModel):
     # ``WEB_INVENTORY`` / when no cert was grabbed. ``run_recon`` lifts
     # these off the endpoints into ``AttackGraph.tls_certificates``.
     tls_certificate: TLSCertificate | None = None
+
+    # OAM ``VulnProperty`` annotations hung off this endpoint asset - the
+    # known vulnerabilities the VR / OA attributed to its detected web
+    # technologies (an NVD CVE matched against a ``technologies`` entry).
+    # Additive and default-empty: an endpoint with no attributed vulns is
+    # the common case.
+    vulns: list[VulnProperty] = Field(default_factory=list)
 
 
 class EndpointPage(BaseModel):
@@ -164,6 +224,10 @@ class HostInsight(BaseModel):
     priority: HostPriority
     notes: str  # agent-authored, >= 30 chars
     detected_tech: list[str] = Field(default_factory=list)  # ideally with versions
+    # OAM ``VulnProperty`` annotations hung off this host (FQDN asset) - the
+    # known vulnerabilities the OA / VR attributed to it from its detected
+    # tech. Additive and default-empty.
+    vulns: list[VulnProperty] = Field(default_factory=list)
     annotated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
@@ -274,6 +338,12 @@ class Service(BaseModel):
     # ``RawFinding.tool`` provenance field - a shared ``DetectionTool``
     # StrEnum is the natural promotion once this lands on more asset types.
     detected_by: str | None = Field(default=None, max_length=32)
+
+    # OAM ``VulnProperty`` annotations hung off this service asset - the
+    # known vulnerabilities the VR / OA attributed to it, typically an NVD
+    # CVE matched against the service's ``cpe`` (the authoritative product
+    # key) or product / version. Additive and default-empty.
+    vulns: list[VulnProperty] = Field(default_factory=list)
 
 
 class TLSCertificate(BaseModel):
