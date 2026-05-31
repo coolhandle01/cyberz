@@ -32,7 +32,7 @@ through the scope filter.
 | ``models.asset.url`` | ``Url`` |
 | ``models.asset.service`` | ``Service``, ``Product``, ``ProductRelease`` |
 | ``models.asset.certificate`` | ``TLSCertificate`` |
-| ``models.asset.network`` | ``AutonomousSystem``, ``Netblock`` (+ legacy |
+| ``models.asset.network`` | ``IPAddress``, ``AutonomousSystem``, ``Netblock`` (+ legacy |
 |                          | ``AsnRecord`` / ``Contact`` / ``ContactRole`` / ``RdapRecord``) |
 | ``models.asset.registration`` | ``DomainRecord``, ``IPNetRecord``, ``AutnumRecord`` |
 | ``models.asset.org`` | ``Organization`` |
@@ -60,6 +60,7 @@ from models.asset.network import (
     AutonomousSystem,
     Contact,
     ContactRole,
+    IPAddress,
     Netblock,
     RdapRecord,
 )
@@ -87,6 +88,7 @@ __all__ = [
     "DomainRecord",
     "Endpoint",
     "EndpointPage",
+    "IPAddress",
     "IPNetRecord",
     "Identifier",
     "IpAsset",

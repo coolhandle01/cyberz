@@ -8,13 +8,16 @@ data here is what Team Cymru bulk-whois, RDAP lookups, and (eventually)
 amass's graph emit about the IP-layer ownership of an asset.
 
 Mid-migration to the faithful per-OAM-type modules: the faithful
-``AutonomousSystem`` and ``Netblock`` assets live here now. The legacy
-cybersquad compositions (``AsnRecord`` / ``Contact`` / ``ContactRole`` /
-``RdapRecord``) remain until the recon producers are rewired onto the
-faithful assets (in ``registration`` / ``org`` / ``contact`` / ``people`` /
-``identifier``) plus ``Relation`` edges - then they are removed.
+``IPAddress`` / ``AutonomousSystem`` / ``Netblock`` assets live here now (amass
+groups all three in its ``network`` package). The legacy cybersquad
+compositions (``AsnRecord`` / ``Contact`` / ``ContactRole`` / ``RdapRecord``)
+remain until the recon producers are rewired onto the faithful assets (in
+``registration`` / ``org`` / ``contact`` / ``people`` / ``identifier``) plus
+``Relation`` edges - then they are removed.
 
 OAM assets:
+* ``IPAddress``
+  <https://owasp-amass.github.io/docs/open_asset_model/assets/ip_address/>
 * ``AutonomousSystem``
   <https://owasp-amass.github.io/docs/open_asset_model/assets/autonomous_system/>
 * ``Netblock`` <https://owasp-amass.github.io/docs/open_asset_model/assets/netblock/>
@@ -41,7 +44,42 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field, model_validator
 
+from models.asset.property import SourceProperty, VulnProperty
 from models.primitives import Cidr, Email, IpAddr, IPType
+
+
+class IPAddress(BaseModel):
+    """The cybersquad shape that maps to amass's OAM ``IPAddress`` asset.
+
+    A single IP-address node. Mirrors amass's ``IPAddress`` field for field
+    (OAM json tag in parentheses): ``address`` (``address``) and ``type``
+    (``type`` - "IPv4" / "IPv6", determined by the address family). The legacy
+    ``IpAddr`` primitive (renamed off this asset's name) validates the literal.
+    """
+
+    address: IpAddr  # address
+    type: IPType  # type ("IPv4" / "IPv6") - exhaustive; must match address family
+
+    # OAM VulnProperty annotations hung off this IP node (additive, default-empty).
+    vulns: list[VulnProperty] = Field(default_factory=list)
+    # OAM SourceProperty provenance - which tool / feed surfaced this IP.
+    sources: list[SourceProperty] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _type_matches_address(self) -> IPAddress:
+        """``type`` is fully determined by ``address``'s family (the ``IpAddr``
+        primitive already validated the literal), so a ``type`` that disagrees
+        with ``address`` is a producer bug we reject rather than persist.
+        """
+        import ipaddress
+
+        version = ipaddress.ip_address(self.address).version
+        expected = IPType.IPV6 if version == 6 else IPType.IPV4
+        if self.type != expected:
+            raise ValueError(
+                f"type {self.type!r} does not match address {self.address!r} (expected {expected})"
+            )
+        return self
 
 
 class AutonomousSystem(BaseModel):
@@ -273,6 +311,7 @@ __all__ = [
     "AutonomousSystem",
     "Contact",
     "ContactRole",
+    "IPAddress",
     "Netblock",
     "RdapRecord",
 ]

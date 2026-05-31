@@ -10,6 +10,7 @@ from models import (
     AutonomousSystem,
     ContactRecord,
     Identifier,
+    IPAddress,
     Location,
     Netblock,
     Organization,
@@ -18,6 +19,28 @@ from models import (
 )
 
 pytestmark = pytest.mark.unit
+
+
+class TestIPAddress:
+    def test_ipv4(self):
+        ip = IPAddress(address="8.8.8.8", type="IPv4")
+        assert ip.address == "8.8.8.8"
+        assert ip.type == "IPv4"  # coerced to the IPType StrEnum
+        assert ip.vulns == []
+        assert ip.sources == []
+
+    def test_ipv6(self):
+        assert IPAddress(address="2001:db8::1", type="IPv6").type == "IPv6"
+
+    def test_rejects_type_mismatched_with_address(self):
+        # type is determined by the address family; a disagreement is rejected.
+        with pytest.raises(ValidationError):
+            IPAddress(address="8.8.8.8", type="IPv6")
+
+    def test_rejects_non_ip_address(self):
+        # The IpAddr primitive rejects a non-literal before the validator runs.
+        with pytest.raises(ValidationError):
+            IPAddress(address="not-an-ip", type="IPv4")
 
 
 class TestAutonomousSystem:
