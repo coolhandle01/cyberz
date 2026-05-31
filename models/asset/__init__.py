@@ -27,6 +27,7 @@ through the scope filter.
 |---|---|
 | ``models.asset.vuln`` | ``VulnProperty`` |
 | ``models.asset.endpoint`` | ``Endpoint``, ``EndpointPage``, ``LlmEndpoint`` |
+| ``models.asset.url`` | ``Url`` |
 | ``models.asset.service`` | ``Service``, ``Product``, ``ProductRelease`` |
 | ``models.asset.certificate`` | ``TLSCertificate`` |
 | ``models.asset.ip`` | ``IpAsset`` |
@@ -51,6 +52,7 @@ from models.asset.network import (
     RdapRecord,
 )
 from models.asset.service import Product, ProductRelease, Service
+from models.asset.url import Url
 from models.asset.vuln import VulnProperty
 
 __all__ = [
@@ -67,5 +69,6 @@ __all__ = [
     "RdapRecord",
     "Service",
     "TLSCertificate",
+    "Url",
     "VulnProperty",
 ]

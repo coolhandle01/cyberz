@@ -12,7 +12,7 @@ across every consumer.
 | ``models.finding`` | ``RawFinding``, ``VerifiedVulnerability``, ``RawFindingSummary`` |
 | ``models.asset`` | ``Endpoint``, ``EndpointPage``, ``IpAsset``, ``Service``, |
 |                  | ``TLSCertificate``, ``VulnProperty``, ``Product``, |
-|                  | ``ProductRelease``, ``LlmEndpoint`` |
+|                  | ``ProductRelease``, ``LlmEndpoint``, ``Url`` |
 | ``models.asset.network`` | ``AsnRecord``, ``Contact``, ``ContactRole``, |
 |                          | ``DomainRecord``, ``RdapRecord`` |
 | ``models.workspace`` | ``RunFile``, ``RunFileContent`` |
@@ -50,6 +50,7 @@ from models.asset import (
     ProductRelease,
     Service,
     TLSCertificate,
+    Url,
     VulnProperty,
 )
 from models.asset.network import AsnRecord, Contact, ContactRole, DomainRecord, RdapRecord
@@ -148,6 +149,7 @@ __all__ = [
     "SeverityDecision",
     "TLSCertificate",
     "TakeoverCandidate",
+    "Url",
     "VerifiedVulnerability",
     "VulnProperty",
 ]
