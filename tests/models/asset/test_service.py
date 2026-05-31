@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from models import Product, ProductRelease, Service, VulnProperty
+from models import Product, ProductRelease, Service, SourceProperty, VulnProperty
 
 pytestmark = pytest.mark.unit
 
@@ -70,6 +70,12 @@ class TestService:
         restored = Service.model_validate_json(svc.model_dump_json())
         assert restored.vulns[0].id == "CVE-2022-22965"
 
+    def test_sources_default_and_carry(self):
+        # Provenance defaults empty; the nmap producer stamps it at write time.
+        assert Service(id="h:1/tcp").sources == []
+        svc = Service(id="h:1/tcp", sources=[SourceProperty(source="nmap", confidence=100)])
+        assert svc.sources[0].source == "nmap"
+
 
 class TestProduct:
     def test_minimal_record(self):
@@ -95,6 +101,11 @@ class TestProduct:
 
         with pytest.raises(ValidationError):
             Product(name="")
+
+    def test_sources_default_and_carry(self):
+        assert Product(name="nginx").sources == []
+        p = Product(name="nginx", sources=[SourceProperty(source="nmap", confidence=90)])
+        assert p.sources[0].confidence == 90
 
 
 class TestProductRelease:
@@ -128,3 +139,10 @@ class TestProductRelease:
 
         with pytest.raises(ValidationError):
             ProductRelease(name="")
+
+    def test_sources_default_and_carry(self):
+        assert ProductRelease(name="nginx 1.25.3").sources == []
+        rel = ProductRelease(
+            name="nginx 1.25.3", sources=[SourceProperty(source="nmap", confidence=80)]
+        )
+        assert rel.sources[0].source == "nmap"

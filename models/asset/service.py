@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from models.asset.property import VulnProperty
+from models.asset.property import SourceProperty, VulnProperty
 
 
 class Service(BaseModel):
@@ -73,6 +73,11 @@ class Service(BaseModel):
     # related ``ProductRelease``.
     vulns: list[VulnProperty] = Field(default_factory=list)
 
+    # OAM ``SourceProperty`` provenance stamps - which tool / feed produced
+    # this asset and at what confidence. Additive and default-empty; the
+    # producer (nmap) stamps its source at write time.
+    sources: list[SourceProperty] = Field(default_factory=list)
+
 
 class Product(BaseModel):
     """The cybersquad shape that maps to amass's OAM ``Product`` asset.
@@ -92,6 +97,11 @@ class Product(BaseModel):
     description: str = Field(default="", max_length=2000)  # description
     country_of_origin: str = Field(default="", max_length=64)  # country_of_origin
 
+    # OAM ``SourceProperty`` provenance stamps - which tool / feed produced
+    # this asset and at what confidence. Additive and default-empty; the
+    # producer (nmap CPE decomposition) stamps its source at write time.
+    sources: list[SourceProperty] = Field(default_factory=list)
+
 
 class ProductRelease(BaseModel):
     """The cybersquad shape that maps to amass's OAM ``ProductRelease`` asset.
@@ -110,3 +120,8 @@ class ProductRelease(BaseModel):
     # spec-proper home for a CVE the VR matched against this exact version.
     # Additive and default-empty.
     vulns: list[VulnProperty] = Field(default_factory=list)
+
+    # OAM ``SourceProperty`` provenance stamps - which tool / feed produced
+    # this asset and at what confidence. Additive and default-empty; the
+    # producer (nmap CPE decomposition) stamps its source at write time.
+    sources: list[SourceProperty] = Field(default_factory=list)

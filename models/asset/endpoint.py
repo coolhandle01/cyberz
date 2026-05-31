@@ -16,7 +16,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 from models.asset.certificate import TLSCertificate
-from models.asset.property import VulnProperty
+from models.asset.property import SourceProperty, VulnProperty
 from models.primitives import FQDN, HttpUrl
 
 
@@ -77,6 +77,11 @@ class Endpoint(BaseModel):
     # Additive and default-empty: an endpoint with no attributed vulns is
     # the common case.
     vulns: list[VulnProperty] = Field(default_factory=list)
+
+    # OAM ``SourceProperty`` provenance stamps - which tool / feed produced
+    # this observation and at what confidence. Additive and default-empty; the
+    # producer (httpx) stamps its source at write time.
+    sources: list[SourceProperty] = Field(default_factory=list)
 
 
 class EndpointPage(BaseModel):

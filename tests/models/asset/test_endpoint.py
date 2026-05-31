@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from models import Endpoint
+from models import Endpoint, SourceProperty
 
 pytestmark = pytest.mark.unit
 
@@ -31,3 +31,13 @@ class TestEndpoint:
         # empty until a CVE is matched against a detected technology.
         ep = Endpoint(url=f"https://{target_apex}")
         assert ep.vulns == []
+
+    def test_sources_default_and_carry(self, target_apex):
+        # Provenance defaults empty; the httpx producer stamps it at write time.
+        ep = Endpoint(url=f"https://{target_apex}")
+        assert ep.sources == []
+        ep2 = Endpoint(
+            url=f"https://{target_apex}",
+            sources=[SourceProperty(source="httpx", confidence=100)],
+        )
+        assert ep2.sources[0].source == "httpx"

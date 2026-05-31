@@ -16,6 +16,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from models.asset.property import SourceProperty
+
 
 class Url(BaseModel):
     """The cybersquad shape that maps to amass's OAM ``URL`` asset.
@@ -56,3 +58,8 @@ class Url(BaseModel):
     # human-facing report - never re-issue them as instruction context.
     username: str = Field(default="", max_length=255)  # username
     password: str = Field(default="", max_length=255)  # password
+
+    # OAM ``SourceProperty`` provenance stamps - which tool / feed produced
+    # this asset and at what confidence. Additive and default-empty; the
+    # producer (httpx) stamps its source at write time.
+    sources: list[SourceProperty] = Field(default_factory=list)

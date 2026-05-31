@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from models import Url
+from models import SourceProperty, Url
 
 pytestmark = pytest.mark.unit
 
@@ -20,6 +20,15 @@ class TestUrl:
         assert u.port is None
         assert u.username == ""
         assert u.password == ""
+        assert u.sources == []
+
+    def test_sources_carry(self, target_apex):
+        # Provenance defaults empty; the httpx producer stamps it at write time.
+        u = Url(
+            raw=f"https://{target_apex}/",
+            sources=[SourceProperty(source="httpx", confidence=100)],
+        )
+        assert u.sources[0].source == "httpx"
 
     def test_full_parsed_components(self, target_apex):
         u = Url(
