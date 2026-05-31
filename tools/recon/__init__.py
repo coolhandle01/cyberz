@@ -13,7 +13,7 @@ from models import AttackGraph, Endpoint
 from models.h1 import Programme, ScopeType
 from tools.recon.cert_transparency import cert_transparency
 from tools.recon.dirfuzz import discover_paths
-from tools.recon.dns_assets import dns_records_from_dnsx
+from tools.recon.dns_assets import dns_assets_from_dnsx
 from tools.recon.dnsx import TakeoverCandidate, detect_takeover_candidates, resolve_records
 from tools.recon.httpx import probe_endpoints
 from tools.recon.ip_asset import compose_ip_assets
@@ -86,7 +86,7 @@ __all__ = [
     "detect_llm_endpoints",
     "detect_takeover_candidates",
     "discover_paths",
-    "dns_records_from_dnsx",
+    "dns_assets_from_dnsx",
     "enumerate_subdomains",
     "filter_in_scope",
     "historical_urls",
@@ -173,9 +173,10 @@ def run_recon(programme: Programme) -> AttackGraph:
     dns_records = resolve_records(in_scope_hosts)
     unique_ips = list(dict.fromkeys(ip for record in dns_records for ip in record.a_records))
     ip_assets = compose_ip_assets(unique_ips)
-    # The OAM property side of those same records: A / CNAME answers as
-    # DNSRecordProperty entries hung off each host's FQDN node.
-    dns_record_properties = dns_records_from_dnsx(dns_records)
+    # The OAM subgraph of those same records: A / CNAME answers as
+    # DNSRecordProperty entries hung off each host's FQDN node, plus the
+    # BasicDNSRelation edges to the answer assets.
+    dns_assets = dns_assets_from_dnsx(dns_records)
 
     return AttackGraph(
         programme=programme,
@@ -186,7 +187,8 @@ def run_recon(programme: Programme) -> AttackGraph:
         passive_findings=passive_findings,
         network_hops=network_hops,
         ip_assets=ip_assets,
-        dns_records=dns_record_properties,
+        dns_records=dns_assets.records,
+        relations=dns_assets.relations,
         # Cert aggregate for the sweep; per-host materialisation happens at
         # finalise (the bound handoff point), not here - run_recon stays
         # side-effect-free.

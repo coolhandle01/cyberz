@@ -86,9 +86,12 @@ class TestRunRecon:
         mock_compose.assert_called_once_with(["8.8.8.8"])
         assert attack_graph.ip_assets == [ip_asset]
 
-        # The same A records surface as OAM DNSRecordProperty on the graph.
+        # The same A records surface as OAM DNSRecordProperty entries plus
+        # their BasicDNSRelation edges on the graph.
         assert [p.data for p in attack_graph.dns_records] == ["8.8.8.8"]
         assert attack_graph.dns_records[0].header.rr_type == 1  # A
+        assert [r.to_key for r in attack_graph.relations] == ["8.8.8.8"]
+        assert attack_graph.relations[0].label == "a_record"
 
     def test_port_scan_receives_hostnames_not_urls(self, programme, target_apex):
         # Regression: nmap scans hosts, not URLs. run_recon must extract the

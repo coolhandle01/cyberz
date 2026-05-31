@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field
 
-from models.asset import DNSRecordProperty, Endpoint, IpAsset, TLSCertificate
+from models.asset import DNSRecordProperty, Endpoint, IpAsset, Relation, TLSCertificate
 from models.finding import RawFinding
 from models.h1 import Programme
 from models.insight import HostInsight
@@ -47,8 +47,14 @@ class AttackGraph(BaseModel):
     # Forward-DNS records (A / CNAME) resolved for the in-scope hosts, as OAM
     # DNSRecordProperty entries - the record content hung off each host's FQDN
     # node. The property side of DNS; the relation edges to the answer assets
-    # persist through relations.json. Empty when the resolve pass did not run.
+    # are in ``relations`` below. Empty when the resolve pass did not run.
     dns_records: list[DNSRecordProperty] = Field(default_factory=list)
+    # OAM relation edges the sweep produced - currently the DNS edges
+    # (``BasicDNSRelation``: FQDN -> IP for an A record, FQDN -> target for a
+    # CNAME) from forward resolution. The per-host relations.json the
+    # enrichment tools write (nmap port / product_used edges) is the other
+    # source; #45 unions both into the graph DB.
+    relations: list[Relation] = Field(default_factory=list)
     # Leaf TLS certificates observed during the httpx WEB_INVENTORY pass,
     # lifted off the endpoints by ``run_recon`` - one per HTTPS endpoint
     # that presented a cert. The cybersquad equivalent of amass's
