@@ -2,7 +2,7 @@
 models.asset.network - typed shapes for the OAM registrant / network assets
 of an attack surface.
 
-Sits between ``models.primitives.IPAddress`` (the typed address) and
+Sits between ``models.primitives.IpAddr`` (the typed address) and
 ``models.asset`` (the FQDN / Endpoint layer agents reason about). The
 data here is what Team Cymru bulk-whois, RDAP lookups, and (eventually)
 amass's graph emit about the IP-layer ownership of an asset.
@@ -41,7 +41,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
-from models.primitives import Cidr, Email, IPAddress, IPType
+from models.primitives import Cidr, Email, IpAddr, IPType
 
 
 class AutonomousSystem(BaseModel):
@@ -83,7 +83,7 @@ class AsnRecord(BaseModel):
     pre-amass adds joins for no gain.
     """
 
-    ip: IPAddress
+    ip: IpAddr
     asn: int = Field(ge=0, le=4_294_967_295)  # 32-bit ASN range per RFC 6793
     prefix: str = Field(
         max_length=64,

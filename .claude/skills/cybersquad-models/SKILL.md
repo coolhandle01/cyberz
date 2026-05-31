@@ -55,6 +55,14 @@ If you are adding a field that crosses agent boundaries:
 - Update both sides in the same PR (the writer's args_schema, the reader's task description).
 - The reader/writer pair test in `tests/test_workspace.py` and per-agent integration tests will catch a half-migrated change.
 
+## OAM names are canonical; cybersquad names yield
+
+`models/asset/` is a faithful implementation of the OWASP Open Asset Model (OAM). The asset structs mirror amass field for field, and the module docstrings link the upstream OAM page for each. Rule of thumb when a cybersquad name would collide with an OAM asset name: **cybersquad code moves out of the OAM's way, never the reverse.** The OAM owns `IPAddress`, `Netblock`, `Service`, `Product`, `URL`, etc. as *asset* names; if a primitive, helper, or local symbol wants the same word, rename the cybersquad side.
+
+Worked example (#161): the typed-string primitive for an IP literal was called `IPAddress`, colliding with the OAM `IPAddress` asset that `models/asset/` will model under that exact name. The primitive was renamed `IPAddress` -> `IpAddr` (in `models/primitives.py`, re-exported from `models/__init__.py`); every field type and import moved with it. Prose that refers to the *primitive* says `IpAddr`; prose that refers to the *OAM asset* keeps `IPAddress` - the distinction is load-bearing, so a blanket find-replace is wrong. The two live side by side in one comment in `models/primitives.py`: "the future amass `IPAddress` asset ... reads this `IpAddr` primitive at the boundary."
+
+Layering that falls out of this: `models/primitives.py` is the shared validation leaf (typed strings + cross-cutting enums) that *both* the `@cyber_tool` args_schema boundary and the disk-side asset models consume - `FQDN` / `IpAddr` / `Cidr` / `HttpUrl` / `Email` all do double duty. `models/asset/` is the OAM-faithful disk shape that *uses* those primitives as field types. A StrEnum that is only an OAM asset's discriminator (e.g. an IP-family `type`) is asset vocabulary, not a boundary primitive - though `Severity` and `IPType` currently live in `primitives.py` as shared closed sets by precedent.
+
 ## Anti-patterns
 
 - A bare `str` field for a value that has a constrained shape (hostname, URL, CVSS vector, CWE id, OWASP category). Use the matching primitive in `models/primitives.py`; if it does not exist, see "When to add a new typed primitive" above.

@@ -45,7 +45,7 @@ class TestNetblock:
             Netblock(cidr="")
 
     def test_rejects_non_cidr(self):
-        # A bare address (no prefix) is an IPAddress, not a Cidr; garbage rejects.
+        # A bare address (no prefix) is an IpAddr, not a Cidr; garbage rejects.
         with pytest.raises(ValidationError):
             Netblock(cidr="8.8.8.8")
         with pytest.raises(ValidationError):

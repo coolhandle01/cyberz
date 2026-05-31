@@ -8,7 +8,7 @@ across every consumer.
 
 | Module | Contents |
 |---|---|
-| ``models.primitives`` | ``Severity``, ``FQDN``, ``HttpUrl``, ``IPAddress``, ``Email`` |
+| ``models.primitives`` | ``Severity``, ``FQDN``, ``HttpUrl``, ``IpAddr``, ``Email`` |
 | ``models.finding`` | ``RawFinding``, ``VerifiedVulnerability``, ``RawFindingSummary`` |
 | ``models.asset`` | assets ``Endpoint``, ``EndpointPage``, ``IpAsset``, |
 |                  | ``Service``, ``Product``, ``ProductRelease``, ``Url``, |
@@ -101,7 +101,7 @@ from models.insight import (
 )
 from models.metrics import RunMetrics
 from models.owasp import OWASPEntry
-from models.primitives import FQDN, Cidr, Email, HttpUrl, IPAddress, IPType, Severity
+from models.primitives import FQDN, Cidr, Email, HttpUrl, IpAddr, IPType, Severity
 from models.report import AuthoredDraft
 from models.scanner import (
     HttpxMode,
@@ -145,12 +145,12 @@ __all__ = [
     "HostScore",
     "HttpUrl",
     "HttpxMode",
-    "IPAddress",
     "IPNetRecord",
     "IPType",
     "Identifier",
     "InsightValidationIssue",
     "InsightValidationReport",
+    "IpAddr",
     "IpAsset",
     "LlmEndpoint",
     "Location",

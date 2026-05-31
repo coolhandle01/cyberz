@@ -10,7 +10,7 @@ from models import (
     Cidr,
     Email,
     HttpUrl,
-    IPAddress,
+    IpAddr,
     IPType,
     Severity,
 )
@@ -163,13 +163,13 @@ class TestHttpUrl:
         assert _HttpUrlProbe(value=url).value == url
 
 
-class _IPAddressProbe(BaseModel):
-    """Thin probe model used to drive the IPAddress validator in isolation."""
+class _IpAddrProbe(BaseModel):
+    """Thin probe model used to drive the IpAddr validator in isolation."""
 
-    value: IPAddress
+    value: IpAddr
 
 
-class TestIPAddress:
+class TestIpAddr:
     @pytest.mark.parametrize(
         ("raw", "expected"),
         [
@@ -189,7 +189,7 @@ class TestIPAddress:
         ],
     )
     def test_valid_address_canonicalises(self, raw, expected):
-        assert _IPAddressProbe(value=raw).value == expected
+        assert _IpAddrProbe(value=raw).value == expected
 
     @pytest.mark.parametrize(
         "bad",
@@ -206,33 +206,33 @@ class TestIPAddress:
     )
     def test_rejects_malformed(self, bad):
         with pytest.raises(ValidationError):
-            _IPAddressProbe(value=bad)
+            _IpAddrProbe(value=bad)
 
     def test_rejects_cidr_notation(self):
         # CIDR is a netblock, not an IP; explicit reject so the error
         # message names the cause.
         with pytest.raises(ValidationError, match="CIDR"):
-            _IPAddressProbe(value="1.2.3.0/24")
+            _IpAddrProbe(value="1.2.3.0/24")
 
     def test_rejects_ipv6_zone_identifier(self):
         # Link-local zone IDs (``fe80::1%eth0``) shouldn't appear in
         # recon JSON - they're scoped to the scanner's host, not stable.
         with pytest.raises(ValidationError, match="zone identifier"):
-            _IPAddressProbe(value="fe80::1%eth0")
+            _IpAddrProbe(value="fe80::1%eth0")
 
     def test_rejects_non_string_input(self):
         with pytest.raises(ValidationError):
-            _IPAddressProbe.model_validate({"value": ["1.2.3.4"]})
+            _IpAddrProbe.model_validate({"value": ["1.2.3.4"]})
 
     def test_serialisation_roundtrip(self):
-        original = _IPAddressProbe(value="2001:db8::1")
-        restored = _IPAddressProbe.model_validate_json(original.model_dump_json())
+        original = _IpAddrProbe(value="2001:db8::1")
+        restored = _IpAddrProbe.model_validate_json(original.model_dump_json())
         assert restored.value == "2001:db8::1"
 
     def test_runtime_type_is_str(self):
-        # IPAddress is Annotated[str, ...] - consumers that do
+        # IpAddr is Annotated[str, ...] - consumers that do
         # f"https://{ip}" / ip.startswith(...) / dict-key keep working.
-        probe = _IPAddressProbe(value="8.8.8.8")
+        probe = _IpAddrProbe(value="8.8.8.8")
         assert isinstance(probe.value, str)
         assert probe.value.startswith("8.")
 

@@ -20,7 +20,7 @@ boundary, not the IP one - see the per-tool notes below.
 
 from pydantic import BaseModel, Field
 
-from models import IPAddress, IpAsset, RdapRecord, Service
+from models import IpAddr, IpAsset, RdapRecord, Service
 from models.primitives import FQDN
 from models.scanner import NmapMode, NmapScripts
 from squad import cyber_tool
@@ -39,7 +39,7 @@ from tools.recon_host_store import (
 class _LookupIpAssetsArgs(BaseModel):
     """Explicit args_schema for the Lookup IP Assets tool."""
 
-    ips: list[IPAddress] = Field(
+    ips: list[IpAddr] = Field(
         description=(
             "IPv4 / IPv6 addresses surfaced by the sweep (e.g. the"
             " resolved IPs behind in-scope hostnames, or traceroute"
@@ -53,7 +53,7 @@ class _LookupIpAssetsArgs(BaseModel):
 
 
 @cyber_tool("Lookup IP Assets", args_schema=_LookupIpAssetsArgs)
-def lookup_ip_assets_tool(ips: list[IPAddress]) -> list[IpAsset]:
+def lookup_ip_assets_tool(ips: list[IpAddr]) -> list[IpAsset]:
     """
     Enrich a set of IPs with ASN, RDAP, and reverse-DNS (PTR) data,
     returning one ``IpAsset`` per unique IP. This is the IP-rooted pivot:

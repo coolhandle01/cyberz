@@ -87,7 +87,7 @@ class TestParseXml:
         assert results[0].services[0].product is None
 
     def test_skips_host_when_host_validator_rejects_addr(self):
-        # NmapHostResult.host is typed FQDN | IPAddress; a non-routable
+        # NmapHostResult.host is typed FQDN | IpAddr; a non-routable
         # string trips the validator and the row drops on the floor.
         xml = (
             "<?xml version='1.0'?><nmaprun>"

@@ -25,7 +25,7 @@ from __future__ import annotations
 import logging
 
 from models.asset import IpAsset
-from models.primitives import IPAddress
+from models.primitives import IpAddr
 from tools.recon.asn import lookup_asn
 from tools.recon.dnsx import resolve_ptr
 from tools.recon.rdap import lookup_rdap_for_ip
@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 
 def compose_ip_assets(
-    ips: list[IPAddress],
+    ips: list[IpAddr],
     *,
     with_rdap: bool = True,
 ) -> list[IpAsset]:
@@ -72,7 +72,7 @@ def compose_ip_assets(
                 )
             )
         except ValueError as exc:
-            # IPAddress validator rejected an unexpected shape upstream.
+            # IpAddr validator rejected an unexpected shape upstream.
             # Drop this asset rather than failing the whole batch.
             logger.debug("ip_asset rejected for %s: %s", ip, exc)
             continue

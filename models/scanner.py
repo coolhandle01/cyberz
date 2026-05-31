@@ -22,7 +22,7 @@ from enum import StrEnum
 from pydantic import BaseModel, Field
 
 from models.asset import Endpoint
-from models.primitives import FQDN, IPAddress
+from models.primitives import FQDN, IpAddr
 
 
 class NmapMode(StrEnum):
@@ -118,7 +118,7 @@ class NmapHostResult(BaseModel):
     to the agent.
     """
 
-    host: FQDN | IPAddress
+    host: FQDN | IpAddr
     services: list[NmapService] = Field(default_factory=list)
 
 

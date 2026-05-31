@@ -355,7 +355,7 @@ class TestResolvePtr:
         assert records[0].hostnames == []
 
     def test_invalid_ip_in_response_drops_the_row(self):
-        # If the "host" field isn't a valid IP, the IPAddress validator
+        # If the "host" field isn't a valid IP, the IpAddr validator
         # rejects it on both the original and degraded retry - row drops.
         out = json.dumps({"host": "not.an.ip", "ptr": ["x.example.com"]}) + "\n"
         with (

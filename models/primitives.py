@@ -137,7 +137,7 @@ def _validate_endpoint_url(value: str) -> str:
 HttpUrl = Annotated[str, AfterValidator(_validate_endpoint_url)]
 
 
-# ``IPAddress`` - typed string for an IPv4 or IPv6 address. Validates
+# ``IpAddr`` - typed string for an IPv4 or IPv6 address. Validates
 # via stdlib ``ipaddress.ip_address`` (handles both versions; rejects
 # malformed strings, CIDR notation, hostnames). Keeps the runtime as
 # ``str`` to match the ``FQDN`` / ``HttpUrl`` convention - every
@@ -186,13 +186,13 @@ def _validate_ip_address(value: str) -> str:
     return str(parsed)
 
 
-IPAddress = Annotated[str, AfterValidator(_validate_ip_address)]
+IpAddr = Annotated[str, AfterValidator(_validate_ip_address)]
 
 
 # ``Email`` - typed string for an RFC 5321 / 5322 email address.
 # Validates via the ``email_validator`` library (the same one Pydantic's
 # ``EmailStr`` uses under the hood). Runtime stays ``str`` to match the
-# ``FQDN`` / ``HttpUrl`` / ``IPAddress`` convention - consumers that do
+# ``FQDN`` / ``HttpUrl`` / ``IpAddr`` convention - consumers that do
 # ``.split("@")`` / ``.lower()`` / dict-key work without an audit.
 #
 # Used by ``models.network.Contact.email`` for the structured-registrant
@@ -245,10 +245,10 @@ class IPType(StrEnum):
 
 
 # ``Cidr`` - typed string for an IPv4 / IPv6 network prefix, the netblock
-# counterpart to ``IPAddress``. Validates via stdlib ``ipaddress.ip_network``
+# counterpart to ``IpAddr``. Validates via stdlib ``ipaddress.ip_network``
 # (``strict=False`` so a host-bit-set value like ``8.8.8.8/24`` normalises to
 # its network ``8.8.8.0/24`` rather than rejecting). Runtime stays ``str`` to
-# match the ``FQDN`` / ``HttpUrl`` / ``IPAddress`` convention. Used by the OAM
+# match the ``FQDN`` / ``HttpUrl`` / ``IpAddr`` convention. Used by the OAM
 # ``Netblock`` / ``IPNetRecord`` assets.
 
 
@@ -258,7 +258,7 @@ def _validate_cidr(value: str) -> str:
     Delegates to stdlib ``ipaddress.ip_network`` with ``strict=False`` (so a
     host-bit-set prefix normalises to its network rather than rejecting) and
     returns the canonical form so equality holds across input variants.
-    Rejects a bare address (no prefix length - that is an ``IPAddress``),
+    Rejects a bare address (no prefix length - that is an ``IpAddr``),
     hostnames, and garbage.
     """
     import ipaddress

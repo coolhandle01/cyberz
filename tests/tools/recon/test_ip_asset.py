@@ -128,7 +128,7 @@ class TestComposeIpAssets:
         assert by_ip["1.1.1.1"].ptr == []
 
     def test_invalid_ip_drops_that_asset_only(self):
-        # An IP that fails the IPAddress validator skips its IpAsset
+        # An IP that fails the IpAddr validator skips its IpAsset
         # construction; the rest of the batch lands intact.
         with (
             patch("tools.recon.ip_asset.lookup_asn", return_value=[]),

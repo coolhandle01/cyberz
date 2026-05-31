@@ -14,7 +14,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from models.primitives import FQDN, IPAddress
+from models.primitives import FQDN, IpAddr
 
 
 class TLSCertificate(BaseModel):
@@ -43,14 +43,14 @@ class TLSCertificate(BaseModel):
     * ``subject_alt_names`` -> ``SAN_FOR`` edges to the ``FQDN`` assets
       the cert vouches for; a multi-SAN cert is the densest single-asset
       FQDN-discovery surface recon produces.
-    * ``host`` -> the edge back to the ``FQDN`` / ``IPAddress`` the cert
+    * ``host`` -> the edge back to the ``FQDN`` / ``IpAddr`` the cert
       was observed on (provenance), mirroring ``Service.host``.
 
     All fields beyond ``host`` default to None / empty - a cert is
     useful with whatever subset the grab recovered.
     """
 
-    host: FQDN | IPAddress
+    host: FQDN | IpAddr
 
     # Tool-captured from the leaf cert the *target* presents - i.e.
     # attacker-controlled text. Defence on every field below: a boundary

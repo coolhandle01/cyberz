@@ -14,7 +14,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 from models.asset.network import AsnRecord, RdapRecord
-from models.primitives import FQDN, IPAddress
+from models.primitives import FQDN, IpAddr
 
 
 class IpAsset(BaseModel):
@@ -42,7 +42,7 @@ class IpAsset(BaseModel):
     populating whichever sources succeeded.
     """
 
-    ip: IPAddress
+    ip: IpAddr
     asn: AsnRecord | None = None
     rdap: RdapRecord | None = None
     ptr: list[FQDN] = Field(default_factory=list)
