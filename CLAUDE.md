@@ -8,6 +8,12 @@ The contributor skills below auto-load on the first matching edit, which is too 
 
 Then ask: what canonical knowledge will this issue produce that does not yet live in a skill? Update the skill **first** - or at least sketch the update in this conversation - so the work that follows is the skill being applied, not the skill being discovered. By the time the code lands the skill update is part of the same PR, written by an expert against captured intent rather than documented after the fact.
 
+## Handling PR review feedback
+
+When you have an open PR and a reviewer surfaces a gap, treat it as a **blocker on this PR** by default - file as a sub-issue of the parent feature and address it before merge. See `CONTRIBUTING.md`'s "Reviewer-surfaced gaps default to blockers". Standalone "follow-up" issues need a named orthogonal scope; if you cannot name the orthogonal feature, the work belongs in the current PR.
+
+Watching a PR means investigating each review event and deciding whether the surfaced gap belongs in this PR or somewhere else - not optimising for closing the current PR by deferring everything to "follow-ups" that grow the open-issue count without growing the project.
+
 ## Commit messages
 
 Never include session URLs (`https://claude.ai/code/session_...`) in commit messages or PR bodies. They reference private conversations.
