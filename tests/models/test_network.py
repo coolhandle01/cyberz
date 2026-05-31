@@ -8,9 +8,56 @@ from pydantic import ValidationError
 from models import (
     Contact,
     ContactRole,
+    DomainRecord,
 )
 
 pytestmark = pytest.mark.unit
+
+
+class TestDomainRecord:
+    def test_minimal_record(self, target_apex):
+        # domain is the only floor; the WHOIS facets populate as the lookup
+        # recovers them.
+        rec = DomainRecord(domain=target_apex)
+        assert rec.domain == target_apex
+        assert rec.raw == ""
+        assert rec.status == []
+        assert rec.dnssec is False
+
+    def test_full_record(self, target_apex):
+        rec = DomainRecord(
+            domain=target_apex,
+            record_id="whois-123",
+            extension="com",
+            whois_server="whois.verisign-grs.com",
+            created_date="1997-09-15T04:00:00Z",
+            expiration_date="2028-09-14T04:00:00Z",
+            status=["clientTransferProhibited"],
+            dnssec=True,
+        )
+        assert rec.extension == "com"
+        assert rec.status == ["clientTransferProhibited"]
+        assert rec.dnssec is True
+
+    def test_serialise_roundtrip(self, target_apex):
+
+        original = DomainRecord(domain=target_apex, status=["ok"], dnssec=True)
+        restored = DomainRecord.model_validate_json(original.model_dump_json())
+        assert restored.domain == target_apex
+        assert restored.status == ["ok"]
+        assert restored.dnssec is True
+
+    def test_rejects_empty_domain(self):
+
+        with pytest.raises(ValidationError):
+            DomainRecord(domain="")
+
+    def test_rejects_oversize_raw(self, target_apex):
+        # The raw WHOIS text is tool-captured; the boundary cap is the
+        # defence against an outsize injection riding the registry response.
+
+        with pytest.raises(ValidationError):
+            DomainRecord(domain=target_apex, raw="x" * 8001)
 
 
 class TestContact:

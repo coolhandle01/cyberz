@@ -13,6 +13,8 @@ from models import (
     HostRole,
     HostScore,
     IpAsset,
+    Product,
+    ProductRelease,
     Service,
     TLSCertificate,
     VulnProperty,
@@ -287,6 +289,65 @@ class TestOamAssetsTakeVulns:
         )
         restored = Service.model_validate_json(svc.model_dump_json())
         assert restored.vulns[0].id == "CVE-2022-22965"
+
+
+class TestProduct:
+    def test_minimal_record(self):
+        # product_name is the only floor; the rest of the OAM Product facets
+        # populate as the agent / feed enriches them.
+        p = Product(name="WordPress")
+        assert p.name == "WordPress"
+        assert p.product_id == ""
+        assert p.category == ""
+
+    def test_full_record(self):
+        p = Product(
+            name="Spring Framework",
+            product_id="pkg:maven/org.springframework",
+            type="web-framework",
+            category="application framework",
+            country_of_origin="US",
+        )
+        assert p.type == "web-framework"
+        assert p.country_of_origin == "US"
+
+    def test_rejects_empty_name(self):
+
+        with pytest.raises(ValidationError):
+            Product(name="")
+
+
+class TestProductRelease:
+    def test_minimal_record(self):
+        rel = ProductRelease(name="WordPress 5.8.1")
+        assert rel.name == "WordPress 5.8.1"
+        assert rel.release_date == ""
+        assert rel.vulns == []
+
+    def test_carries_vulns_the_spec_proper_anchor(self):
+        # ProductRelease is where a VulnProperty hangs in OAM - the CVE is
+        # carried by the exact released version.
+        rel = ProductRelease(
+            name="WordPress 5.8.1",
+            release_date="2021-09-09",
+            vulns=[VulnProperty(id="CVE-2021-44223", source="nvd", enumeration="CVE")],
+        )
+        assert rel.vulns[0].id == "CVE-2021-44223"
+
+    def test_serialise_roundtrip(self):
+
+        original = ProductRelease(
+            name="nginx 1.25.3",
+            vulns=[VulnProperty(id="CVE-2021-23017", enumeration="CVE")],
+        )
+        restored = ProductRelease.model_validate_json(original.model_dump_json())
+        assert restored.name == "nginx 1.25.3"
+        assert restored.vulns[0].id == "CVE-2021-23017"
+
+    def test_rejects_empty_name(self):
+
+        with pytest.raises(ValidationError):
+            ProductRelease(name="")
 
 
 class TestHostScore:

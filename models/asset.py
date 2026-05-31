@@ -346,6 +346,44 @@ class Service(BaseModel):
     vulns: list[VulnProperty] = Field(default_factory=list)
 
 
+class Product(BaseModel):
+    """The cybersquad shape that maps to amass's OAM ``Product`` asset.
+
+    A product line / vendor offering observed on the surface - "WordPress",
+    "nginx", "Spring Framework". In OAM a ``Service`` relates to a
+    ``Product`` via the ``product_used`` edge; the version-specific instance
+    is ``ProductRelease`` below. Mirrors amass's ``Product`` field for field
+    (OAM json tag in parentheses).
+    """
+
+    name: str = Field(min_length=1, max_length=128)  # product_name
+    product_id: str = Field(default="", max_length=128)  # unique_id
+    type: str = Field(default="", max_length=64)  # product_type
+    category: str = Field(default="", max_length=128)  # category
+    # Agent- / feed-authored descriptive text; length-capped at the boundary.
+    description: str = Field(default="", max_length=2000)  # description
+    country_of_origin: str = Field(default="", max_length=64)  # country_of_origin
+
+
+class ProductRelease(BaseModel):
+    """The cybersquad shape that maps to amass's OAM ``ProductRelease`` asset.
+
+    A specific released version of a ``Product`` - "WordPress 5.8.1". In OAM
+    this is the spec-proper anchor a ``VulnProperty`` hangs off (a CVE is
+    carried by the *release*, not the product line), and the target of a
+    ``Service`` ``product_used`` edge. Mirrors amass's ``ProductRelease``
+    (OAM json tag in parentheses).
+    """
+
+    name: str = Field(min_length=1, max_length=128)  # name (e.g. "WordPress 5.8.1")
+    release_date: str = Field(default="", max_length=64)  # release_date (verbatim)
+
+    # OAM ``VulnProperty`` annotations hung off this release - the
+    # spec-proper home for a CVE the VR matched against this exact version.
+    # Additive and default-empty.
+    vulns: list[VulnProperty] = Field(default_factory=list)
+
+
 class TLSCertificate(BaseModel):
     """The cybersquad shape that maps to amass's ``TLSCertificate`` asset.
 

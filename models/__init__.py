@@ -12,8 +12,8 @@ across every consumer.
 | ``models.finding`` | ``RawFinding``, ``VerifiedVulnerability``, ``RawFindingSummary`` |
 | ``models.asset`` | ``Endpoint``, ``EndpointPage``, ``HostRole``, ``HostPriority``, |
 |                  | ``HostInsight``, ``HostScore``, ``IpAsset``, ``OpenPortsMap``, |
-|                  | ``Service``, ``TLSCertificate``, ``VulnProperty``, ``LlmEndpoint``, |
-|                  | ``AttackGraph`` |
+|                  | ``Service``, ``TLSCertificate``, ``VulnProperty``, ``Product``, |
+|                  | ``ProductRelease``, ``LlmEndpoint``, ``AttackGraph`` |
 | ``models.workspace`` | ``RunFile``, ``RunFileContent`` |
 | ``models.cve`` | ``CveEntry`` |
 | ``models.cwe`` | ``CWEEntry`` |
@@ -22,7 +22,8 @@ across every consumer.
 | ``models.insight`` | ``HostAnnotation``, ``InsightValidationIssue``, |
 |                    | ``InsightValidationReport``, ``ReconFinalisationError`` |
 | ``models.metrics`` | ``RunMetrics`` |
-| ``models.network`` | ``AsnRecord``, ``Contact``, ``ContactRole``, ``RdapRecord`` |
+| ``models.network`` | ``AsnRecord``, ``Contact``, ``ContactRole``, ``DomainRecord``, |
+|                    | ``RdapRecord`` |
 | ``models.scanner`` | ``NmapMode``, ``NmapBanner``, ``NmapScripts``, ``NmapService``, |
 |                    | ``NmapHostResult``, ``NmapScanResult``, ``HttpxMode`` |
 | ``models.h1`` | HackerOne shapes incl. ``ProgrammeReportSummary`` |
@@ -51,6 +52,8 @@ from models.asset import (
     IpAsset,
     LlmEndpoint,
     OpenPortsMap,
+    Product,
+    ProductRelease,
     Service,
     TLSCertificate,
     VulnProperty,
@@ -74,7 +77,7 @@ from models.insight import (
     ReconFinalisationError,
 )
 from models.metrics import RunMetrics
-from models.network import AsnRecord, Contact, ContactRole, RdapRecord
+from models.network import AsnRecord, Contact, ContactRole, DomainRecord, RdapRecord
 from models.owasp import OWASPEntry
 from models.primitives import FQDN, Email, HttpUrl, IPAddress, Severity
 from models.report import AuthoredDraft
@@ -105,6 +108,7 @@ __all__ = [
     "Contact",
     "ContactRole",
     "CveEntry",
+    "DomainRecord",
     "Email",
     "Endpoint",
     "EndpointPage",
@@ -128,6 +132,8 @@ __all__ = [
     "NmapService",
     "OWASPEntry",
     "OpenPortsMap",
+    "Product",
+    "ProductRelease",
     "ProgrammeReportSummary",
     "PtrRecord",
     "RawFinding",

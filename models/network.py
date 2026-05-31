@@ -224,4 +224,38 @@ class RdapRecord(BaseModel):
     )
 
 
-__all__ = ["AsnRecord", "Contact", "ContactRole", "RdapRecord"]
+class DomainRecord(BaseModel):
+    """The domain-WHOIS sibling of ``RdapRecord`` - maps to amass's OAM
+    ``DomainRecord`` asset.
+
+    Where ``RdapRecord`` answers "what RIR entity owns this *IP*"
+    (registration layer for an address), ``DomainRecord`` answers "what does
+    the *domain*'s WHOIS say" - registrar, registration / expiry dates, EPP
+    status codes, DNSSEC. In OAM this is the target of the FQDN
+    ``registration`` edge, produced from a domain WHOIS lookup.
+
+    Mirrors amass's ``DomainRecord`` field for field (OAM json tag in
+    parentheses). Dates stay strings: WHOIS date formats vary by registrar
+    and OAM keeps them verbatim rather than forcing a parse. All fields
+    beyond ``domain`` default empty - registrars vary in what they expose.
+    """
+
+    domain: str = Field(min_length=1, max_length=255)  # domain
+    # Tool-captured: the full raw WHOIS response text. Defence (cybersquad-
+    # models skill, tool-captured text): length-capped at the boundary, and
+    # human / audit-facing only - not re-issued to an LLM as instruction
+    # context.
+    raw: str = Field(default="", max_length=8000)  # raw
+    record_id: str = Field(default="", max_length=128)  # id
+    punycode: str = Field(default="", max_length=255)  # punycode
+    name: str = Field(default="", max_length=255)  # name
+    extension: str = Field(default="", max_length=64)  # extension (the TLD)
+    whois_server: str = Field(default="", max_length=255)  # whois_server
+    created_date: str = Field(default="", max_length=64)  # created_date (verbatim)
+    updated_date: str = Field(default="", max_length=64)  # updated_date (verbatim)
+    expiration_date: str = Field(default="", max_length=64)  # expiration_date (verbatim)
+    status: list[str] = Field(default_factory=list)  # status (EPP status codes)
+    dnssec: bool = False  # dnssec
+
+
+__all__ = ["AsnRecord", "Contact", "ContactRole", "DomainRecord", "RdapRecord"]
