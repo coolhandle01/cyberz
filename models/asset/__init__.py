@@ -31,41 +31,62 @@ through the scope filter.
 | ``models.asset.url`` | ``Url`` |
 | ``models.asset.service`` | ``Service``, ``Product``, ``ProductRelease`` |
 | ``models.asset.certificate`` | ``TLSCertificate`` |
-| ``models.asset.ip`` | ``IpAsset`` |
-| ``models.asset.network`` | ``AsnRecord``, ``Contact``, ``ContactRole``, |
-|                          | ``RdapRecord``, ``DomainRecord`` |
+| ``models.asset.network`` | ``AutonomousSystem``, ``Netblock`` (+ legacy |
+|                          | ``AsnRecord`` / ``Contact`` / ``ContactRole`` / ``RdapRecord``) |
+| ``models.asset.registration`` | ``DomainRecord``, ``IPNetRecord``, ``AutnumRecord`` |
+| ``models.asset.org`` | ``Organization`` |
+| ``models.asset.contact`` | ``ContactRecord``, ``Phone``, ``Location`` |
+| ``models.asset.people`` | ``Person`` |
+| ``models.asset.identifier`` | ``Identifier`` |
+| ``models.asset.ip`` | ``IpAsset`` (legacy composition, migrating) |
 
-The intra-package import order is a DAG: ``property`` / ``relation`` /
-``certificate`` / ``network`` are leaves; ``endpoint`` / ``service`` / ``ip``
-build on them. No cycles, so no ``model_rebuild`` is needed.
+The intra-package import order is a DAG: the per-asset / property / relation
+modules are leaves (they import only primitives); ``endpoint`` / ``service`` /
+``ip`` build on them. No cycles, so no ``model_rebuild`` is needed.
 """
 
 from __future__ import annotations
 
 from models.asset.certificate import TLSCertificate
+from models.asset.contact import ContactRecord, Location, Phone
 from models.asset.endpoint import Endpoint, EndpointPage, LlmEndpoint
+from models.asset.identifier import Identifier
 from models.asset.ip import IpAsset
 from models.asset.network import (
     AsnRecord,
+    AutonomousSystem,
     Contact,
     ContactRole,
-    DomainRecord,
+    Netblock,
     RdapRecord,
 )
+from models.asset.org import Organization
+from models.asset.people import Person
 from models.asset.property import SimpleProperty, SourceProperty, VulnProperty
+from models.asset.registration import AutnumRecord, DomainRecord, IPNetRecord
 from models.asset.relation import Relation, RelationType, RRHeader
 from models.asset.service import Product, ProductRelease, Service
 from models.asset.url import Url
 
 __all__ = [
     "AsnRecord",
+    "AutnumRecord",
+    "AutonomousSystem",
     "Contact",
+    "ContactRecord",
     "ContactRole",
     "DomainRecord",
     "Endpoint",
     "EndpointPage",
+    "IPNetRecord",
+    "Identifier",
     "IpAsset",
     "LlmEndpoint",
+    "Location",
+    "Netblock",
+    "Organization",
+    "Person",
+    "Phone",
     "Product",
     "ProductRelease",
     "RRHeader",

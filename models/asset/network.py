@@ -7,23 +7,17 @@ Sits between ``models.primitives.IPAddress`` (the typed address) and
 data here is what Team Cymru bulk-whois, RDAP lookups, and (eventually)
 amass's graph emit about the IP-layer ownership of an asset.
 
-When amass lands (#45), the ASN / netblock / RIR-Org data persists
-there as ``SimpleProperty`` / ``SourceProperty`` values on amass's
-``IPAddress`` and ``ASN`` asset nodes. This module is the runtime
-in-memory shape; the amass-side property is the persisted shape. Two
-layers, one model.
+Mid-migration to the faithful per-OAM-type modules: the faithful
+``AutonomousSystem`` and ``Netblock`` assets live here now. The legacy
+cybersquad compositions (``AsnRecord`` / ``Contact`` / ``ContactRole`` /
+``RdapRecord``) remain until the recon producers are rewired onto the
+faithful assets (in ``registration`` / ``org`` / ``contact`` / ``people`` /
+``identifier``) plus ``Relation`` edges - then they are removed.
 
-OAM assets this module maps to (each pinned in its class docstring below):
-``AutonomousSystem``
-<https://owasp-amass.github.io/docs/open_asset_model/assets/autonomous_system/>,
-``ContactRecord``
-<https://owasp-amass.github.io/docs/open_asset_model/assets/contact_record/>,
-``Organization``
-<https://owasp-amass.github.io/docs/open_asset_model/assets/organization/>,
-``DomainRecord``
-<https://owasp-amass.github.io/docs/open_asset_model/assets/domain_record/>,
-and ``Netblock``
-<https://owasp-amass.github.io/docs/open_asset_model/assets/netblock/>.
+OAM assets:
+* ``AutonomousSystem``
+  <https://owasp-amass.github.io/docs/open_asset_model/assets/autonomous_system/>
+* ``Netblock`` <https://owasp-amass.github.io/docs/open_asset_model/assets/netblock/>
 
 ``RdapRecord`` is the structured-registrant sibling of ``AsnRecord``.
 RFC 7483 / RDAP gives us per-field registrant_organisation /
@@ -48,6 +42,30 @@ from enum import StrEnum
 from pydantic import BaseModel, Field
 
 from models.primitives import Email, IPAddress
+
+
+class AutonomousSystem(BaseModel):
+    """The cybersquad shape that maps to amass's OAM ``AutonomousSystem``.
+
+    The BGP autonomous system an IP's prefix is announced by. OAM models it as
+    just its number; the registrant detail is a related ``AutnumRecord`` and
+    ``Organization``. Mirrors amass field for field (OAM json tag in
+    parentheses).
+    """
+
+    number: int = Field(ge=0, le=4_294_967_295)  # number (32-bit ASN per RFC 6793)
+
+
+class Netblock(BaseModel):
+    """The cybersquad shape that maps to amass's OAM ``Netblock`` asset.
+
+    The announced address prefix an IP is contained by. ``cidr`` is kept as a
+    string (amass uses ``netip.Prefix``; cybersquad keeps the CIDR text).
+    Mirrors amass field for field (OAM json tag in parentheses).
+    """
+
+    cidr: str = Field(min_length=1, max_length=64)  # cidr (e.g. "8.8.8.0/24")
+    type: str = Field(default="", max_length=8)  # type ("IPv4" / "IPv6")
 
 
 class AsnRecord(BaseModel):
@@ -232,38 +250,11 @@ class RdapRecord(BaseModel):
     )
 
 
-class DomainRecord(BaseModel):
-    """The domain-WHOIS sibling of ``RdapRecord`` - maps to amass's OAM
-    ``DomainRecord`` asset.
-
-    Where ``RdapRecord`` answers "what RIR entity owns this *IP*"
-    (registration layer for an address), ``DomainRecord`` answers "what does
-    the *domain*'s WHOIS say" - registrar, registration / expiry dates, EPP
-    status codes, DNSSEC. In OAM this is the target of the FQDN
-    ``registration`` edge, produced from a domain WHOIS lookup.
-
-    Mirrors amass's ``DomainRecord`` field for field (OAM json tag in
-    parentheses). Dates stay strings: WHOIS date formats vary by registrar
-    and OAM keeps them verbatim rather than forcing a parse. All fields
-    beyond ``domain`` default empty - registrars vary in what they expose.
-    """
-
-    domain: str = Field(min_length=1, max_length=255)  # domain
-    # Tool-captured: the full raw WHOIS response text. Defence (cybersquad-
-    # models skill, tool-captured text): length-capped at the boundary, and
-    # human / audit-facing only - not re-issued to an LLM as instruction
-    # context.
-    raw: str = Field(default="", max_length=8000)  # raw
-    record_id: str = Field(default="", max_length=128)  # id
-    punycode: str = Field(default="", max_length=255)  # punycode
-    name: str = Field(default="", max_length=255)  # name
-    extension: str = Field(default="", max_length=64)  # extension (the TLD)
-    whois_server: str = Field(default="", max_length=255)  # whois_server
-    created_date: str = Field(default="", max_length=64)  # created_date (verbatim)
-    updated_date: str = Field(default="", max_length=64)  # updated_date (verbatim)
-    expiration_date: str = Field(default="", max_length=64)  # expiration_date (verbatim)
-    status: list[str] = Field(default_factory=list)  # status (EPP status codes)
-    dnssec: bool = False  # dnssec
-
-
-__all__ = ["AsnRecord", "Contact", "ContactRole", "DomainRecord", "RdapRecord"]
+__all__ = [
+    "AsnRecord",
+    "AutonomousSystem",
+    "Contact",
+    "ContactRole",
+    "Netblock",
+    "RdapRecord",
+]
