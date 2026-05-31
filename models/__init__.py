@@ -68,6 +68,7 @@ from models.asset import (
     Product,
     ProductRelease,
     RdapRecord,
+    RegistrantBundle,
     Relation,
     RelationType,
     RRHeader,

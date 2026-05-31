@@ -39,7 +39,7 @@ through the scope filter.
 | ``models.asset.contact`` | ``ContactRecord``, ``Phone``, ``Location`` |
 | ``models.asset.people`` | ``Person`` |
 | ``models.asset.identifier`` | ``Identifier`` |
-| ``models.asset.ip`` | ``IpEnrichment`` (the IP-rooted OAM subgraph bundle) |
+| ``models.asset.ip`` | ``IpEnrichment``, ``RegistrantBundle`` (recon subgraph bundles) |
 
 The intra-package import order is a DAG: ``relation`` is a leaf (primitives
 only); ``property`` builds on ``relation`` (``DNSRecordProperty`` reuses
@@ -54,7 +54,7 @@ from models.asset.certificate import TLSCertificate
 from models.asset.contact import ContactRecord, Location, Phone
 from models.asset.endpoint import Endpoint, EndpointPage, LlmEndpoint
 from models.asset.identifier import Identifier
-from models.asset.ip import IpEnrichment
+from models.asset.ip import IpEnrichment, RegistrantBundle
 from models.asset.network import (
     AsnRecord,
     AutonomousSystem,
@@ -102,6 +102,7 @@ __all__ = [
     "ProductRelease",
     "RRHeader",
     "RdapRecord",
+    "RegistrantBundle",
     "Relation",
     "RelationType",
     "Service",

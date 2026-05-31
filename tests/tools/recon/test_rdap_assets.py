@@ -94,4 +94,9 @@ class TestRegistrantAssetsFromRdap:
         assert len(g.organizations) == 1
 
     def test_empty(self):
-        assert registrant_assets_from_rdap([], {}) == ([], [], [], [], [])
+        g = registrant_assets_from_rdap([], {})
+        assert g.organizations == []
+        assert g.autnum_records == []
+        assert g.ipnet_records == []
+        assert g.identifiers == []
+        assert g.relations == []

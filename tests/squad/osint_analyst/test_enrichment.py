@@ -107,9 +107,11 @@ class TestLookupRdapAsn:
         with pytest.raises(ValidationError):
             _LookupRdapAsnArgs.model_validate({"asn": "AS13335"})
 
-    def test_returns_rdap_record(self, invoke_tool, monkeypatch) -> None:
-        """The wrapper returns ``lookup_rdap_for_asn``' result verbatim."""
-        record = RdapRecord(query="AS13335", registrant_organisation="Cloudflare, Inc.")
+    def test_returns_registrant_bundle(self, invoke_tool, monkeypatch) -> None:
+        """The wrapper decomposes the RDAP record into faithful OAM assets."""
+        record = RdapRecord(
+            query="AS13335", handle="AS13335", registrant_organisation="Cloudflare, Inc."
+        )
         captured: dict[str, object] = {}
 
         def _fake_lookup(asn):
@@ -120,16 +122,20 @@ class TestLookupRdapAsn:
 
         result = invoke_tool(lookup_rdap_asn_tool, asn=13335)
 
-        assert result is record
+        assert [a.number for a in result.autnum_records] == [13335]
+        assert [o.name for o in result.organizations] == ["Cloudflare, Inc."]
+        assert any(r.label == "managed_by" for r in result.relations)
         assert captured["asn"] == 13335
 
-    def test_returns_none_on_miss(self, invoke_tool, monkeypatch) -> None:
-        """A bootstrap / lookup miss returns ``None`` straight through."""
+    def test_returns_empty_bundle_on_miss(self, invoke_tool, monkeypatch) -> None:
+        """A bootstrap / lookup miss yields an empty bundle, not a crash."""
         monkeypatch.setattr("squad.osint_analyst.enrichment.lookup_rdap_for_asn", lambda asn: None)
 
         result = invoke_tool(lookup_rdap_asn_tool, asn=64512)
 
-        assert result is None
+        assert result.autnum_records == []
+        assert result.organizations == []
+        assert result.relations == []
 
 
 class TestDeepScanHost:

@@ -41,3 +41,21 @@ class IpEnrichment(BaseModel):
     organizations: list[Organization] = Field(default_factory=list)
     identifiers: list[Identifier] = Field(default_factory=list)
     relations: list[Relation] = Field(default_factory=list)
+
+
+class RegistrantBundle(BaseModel):
+    """The OAM registration subgraph an RDAP lookup decomposes into.
+
+    The registry records (``AutnumRecord`` / ``IPNetRecord``), the registrant
+    ``Organization``, and the contact ``Identifier`` assets, plus the
+    ``registrant_org`` / ``managed_by`` / ``<role>_email`` edges joining them -
+    the registration-layer counterpart to ``IpEnrichment``. The OA's ``Lookup
+    RDAP for ASN`` tool returns it, and ``compose_ip_enrichment`` folds it into
+    the ``IpEnrichment`` bundle.
+    """
+
+    organizations: list[Organization] = Field(default_factory=list)
+    autnum_records: list[AutnumRecord] = Field(default_factory=list)
+    ipnet_records: list[IPNetRecord] = Field(default_factory=list)
+    identifiers: list[Identifier] = Field(default_factory=list)
+    relations: list[Relation] = Field(default_factory=list)

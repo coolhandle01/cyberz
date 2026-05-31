@@ -21,7 +21,7 @@ boundary, not the IP one - see the per-tool notes below.
 
 from pydantic import BaseModel, Field
 
-from models import IpAddr, IpEnrichment, RdapRecord, Service
+from models import IpAddr, IpEnrichment, RegistrantBundle, Service
 from models.primitives import FQDN
 from models.scanner import NmapMode, NmapScripts
 from squad import cyber_tool
@@ -100,23 +100,26 @@ class _LookupRdapAsnArgs(BaseModel):
 
 
 @cyber_tool("Lookup RDAP for ASN", args_schema=_LookupRdapAsnArgs)
-def lookup_rdap_asn_tool(asn: int) -> RdapRecord | None:
+def lookup_rdap_asn_tool(asn: int) -> RegistrantBundle:
     """
-    Look up the RDAP (RFC 7483) registration record for one ASN: the
-    AS-owner organisation, abuse / registrant contacts, and registration
-    events. This is the ASN-side pivot - IP-side RDAP already rides in on
-    ``Lookup IP Assets`` (its ``ipnet_records`` / ``organizations``), so
-    reach for this when the question is about the AS itself: who to disclose
-    to, or building a pattern-of-life view of an org's address space.
+    Look up the RDAP (RFC 7483) registration for one ASN and return the
+    faithful OAM registration subgraph: the ``AutnumRecord`` registry record,
+    the registrant ``Organization``, and the abuse / registrant contact
+    ``Identifier`` (email) assets, joined by ``registrant_org`` / ``managed_by``
+    / ``<role>_email`` edges. This is the ASN-side pivot - IP-side RDAP already
+    rides in on ``Lookup IP Assets`` (its ``ipnet_records`` /
+    ``organizations``), so reach for this when the question is about the AS
+    itself: who to disclose to, or building a pattern-of-life view of an org's
+    address space.
 
-    Fires one RDAP HTTP fetch against the authoritative RIR (resolved via
-    the IANA bootstrap registry). Returns an ``RdapRecord`` ({query,
-    handle, rir, registrant_organisation, abuse_email, registered_at,
-    last_changed_at, source_url, contacts}), or ``None`` when the
-    bootstrap has no entry for the ASN or the RIR lookup fails - the OA
+    Fires one RDAP HTTP fetch against the authoritative RIR (resolved via the
+    IANA bootstrap registry). Returns a ``RegistrantBundle`` ({organizations,
+    autnum_records, ipnet_records, identifiers, relations}); the bundle is empty
+    when the bootstrap has no entry for the ASN or the RIR lookup fails - the OA
     keeps moving rather than blocking on a miss.
     """
-    return lookup_rdap_for_asn(asn)
+    record = lookup_rdap_for_asn(asn)
+    return registrant_assets_from_rdap([record] if record is not None else [], ip_to_cidr={})
 
 
 class _DiscoverHostServicesArgs(BaseModel):

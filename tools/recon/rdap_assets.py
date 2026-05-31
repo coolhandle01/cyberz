@@ -18,31 +18,16 @@ Both yield the registrant ``Organization`` and the contact emails as
 
 from __future__ import annotations
 
-from typing import NamedTuple
-
 from models import (
     AutnumRecord,
     Identifier,
     IPNetRecord,
     Organization,
+    RegistrantBundle,
     Relation,
     RelationType,
 )
 from models.asset.network import RdapRecord
-
-
-class RegistrantGraph(NamedTuple):
-    """The OAM registration subgraph a set of RDAP records decomposes into.
-
-    The asset nodes (de-duplicated by identity) plus the ``registrant_org`` /
-    ``managed_by`` / ``<role>_email`` edges that ``relations.json`` holds.
-    """
-
-    organizations: list[Organization]
-    autnum_records: list[AutnumRecord]
-    ipnet_records: list[IPNetRecord]
-    identifiers: list[Identifier]
-    relations: list[Relation]
 
 
 def _asn_from_query(query: str) -> int | None:
@@ -59,7 +44,7 @@ def _asn_from_query(query: str) -> int | None:
 def registrant_assets_from_rdap(
     rdap_records: list[RdapRecord],
     ip_to_cidr: dict[str, str],
-) -> RegistrantGraph:
+) -> RegistrantBundle:
     """Decompose RDAP records into the OAM registration subgraph.
 
     Per record: an ``AutnumRecord`` (AS query, keyed by number) or an
@@ -132,13 +117,13 @@ def registrant_assets_from_rdap(
                     )
                 )
 
-    return RegistrantGraph(
-        list(organizations.values()),
-        list(autnum_by_number.values()),
-        list(ipnet_by_cidr.values()),
-        list(identifiers.values()),
-        relations,
+    return RegistrantBundle(
+        organizations=list(organizations.values()),
+        autnum_records=list(autnum_by_number.values()),
+        ipnet_records=list(ipnet_by_cidr.values()),
+        identifiers=list(identifiers.values()),
+        relations=relations,
     )
 
 
-__all__ = ["RegistrantGraph", "registrant_assets_from_rdap"]
+__all__ = ["registrant_assets_from_rdap"]
