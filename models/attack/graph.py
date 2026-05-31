@@ -48,7 +48,7 @@ class AttackGraph(BaseModel):
     # lifted off the endpoints by ``run_recon`` - one per HTTPS endpoint
     # that presented a cert. The cybersquad equivalent of amass's
     # TLSCertificate asset nodes; the per-host copy lives at
-    # ``hosts/<fqdn>/tls.json``. Populated OA-side, read by the PT/VR
+    # ``assets/<fqdn>/tls.json``. Populated OA-side, read by the PT/VR
     # (additive: empty when the WEB_INVENTORY pass did not run).
     tls_certificates: list[TLSCertificate] = Field(default_factory=list)
     completed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

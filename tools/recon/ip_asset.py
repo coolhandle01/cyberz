@@ -16,7 +16,7 @@ This is the "amass IPAddress asset + hanging SimpleProperty values"
 shape the OA's enrichment pass produces. Per-IP file evidence (PTR
 zone snapshots, RDAP raw payloads) is out of scope here - the typed
 record is what downstream agents consume; raw evidence can land in
-the per-host ``hosts/<fqdn>/`` directory when the host-resolution
+the per-host ``assets/<fqdn>/`` directory when the host-resolution
 join is made.
 """
 

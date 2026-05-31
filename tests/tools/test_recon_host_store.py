@@ -110,7 +110,7 @@ class TestRelationPersistence:
 class TestInsightPersistence:
     def test_save_insight_writes_per_host_file(self, make_host_insight, run_dir):
         path = save_insight(make_host_insight())
-        assert path == run_dir / "hosts" / "api.example.com" / "insight.json"
+        assert path == run_dir / "assets" / "api.example.com" / "insight.json"
         assert path.exists()
         loaded = HostInsight.model_validate_json(path.read_text())
         assert loaded.hostname == "api.example.com"
@@ -120,14 +120,14 @@ class TestInsightPersistence:
         # (screenshots, scan output, response bodies) call to find the
         # per-FQDN slot.
         d = host_dir("api.example.com")
-        assert d == run_dir / "hosts" / "api.example.com"
+        assert d == run_dir / "assets" / "api.example.com"
 
     def test_insight_path_sanitises_special_chars(self, run_dir):
         # / in the FQDN is sanitised to _ so the host's directory stays
-        # inside hosts/ rather than escaping via path traversal.
+        # inside assets/ rather than escaping via path traversal.
         path = insight_path("weird host/name.example.com")
         assert "/" not in path.parent.name
-        assert path.parent.parent.name == "hosts"
+        assert path.parent.parent.name == "assets"
         assert path.name == "insight.json"
 
     def test_load_insights_orders_by_hostname(self, make_host_insight, run_dir):
@@ -150,7 +150,7 @@ class TestTlsCertificatePersistence:
     def test_save_writes_per_host_file(self, run_dir, target_apex):
         cert = TLSCertificate(host=f"api.{target_apex}", issuer="Let's Encrypt")
         path = save_tls_certificate(cert)
-        assert path == run_dir / "hosts" / f"api.{target_apex}" / "tls.json"
+        assert path == run_dir / "assets" / f"api.{target_apex}" / "tls.json"
         restored = TLSCertificate.model_validate_json(path.read_text(encoding="utf-8"))
         assert restored.issuer == "Let's Encrypt"
 
@@ -170,14 +170,14 @@ class TestTlsCertificatePersistence:
 
 class TestHostFacetPersistence:
     """The per-host OAM-node facets: host.json (score), notes.md, findings.json,
-    ports.json - writer/reader pairs under hosts/<fqdn>/."""
+    ports.json - writer/reader pairs under assets/<fqdn>/."""
 
     def test_host_score_writes_and_loads(self, run_dir, target_apex):
         save_host_score(
             HostScore(hostname=f"api.{target_apex}", role=HostRole.API, priority=HostPriority.HIGH)
         )
         assert host_score_path(f"api.{target_apex}") == (
-            run_dir / "hosts" / f"api.{target_apex}" / "host.json"
+            run_dir / "assets" / f"api.{target_apex}" / "host.json"
         )
         # sibling of insight.json in the same per-FQDN dir
         score_dir = host_score_path(f"api.{target_apex}").parent
@@ -190,7 +190,7 @@ class TestHostFacetPersistence:
 
     def test_notes_writes_markdown(self, run_dir, target_apex):
         path = save_host_notes(f"api.{target_apex}", "look here, because it is the admin panel")
-        assert path == run_dir / "hosts" / f"api.{target_apex}" / "notes.md"
+        assert path == run_dir / "assets" / f"api.{target_apex}" / "notes.md"
         assert "admin panel" in path.read_text(encoding="utf-8")
 
     def test_findings_roundtrip_and_empty(self, run_dir, target_apex):

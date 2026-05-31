@@ -14,11 +14,11 @@ primitives:
 * ``validate_insight(insight, sweep, programme)`` - quality gate. Returns the
   issue list. Hard errors block ``finalise_recon``.
 * ``host_dir(fqdn)`` - the per-host evidence directory under
-  ``<run_dir>/hosts/<fqdn>/``. Future recon tools (screenshots, scan
+  ``<run_dir>/assets/<fqdn>/``. Future recon tools (screenshots, scan
   output, response bodies) write per-host artefacts here so each
   directory carries one FQDN asset's worth of evidence end-to-end.
 * ``save_insight`` / ``load_insights`` - persist insights under
-  ``<run_dir>/hosts/<fqdn>/insight.json``.
+  ``<run_dir>/assets/<fqdn>/insight.json``.
 * ``finalise_recon(programme, attack_graph_path)`` - load the sweep, validate every
   insight, build the canonical ``AttackGraph`` for downstream agents, and
   write ``recon.json``. Refuses on hard errors or insufficient curation.
@@ -295,7 +295,7 @@ def _url_asset(raw: str) -> Url:
 
 
 def _materialise_host_dirs(sweep: AttackGraph, insights: list[HostInsight]) -> None:
-    """Write each host's OAM-node directory under ``hosts/<fqdn>/``.
+    """Write each host's OAM-node directory under ``assets/<fqdn>/``.
 
     The OA's per-node handoff, split into typed facets so #45 can swap each
     JSON write for an amass insert one day:

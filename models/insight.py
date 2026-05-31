@@ -97,7 +97,7 @@ class HostScore(BaseModel):
     as ``notes.md`` rather than shoehorned into this data shape, so the PT
     can filter on ``priority`` / ``role`` without parsing free text.
 
-    Materialised per host at ``hosts/<fqdn>/host.json`` - the typed header
+    Materialised per host at ``assets/<fqdn>/host.json`` - the typed header
     of that host's OAM-asset directory. Maps toward amass's FQDN asset,
     with role / priority as ``SimpleProperty`` values when #45 lands.
     """
@@ -138,7 +138,7 @@ class HostAnnotation(BaseModel):
     """Return shape of the Annotate Host tool.
 
     ``path`` is the workspace-relative location of the persisted insight
-    (e.g. ``hosts/api.example.com/insight.json``); ``validation`` is the
+    (e.g. ``assets/api.example.com/insight.json``); ``validation`` is the
     quality-gate report for the insight that was just authored.
     """
 

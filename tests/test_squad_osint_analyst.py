@@ -116,7 +116,7 @@ class TestOsintAnalystTools:
 
         assert isinstance(result, HostAnnotation)
         assert result.validation.ok is True
-        assert (tmp_path / "hosts" / "api.example.com" / "insight.json").exists()
+        assert (tmp_path / "assets" / "api.example.com" / "insight.json").exists()
 
     def test_annotate_host_tool_surfaces_validation_issues(
         self, programme_in_workspace, recon_result, tmp_path, target_apex

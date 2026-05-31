@@ -1,7 +1,7 @@
 """
 tools/recon_host_store.py - the per-host workspace artefact store.
 
-Every in-scope FQDN gets one directory under ``<run_dir>/hosts/<fqdn>/``,
+Every in-scope FQDN gets one directory under ``<run_dir>/assets/<fqdn>/``,
 and this module is the typed reader/writer pair for the facets that hang
 off it - the on-disk form of one amass FQDN-asset node:
 
@@ -12,6 +12,13 @@ off it - the on-disk form of one amass FQDN-asset node:
 * ``tls.json`` - the leaf ``TLSCertificate`` observed on the host.
 * ``ports.json`` / ``findings.json`` - the host's open ports and its
   node-local ``RawFinding`` rows.
+* ``services.json`` / ``products.json`` / ``product_releases.json`` /
+  ``urls.json`` - the host's OAM asset facets.
+* ``relations.json`` - the typed edges originating from this host.
+
+The per-host dirs live under ``<run_dir>/assets/<fqdn>/``; the run-level,
+infrastructure OAM assets (one IP serving many FQDNs - AutonomousSystem /
+Netblock / Organization / ... ) sit beside them at ``<run_dir>/assets/*.json``.
 
 Split out of ``tools.recon_insights`` (which keeps the validation + the
 ``finalise_recon`` orchestration that *drives* these writers) so neither
@@ -41,21 +48,21 @@ from models import (
 )
 from models.primitives import FQDN
 
-_HOSTS_SUBDIR = "hosts"
+_ASSETS_SUBDIR = "assets"
 
 # FQDNs must be made filesystem-safe before persisting under
-# ``hosts/<fqdn>/``. The replacement is reversible because we never
+# ``assets/<fqdn>/``. The replacement is reversible because we never
 # reverse it - the persisted artefacts carry the original hostname in
 # their body.
 _HOSTNAME_SANITISE = re.compile(r"[^A-Za-z0-9.\-_]")
 
 
-def _hosts_dir() -> Path:
-    return runtime.run_dir() / _HOSTS_SUBDIR
+def _assets_dir() -> Path:
+    return runtime.run_dir() / _ASSETS_SUBDIR
 
 
 def host_dir(hostname: FQDN) -> Path:
-    """Return the per-host evidence directory under ``<run_dir>/hosts/``.
+    """Return the per-host evidence directory under ``<run_dir>/assets/``.
 
     Each in-scope FQDN gets its own directory; ``insight_path`` writes
     ``insight.json`` here, and future evidence-writing tools (httpx
@@ -71,7 +78,7 @@ def host_dir(hostname: FQDN) -> Path:
     safe = _HOSTNAME_SANITISE.sub("_", hostname.strip().lower())
     if not safe or safe.strip("_") == "":
         raise ValueError("hostname is empty after sanitisation")
-    return _hosts_dir() / safe
+    return _assets_dir() / safe
 
 
 def insight_path(hostname: FQDN) -> Path:
@@ -85,7 +92,7 @@ def insight_path(hostname: FQDN) -> Path:
 
 
 def save_insight(insight: HostInsight) -> Path:
-    """Persist an insight to ``<run_dir>/hosts/<host>/insight.json``."""
+    """Persist an insight to ``<run_dir>/assets/<host>/insight.json``."""
     path = insight_path(insight.hostname)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(insight.model_dump_json(indent=2), encoding="utf-8")
@@ -94,7 +101,7 @@ def save_insight(insight: HostInsight) -> Path:
 
 def load_insights() -> list[HostInsight]:
     """Load every insight in the current run, ordered by hostname."""
-    dir_ = _hosts_dir()
+    dir_ = _assets_dir()
     if not dir_.is_dir():
         return []
     return sorted(
@@ -117,7 +124,7 @@ def tls_path(hostname: FQDN) -> Path:
 
 
 def save_tls_certificate(certificate: TLSCertificate) -> Path:
-    """Persist a cert to ``<run_dir>/hosts/<host>/tls.json``."""
+    """Persist a cert to ``<run_dir>/assets/<host>/tls.json``."""
     path = tls_path(certificate.host)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(certificate.model_dump_json(indent=2), encoding="utf-8")
@@ -126,7 +133,7 @@ def save_tls_certificate(certificate: TLSCertificate) -> Path:
 
 def load_tls_certificates() -> list[TLSCertificate]:
     """Load every per-host TLS cert in the current run, ordered by host."""
-    dir_ = _hosts_dir()
+    dir_ = _assets_dir()
     if not dir_.is_dir():
         return []
     return sorted(
@@ -156,7 +163,7 @@ def host_score_path(hostname: FQDN) -> Path:
 
 
 def save_host_score(score: HostScore) -> Path:
-    """Persist a ``HostScore`` to ``<run_dir>/hosts/<host>/host.json``."""
+    """Persist a ``HostScore`` to ``<run_dir>/assets/<host>/host.json``."""
     path = host_score_path(score.hostname)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(score.model_dump_json(indent=2), encoding="utf-8")
@@ -165,7 +172,7 @@ def save_host_score(score: HostScore) -> Path:
 
 def load_host_scores() -> list[HostScore]:
     """Load every per-host score in the current run, ordered by hostname."""
-    dir_ = _hosts_dir()
+    dir_ = _assets_dir()
     if not dir_.is_dir():
         return []
     return sorted(
@@ -183,7 +190,7 @@ def notes_path(hostname: FQDN) -> Path:
 
 
 def save_host_notes(hostname: FQDN, notes: str) -> Path:
-    """Persist the OA's prose guidance to ``<run_dir>/hosts/<host>/notes.md``.
+    """Persist the OA's prose guidance to ``<run_dir>/assets/<host>/notes.md``.
 
     The "look here, because ..." half of the curation, kept as markdown
     outside the typed data shape. Agent-authored prose: it is read back by
