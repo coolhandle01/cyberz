@@ -13,7 +13,7 @@ across every consumer.
 | ``models.asset`` | ``Endpoint``, ``EndpointPage``, ``HostRole``, ``HostPriority``, |
 |                  | ``HostInsight``, ``HostScore``, ``IpAsset``, ``OpenPortsMap``, |
 |                  | ``Service``, ``TLSCertificate``, ``VulnProperty``, ``Product``, |
-|                  | ``ProductRelease``, ``LlmEndpoint``, ``AttackGraph`` |
+|                  | ``ProductRelease``, ``LlmEndpoint`` |
 | ``models.workspace`` | ``RunFile``, ``RunFileContent`` |
 | ``models.cve`` | ``CveEntry`` |
 | ``models.cwe`` | ``CWEEntry`` |
@@ -27,7 +27,7 @@ across every consumer.
 | ``models.scanner`` | ``NmapMode``, ``NmapBanner``, ``NmapScripts``, ``NmapService``, |
 |                    | ``NmapHostResult``, ``NmapScanResult``, ``HttpxMode`` |
 | ``models.h1`` | HackerOne shapes incl. ``ProgrammeReportSummary`` |
-| ``models.attack`` | ``AttackForest``, ``AttackTree``, |
+| ``models.attack`` | ``AttackGraph``, ``AttackForest``, ``AttackTree``, |
 |                   | ``AttackForestValidationIssue``, ``AttackForestValidationReport``, |
 |                   | ``AttackForestFinalisationError`` |
 | ``models.triage`` | ``AuthoredAssessment``, ``SeverityDecision`` |
@@ -42,7 +42,6 @@ that the pre-split layout had to dance around.
 from __future__ import annotations
 
 from models.asset import (
-    AttackGraph,
     Endpoint,
     EndpointPage,
     HostInsight,
@@ -64,6 +63,7 @@ from models.attack import (
     AttackForestFinalisationError,
     AttackForestValidationIssue,
     AttackForestValidationReport,
+    AttackGraph,
     AttackTree,
 )
 from models.cve import CveEntry

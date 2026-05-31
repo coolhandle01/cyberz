@@ -5,8 +5,11 @@ What the OSINT Analyst's sweep / annotation / finalisation produces:
 endpoints discovered, hostnames classified by role and priority, open
 ports per host, LLM-backed endpoint flags, the OAM asset shapes
 (``Service`` / ``Product`` / ``ProductRelease`` / ``TLSCertificate`` /
-``IpAsset``), the ``VulnProperty`` annotations hung off them, and the
-bundled ``AttackGraph`` that wraps the lot for downstream agents.
+``IpAsset`` / the registrant shapes in ``network``), and the
+``VulnProperty`` annotations hung off them. The bundle that wraps the lot
+for downstream agents - ``AttackGraph`` - lives in ``models.attack`` with
+its ``AttackTree`` / ``AttackForest`` siblings: it composes these shapes but
+is not itself an OAM asset.
 
 Promoted from a single ``models/asset.py`` to a package as the OAM asset
 layer grew. One module per cohesive OAM-asset concern; this ``__init__`` is
@@ -29,18 +32,16 @@ through the scope filter.
 | ``models.asset.ip`` | ``IpAsset`` |
 | ``models.asset.network`` | ``AsnRecord``, ``Contact``, ``ContactRole``, |
 |                          | ``RdapRecord``, ``DomainRecord`` |
-| ``models.asset.graph`` | ``AttackGraph`` |
 
-The intra-package import order is a DAG: ``vuln`` / ``certificate`` are
-leaves; ``endpoint`` / ``host`` / ``service`` / ``ip`` build on them;
-``graph`` sits on top. No cycles, so no ``model_rebuild`` is needed.
+The intra-package import order is a DAG: ``vuln`` / ``certificate`` /
+``network`` are leaves; ``endpoint`` / ``host`` / ``service`` / ``ip`` build
+on them. No cycles, so no ``model_rebuild`` is needed.
 """
 
 from __future__ import annotations
 
 from models.asset.certificate import TLSCertificate
 from models.asset.endpoint import Endpoint, EndpointPage, LlmEndpoint
-from models.asset.graph import AttackGraph
 from models.asset.host import (
     HostInsight,
     HostPriority,
@@ -61,7 +62,6 @@ from models.asset.vuln import VulnProperty
 
 __all__ = [
     "AsnRecord",
-    "AttackGraph",
     "Contact",
     "ContactRole",
     "DomainRecord",

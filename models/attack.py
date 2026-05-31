@@ -1,19 +1,61 @@
 """
-models/attack.py - The Vulnerability Researcher's typed attack plan.
+models/attack.py - the three attack-surface formalisms (OA -> VR -> PT).
 
-Lives in its own submodule so that the agent boundary the data crosses (VR
-research pass -> PT, then re-loaded by VR at triage) is legible from the
-import line. Future per-agent fixtures (#121) and the typed Exploit
-interface (#88) attach here too.
+The naming trio ``academic-grounding.md`` ties together: ``AttackGraph`` (the
+OSINT Analyst's recon output - the asset graph it *describes*), ``AttackTree``
+(the Vulnerability Researcher's per-goal hypotheses - the trees it *finds*),
+and ``AttackForest`` (the plan the Penetration Tester *searches*). Living in
+one submodule so the agent boundary the data crosses (OA -> VR research pass
+-> PT, then re-loaded by VR at triage) is legible from the import line.
+``AttackGraph`` composes the OAM asset shapes from ``models.asset`` but is not
+itself an OAM asset - it is the Sheyner-style bundle that wraps them. Future
+per-agent fixtures (#121) and the typed Exploit interface (#88) attach here.
 """
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field, field_validator
 
-from models.primitives import Severity
+from models.asset import Endpoint, HostInsight, IpAsset, TLSCertificate
+from models.finding import RawFinding
+from models.h1 import Programme
+from models.primitives import FQDN, Severity
+
+
+class AttackGraph(BaseModel):
+    """Everything the OSINT Analyst found about a programme's attack surface."""
+
+    programme: Programme
+    subdomains: list[FQDN] = Field(default_factory=list)
+    endpoints: list[Endpoint] = Field(default_factory=list)
+    open_ports: dict[FQDN, list[int]] = Field(default_factory=dict)
+    technologies: list[str] = Field(default_factory=list)
+    notes: str = ""
+    # Findings collected passively during recon (TLS issues, DNS misconfigs, etc.)
+    # Available to all downstream agents without requiring a separate pentest pass.
+    passive_findings: list[RawFinding] = Field(default_factory=list)
+    # hostname -> ordered list of public hop IPs from traceroute.
+    # Useful for identifying origin IPs behind CDNs/WAFs (CDN bypass vector).
+    network_hops: dict[FQDN, list[str]] = Field(default_factory=dict)
+    # Per-host curation the OSINT Analyst authors via Annotate Host. Empty on
+    # the OA's internal attack_graph.json; populated on the final recon.json.
+    host_insights: list[HostInsight] = Field(default_factory=list)
+    # IP-rooted enrichment: one IpAsset per unique IP observed across the
+    # in-scope hosts' A records. Composes Cymru ASN data, RDAP registrant
+    # data, and dnsx PTR hostnames into the cybersquad equivalent of an
+    # amass IPAddress asset + its hanging SimpleProperty values. Empty when
+    # the resolve / enrichment pass did not run.
+    ip_assets: list[IpAsset] = Field(default_factory=list)
+    # Leaf TLS certificates observed during the httpx WEB_INVENTORY pass,
+    # lifted off the endpoints by ``run_recon`` - one per HTTPS endpoint
+    # that presented a cert. The cybersquad equivalent of amass's
+    # TLSCertificate asset nodes; the per-host copy lives at
+    # ``hosts/<fqdn>/tls.json``. Populated OA-side, read by the PT/VR
+    # (additive: empty when the WEB_INVENTORY pass did not run).
+    tls_certificates: list[TLSCertificate] = Field(default_factory=list)
+    completed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class AttackTree(BaseModel):
@@ -110,5 +152,6 @@ __all__ = [
     "AttackForestFinalisationError",
     "AttackForestValidationIssue",
     "AttackForestValidationReport",
+    "AttackGraph",
     "AttackTree",
 ]
