@@ -16,7 +16,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 from models.asset.certificate import TLSCertificate
-from models.asset.vuln import VulnProperty
+from models.asset.property import VulnProperty
 from models.primitives import FQDN, HttpUrl
 
 

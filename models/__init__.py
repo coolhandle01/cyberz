@@ -10,9 +10,13 @@ across every consumer.
 |---|---|
 | ``models.primitives`` | ``Severity``, ``FQDN``, ``HttpUrl``, ``IPAddress``, ``Email`` |
 | ``models.finding`` | ``RawFinding``, ``VerifiedVulnerability``, ``RawFindingSummary`` |
-| ``models.asset`` | ``Endpoint``, ``EndpointPage``, ``IpAsset``, ``Service``, |
-|                  | ``TLSCertificate``, ``VulnProperty``, ``Product``, |
-|                  | ``ProductRelease``, ``LlmEndpoint``, ``Url`` |
+| ``models.asset`` | assets ``Endpoint``, ``EndpointPage``, ``IpAsset``, |
+|                  | ``Service``, ``Product``, ``ProductRelease``, ``Url``, |
+|                  | ``TLSCertificate``, ``LlmEndpoint``; properties |
+|                  | ``SimpleProperty``, ``SourceProperty``, ``VulnProperty``; |
+|                  | relations ``RelationType``, ``RRHeader``, ``SimpleRelation``, |
+|                  | ``PortRelation``, ``BasicDNSRelation``, ``PrefDNSRelation``, |
+|                  | ``SRVDNSRelation`` |
 | ``models.asset.network`` | ``AsnRecord``, ``Contact``, ``ContactRole``, |
 |                          | ``DomainRecord``, ``RdapRecord`` |
 | ``models.workspace`` | ``RunFile``, ``RunFileContent`` |
@@ -42,13 +46,22 @@ that the pre-split layout had to dance around.
 from __future__ import annotations
 
 from models.asset import (
+    BasicDNSRelation,
     Endpoint,
     EndpointPage,
     IpAsset,
     LlmEndpoint,
+    PortRelation,
+    PrefDNSRelation,
     Product,
     ProductRelease,
+    RelationType,
+    RRHeader,
     Service,
+    SimpleProperty,
+    SimpleRelation,
+    SourceProperty,
+    SRVDNSRelation,
     TLSCertificate,
     Url,
     VulnProperty,
@@ -105,6 +118,7 @@ __all__ = [
     "AttackTree",
     "AuthoredAssessment",
     "AuthoredDraft",
+    "BasicDNSRelation",
     "CWEEntry",
     "Contact",
     "ContactRole",
@@ -133,20 +147,28 @@ __all__ = [
     "NmapService",
     "OWASPEntry",
     "OpenPortsMap",
+    "PortRelation",
+    "PrefDNSRelation",
     "Product",
     "ProductRelease",
     "ProgrammeReportSummary",
     "PtrRecord",
+    "RRHeader",
     "RawFinding",
     "RawFindingSummary",
     "RdapRecord",
     "ReconFinalisationError",
+    "RelationType",
     "RunFile",
     "RunFileContent",
     "RunMetrics",
+    "SRVDNSRelation",
     "Service",
     "Severity",
     "SeverityDecision",
+    "SimpleProperty",
+    "SimpleRelation",
+    "SourceProperty",
     "TLSCertificate",
     "TakeoverCandidate",
     "Url",

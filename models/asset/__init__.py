@@ -25,7 +25,10 @@ through the scope filter.
 
 | Module | Contents |
 |---|---|
-| ``models.asset.vuln`` | ``VulnProperty`` |
+| ``models.asset.property`` | ``SimpleProperty``, ``SourceProperty``, ``VulnProperty`` |
+| ``models.asset.relation`` | ``RelationType``, ``RRHeader``, ``SimpleRelation``, |
+|                           | ``PortRelation``, ``BasicDNSRelation``, ``PrefDNSRelation``, |
+|                           | ``SRVDNSRelation`` |
 | ``models.asset.endpoint`` | ``Endpoint``, ``EndpointPage``, ``LlmEndpoint`` |
 | ``models.asset.url`` | ``Url`` |
 | ``models.asset.service`` | ``Service``, ``Product``, ``ProductRelease`` |
@@ -34,9 +37,9 @@ through the scope filter.
 | ``models.asset.network`` | ``AsnRecord``, ``Contact``, ``ContactRole``, |
 |                          | ``RdapRecord``, ``DomainRecord`` |
 
-The intra-package import order is a DAG: ``vuln`` / ``certificate`` /
-``network`` are leaves; ``endpoint`` / ``service`` / ``ip`` build on them.
-No cycles, so no ``model_rebuild`` is needed.
+The intra-package import order is a DAG: ``property`` / ``relation`` /
+``certificate`` / ``network`` are leaves; ``endpoint`` / ``service`` / ``ip``
+build on them. No cycles, so no ``model_rebuild`` is needed.
 """
 
 from __future__ import annotations
@@ -51,12 +54,22 @@ from models.asset.network import (
     DomainRecord,
     RdapRecord,
 )
+from models.asset.property import SimpleProperty, SourceProperty, VulnProperty
+from models.asset.relation import (
+    BasicDNSRelation,
+    PortRelation,
+    PrefDNSRelation,
+    RelationType,
+    RRHeader,
+    SimpleRelation,
+    SRVDNSRelation,
+)
 from models.asset.service import Product, ProductRelease, Service
 from models.asset.url import Url
-from models.asset.vuln import VulnProperty
 
 __all__ = [
     "AsnRecord",
+    "BasicDNSRelation",
     "Contact",
     "ContactRole",
     "DomainRecord",
@@ -64,10 +77,18 @@ __all__ = [
     "EndpointPage",
     "IpAsset",
     "LlmEndpoint",
+    "PortRelation",
+    "PrefDNSRelation",
     "Product",
     "ProductRelease",
+    "RRHeader",
     "RdapRecord",
+    "RelationType",
+    "SRVDNSRelation",
     "Service",
+    "SimpleProperty",
+    "SimpleRelation",
+    "SourceProperty",
     "TLSCertificate",
     "Url",
     "VulnProperty",

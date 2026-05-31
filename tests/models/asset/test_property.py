@@ -1,13 +1,41 @@
-"""tests/models/asset/test_vuln.py - unit tests for models/asset/vuln.py."""
+"""tests/models/asset/test_property.py - unit tests for models/asset/property.py."""
 
 from __future__ import annotations
 
 import pytest
 from pydantic import ValidationError
 
-from models import VulnProperty
+from models import SimpleProperty, SourceProperty, VulnProperty
 
 pytestmark = pytest.mark.unit
+
+
+class TestSimpleProperty:
+    def test_key_value(self):
+        p = SimpleProperty(property_name="asn", property_value="15169")
+        assert p.property_name == "asn"
+        assert p.property_value == "15169"
+
+    def test_value_defaults_empty(self):
+        assert SimpleProperty(property_name="role").property_value == ""
+
+    def test_rejects_empty_name(self):
+        with pytest.raises(ValidationError):
+            SimpleProperty(property_name="")
+
+
+class TestSourceProperty:
+    def test_provenance(self):
+        p = SourceProperty(source="nmap", confidence=90)
+        assert p.source == "nmap"
+        assert p.confidence == 90
+
+    def test_confidence_defaults_zero(self):
+        assert SourceProperty(source="nvd").confidence == 0
+
+    def test_rejects_confidence_out_of_range(self):
+        with pytest.raises(ValidationError):
+            SourceProperty(source="nmap", confidence=101)
 
 
 class TestVulnProperty:
