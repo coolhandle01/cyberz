@@ -14,6 +14,8 @@ across every consumer.
 |                  | ``HostInsight``, ``HostScore``, ``IpAsset``, ``OpenPortsMap``, |
 |                  | ``Service``, ``TLSCertificate``, ``VulnProperty``, ``Product``, |
 |                  | ``ProductRelease``, ``LlmEndpoint`` |
+| ``models.asset.network`` | ``AsnRecord``, ``Contact``, ``ContactRole``, |
+|                          | ``DomainRecord``, ``RdapRecord`` |
 | ``models.workspace`` | ``RunFile``, ``RunFileContent`` |
 | ``models.cve`` | ``CveEntry`` |
 | ``models.cwe`` | ``CWEEntry`` |
@@ -22,8 +24,6 @@ across every consumer.
 | ``models.insight`` | ``HostAnnotation``, ``InsightValidationIssue``, |
 |                    | ``InsightValidationReport``, ``ReconFinalisationError`` |
 | ``models.metrics`` | ``RunMetrics`` |
-| ``models.asset.network`` | ``AsnRecord``, ``Contact``, ``ContactRole``, |
-|                          | ``DomainRecord``, ``RdapRecord`` |
 | ``models.scanner`` | ``NmapMode``, ``NmapBanner``, ``NmapScripts``, ``NmapService``, |
 |                    | ``NmapHostResult``, ``NmapScanResult``, ``HttpxMode`` |
 | ``models.h1`` | HackerOne shapes incl. ``ProgrammeReportSummary`` |
