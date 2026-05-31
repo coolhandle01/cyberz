@@ -1,11 +1,13 @@
 """
-models.asset.relation - the OAM typed relations (edges) between asset nodes.
+models.asset.relation - the OAM typed edges between asset nodes.
 
-OAM is a graph: assets are nodes, relations are typed edges that carry a label
-(``product_used`` / ``a_record`` / ``port`` / ...) and, for some kinds, extra
-structured detail. This module mirrors amass's ``relation`` package. An edge's
-endpoints are the two asset ``Key``s it joins, held by whatever composes the
-graph - not on the relation itself, exactly as OAM keeps them.
+OAM is a graph: assets are nodes (each carrying its own attached properties),
+relations are typed edges. cybersquad persists the edges as a flat record in
+``relations.json`` - the shape #45 inserts one graph edge per. An edge names
+the two asset ``Key``s it joins (``from_key`` -> ``to_key``), its OAM
+``RelationType`` and ``label`` (OAM's ``Name``), plus the type-specific detail
+the richer OAM relations carry (the port for a ``PortRelation``, the DNS
+``RRHeader`` for the DNS relations).
 
 OAM relations:
 <https://owasp-amass.github.io/docs/open_asset_model/>
@@ -31,9 +33,9 @@ class RelationType(StrEnum):
 class RRHeader(BaseModel):
     """The cybersquad shape that maps to amass's OAM ``RRHeader``.
 
-    The DNS resource-record header carried on the DNS relations (OAM json tag
-    in parentheses): ``rr_type`` (``rr_type``), ``rr_class`` (``class`` -
-    renamed off the Python keyword), ``ttl`` (``ttl``).
+    The DNS resource-record header a DNS relation carries (OAM json tag in
+    parentheses): ``rr_type`` (``rr_type``), ``rr_class`` (``class`` - renamed
+    off the Python keyword), ``ttl`` (``ttl``).
     """
 
     rr_type: int = Field(ge=0)  # rr_type
@@ -41,44 +43,37 @@ class RRHeader(BaseModel):
     ttl: int = Field(default=0, ge=0)  # ttl
 
 
-class SimpleRelation(BaseModel):
-    """OAM ``SimpleRelation`` - a labelled edge with no extra detail.
+class Relation(BaseModel):
+    """A persisted OAM edge - one row of ``relations.json``.
 
-    The workhorse edge: ``product_used``, ``certificate``, ``registration``,
-    ``verified_for`` and the like. ``label`` is OAM's ``Name`` (json ``label``).
+    The graph edge between two assets. ``from_key`` / ``to_key`` are the
+    endpoints' OAM ``Key``s; ``relation_type`` + ``label`` are the OAM
+    ``RelationType`` and ``Name``. The remaining fields are the type-specific
+    detail OAM's richer relations carry, populated only for the matching
+    ``relation_type``:
+
+    * ``PortRelation`` (host -> ``Service``): ``port_number`` + ``protocol``.
+    * the DNS relations: ``header`` (``RRHeader``), plus ``preference``
+      (``PrefDNSRelation`` / MX) and ``priority`` / ``weight`` / ``port``
+      (``SRVDNSRelation``).
+
+    ``SimpleRelation`` (``product_used`` / ``certificate`` / ...) carries no
+    extra detail - just type + label + endpoints. #45 maps each record onto
+    the matching amass relation struct as it writes the edge to the graph DB.
     """
 
-    label: str = Field(min_length=1, max_length=64)  # label (OAM ``Name``)
+    relation_type: RelationType
+    label: str = Field(min_length=1, max_length=64)  # OAM ``Name``
+    from_key: str = Field(min_length=1, max_length=512)  # source asset Key
+    to_key: str = Field(min_length=1, max_length=512)  # target asset Key
 
+    # PortRelation detail.
+    port_number: int | None = Field(default=None, ge=1, le=65535)
+    protocol: str = Field(default="", max_length=8)  # "tcp" / "udp"
 
-class PortRelation(BaseModel):
-    """OAM ``PortRelation`` - a host -> ``Service`` edge carrying the port."""
-
-    label: str = Field(min_length=1, max_length=64)  # label (OAM ``Name``)
-    port_number: int = Field(ge=1, le=65535)  # port_number
-    protocol: str = Field(default="", max_length=8)  # protocol ("tcp" / "udp")
-
-
-class BasicDNSRelation(BaseModel):
-    """OAM ``BasicDNSRelation`` - a DNS RR edge (A / AAAA / CNAME / PTR / NS)."""
-
-    label: str = Field(min_length=1, max_length=64)  # label (OAM ``Name``)
-    header: RRHeader  # header
-
-
-class PrefDNSRelation(BaseModel):
-    """OAM ``PrefDNSRelation`` - a DNS RR edge with a preference (MX)."""
-
-    label: str = Field(min_length=1, max_length=64)  # label (OAM ``Name``)
-    header: RRHeader  # header
-    preference: int = Field(ge=0)  # preference
-
-
-class SRVDNSRelation(BaseModel):
-    """OAM ``SRVDNSRelation`` - a DNS SRV RR edge (priority / weight / port)."""
-
-    label: str = Field(min_length=1, max_length=64)  # label (OAM ``Name``)
-    header: RRHeader  # header
-    priority: int = Field(ge=0)  # priority
-    weight: int = Field(ge=0)  # weight
-    port: int = Field(ge=0, le=65535)  # port
+    # DNS relation detail (BasicDNSRelation / PrefDNSRelation / SRVDNSRelation).
+    header: RRHeader | None = None
+    preference: int | None = Field(default=None, ge=0)  # PrefDNSRelation (MX)
+    priority: int | None = Field(default=None, ge=0)  # SRVDNSRelation
+    weight: int | None = Field(default=None, ge=0)  # SRVDNSRelation
+    srv_port: int | None = Field(default=None, ge=0, le=65535)  # SRVDNSRelation port

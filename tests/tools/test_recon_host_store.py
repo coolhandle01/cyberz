@@ -11,6 +11,8 @@ from models import (
     HostRole,
     HostScore,
     RawFinding,
+    Relation,
+    RelationType,
     TLSCertificate,
     Url,
 )
@@ -21,14 +23,17 @@ from tools.recon_host_store import (
     insight_path,
     load_host_findings,
     load_host_ports,
+    load_host_relations,
     load_host_scores,
     load_host_urls,
     load_insights,
     load_tls_certificates,
     ports_path,
+    relations_path,
     save_host_findings,
     save_host_notes,
     save_host_ports,
+    save_host_relations,
     save_host_score,
     save_host_urls,
     save_insight,
@@ -53,6 +58,27 @@ class TestUrlPersistence:
 
     def test_load_missing_returns_empty(self, run_dir, target_apex):
         assert load_host_urls(f"ghost.{target_apex}") == []
+
+
+class TestRelationPersistence:
+    def test_save_and_load_round_trip(self, run_dir, target_apex):
+        host = f"api.{target_apex}"
+        edge = Relation(
+            relation_type=RelationType.PORT,
+            label="port",
+            from_key=host,
+            to_key=f"{host}:443/tcp",
+            port_number=443,
+            protocol="tcp",
+        )
+        path = save_host_relations(host, [edge])
+        assert path == relations_path(host)
+        loaded = load_host_relations(host)
+        assert loaded[0].port_number == 443
+        assert loaded[0].relation_type == RelationType.PORT
+
+    def test_load_missing_returns_empty(self, run_dir, target_apex):
+        assert load_host_relations(f"ghost.{target_apex}") == []
 
 
 class TestInsightPersistence:

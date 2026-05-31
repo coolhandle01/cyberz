@@ -28,7 +28,7 @@ from pathlib import Path
 from pydantic import TypeAdapter
 
 import runtime
-from models import HostInsight, HostScore, RawFinding, Service, TLSCertificate, Url
+from models import HostInsight, HostScore, RawFinding, Relation, Service, TLSCertificate, Url
 from models.primitives import FQDN
 
 _HOSTS_SUBDIR = "hosts"
@@ -135,6 +135,7 @@ _HOST_FINDINGS = TypeAdapter(list[RawFinding])
 _HOST_PORTS = TypeAdapter(list[int])
 _HOST_SERVICES = TypeAdapter(list[Service])
 _HOST_URLS = TypeAdapter(list[Url])
+_HOST_RELATIONS = TypeAdapter(list[Relation])
 
 
 def host_score_path(hostname: FQDN) -> Path:
@@ -280,6 +281,34 @@ def load_host_urls(hostname: FQDN) -> list[Url]:
     return _HOST_URLS.validate_json(path.read_text(encoding="utf-8"))
 
 
+def relations_path(hostname: FQDN) -> Path:
+    """Per-host relations file: ``<host_dir>/relations.json``."""
+    return host_dir(hostname) / "relations.json"
+
+
+def save_host_relations(hostname: FQDN, relations: list[Relation]) -> Path:
+    """Persist a host's OAM graph edges to ``hosts/<host>/relations.json``.
+
+    The explicit-edge half of the host's OAM subgraph: assets carry their own
+    attached properties in their facet files; the typed relations *between*
+    them (host -> ``Service`` ``port``, ``Service`` -> ``ProductRelease``
+    ``product_used``, ...) live here, one record per edge. #45 inserts one
+    graph edge per row.
+    """
+    path = relations_path(hostname)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(_HOST_RELATIONS.dump_json(relations, indent=2))
+    return path
+
+
+def load_host_relations(hostname: FQDN) -> list[Relation]:
+    """Load a host's OAM graph edges; empty when none were written."""
+    path = relations_path(hostname)
+    if not path.is_file():
+        return []
+    return _HOST_RELATIONS.validate_json(path.read_text(encoding="utf-8"))
+
+
 __all__ = [
     "findings_path",
     "host_dir",
@@ -287,6 +316,7 @@ __all__ = [
     "insight_path",
     "load_host_findings",
     "load_host_ports",
+    "load_host_relations",
     "load_host_scores",
     "load_host_services",
     "load_host_urls",
@@ -294,9 +324,11 @@ __all__ = [
     "load_tls_certificates",
     "notes_path",
     "ports_path",
+    "relations_path",
     "save_host_findings",
     "save_host_notes",
     "save_host_ports",
+    "save_host_relations",
     "save_host_score",
     "save_host_services",
     "save_host_urls",

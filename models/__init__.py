@@ -14,9 +14,7 @@ across every consumer.
 |                  | ``Service``, ``Product``, ``ProductRelease``, ``Url``, |
 |                  | ``TLSCertificate``, ``LlmEndpoint``; properties |
 |                  | ``SimpleProperty``, ``SourceProperty``, ``VulnProperty``; |
-|                  | relations ``RelationType``, ``RRHeader``, ``SimpleRelation``, |
-|                  | ``PortRelation``, ``BasicDNSRelation``, ``PrefDNSRelation``, |
-|                  | ``SRVDNSRelation`` |
+|                  | relations ``RelationType``, ``RRHeader``, ``Relation`` |
 | ``models.asset.network`` | ``AsnRecord``, ``Contact``, ``ContactRole``, |
 |                          | ``DomainRecord``, ``RdapRecord`` |
 | ``models.workspace`` | ``RunFile``, ``RunFileContent`` |
@@ -46,22 +44,18 @@ that the pre-split layout had to dance around.
 from __future__ import annotations
 
 from models.asset import (
-    BasicDNSRelation,
     Endpoint,
     EndpointPage,
     IpAsset,
     LlmEndpoint,
-    PortRelation,
-    PrefDNSRelation,
     Product,
     ProductRelease,
+    Relation,
     RelationType,
     RRHeader,
     Service,
     SimpleProperty,
-    SimpleRelation,
     SourceProperty,
-    SRVDNSRelation,
     TLSCertificate,
     Url,
     VulnProperty,
@@ -118,7 +112,6 @@ __all__ = [
     "AttackTree",
     "AuthoredAssessment",
     "AuthoredDraft",
-    "BasicDNSRelation",
     "CWEEntry",
     "Contact",
     "ContactRole",
@@ -147,8 +140,6 @@ __all__ = [
     "NmapService",
     "OWASPEntry",
     "OpenPortsMap",
-    "PortRelation",
-    "PrefDNSRelation",
     "Product",
     "ProductRelease",
     "ProgrammeReportSummary",
@@ -158,16 +149,15 @@ __all__ = [
     "RawFindingSummary",
     "RdapRecord",
     "ReconFinalisationError",
+    "Relation",
     "RelationType",
     "RunFile",
     "RunFileContent",
     "RunMetrics",
-    "SRVDNSRelation",
     "Service",
     "Severity",
     "SeverityDecision",
     "SimpleProperty",
-    "SimpleRelation",
     "SourceProperty",
     "TLSCertificate",
     "TakeoverCandidate",
