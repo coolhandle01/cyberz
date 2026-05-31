@@ -112,7 +112,9 @@ class TestOsintAnalystTools:
         sections = {i.section for i in result.validation.issues}
         assert "notes" in sections
 
-    def test_list_uncovered_hosts_tool_returns_missing(self, programme, recon_result, run_dir) -> None:
+    def test_list_uncovered_hosts_tool_returns_missing(
+        self, programme, recon_result, run_dir
+    ) -> None:
         from squad.osint_analyst import list_uncovered_hosts_tool
 
         (run_dir / "attack_graph.json").write_text(recon_result.model_dump_json(), encoding="utf-8")
