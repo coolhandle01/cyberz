@@ -20,7 +20,7 @@ from __future__ import annotations
 import pytest
 
 from models.asset import IpAsset, Service
-from models.network import RdapRecord
+from models.asset.network import RdapRecord
 from models.scanner import NmapHostResult, NmapMode, NmapScanResult, NmapScripts, NmapService
 from squad.osint_analyst import (
     _DiscoverHostServicesArgs,

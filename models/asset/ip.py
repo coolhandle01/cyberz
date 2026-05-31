@@ -2,15 +2,15 @@
 models.asset.ip - the cybersquad ``IpAsset`` (amass IPAddress asset).
 
 Composes the per-IP enrichment lookups (Cymru ASN, RDAP registrant, dnsx
-PTR) into one typed record. Depends on the ``models.network`` registrant /
-ASN shapes.
+PTR) into one typed record. Depends on the ``models.asset.network``
+registrant / ASN shapes.
 """
 
 from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from models.network import AsnRecord, RdapRecord
+from models.asset.network import AsnRecord, RdapRecord
 from models.primitives import FQDN, IPAddress
 
 

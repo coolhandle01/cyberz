@@ -31,7 +31,7 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 
-from models.network import AsnRecord
+from models.asset.network import AsnRecord
 from models.primitives import IPAddress
 from tools._helpers import _require_binary, _run
 

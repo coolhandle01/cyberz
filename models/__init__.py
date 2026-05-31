@@ -22,8 +22,8 @@ across every consumer.
 | ``models.insight`` | ``HostAnnotation``, ``InsightValidationIssue``, |
 |                    | ``InsightValidationReport``, ``ReconFinalisationError`` |
 | ``models.metrics`` | ``RunMetrics`` |
-| ``models.network`` | ``AsnRecord``, ``Contact``, ``ContactRole``, ``DomainRecord``, |
-|                    | ``RdapRecord`` |
+| ``models.asset.network`` | ``AsnRecord``, ``Contact``, ``ContactRole``, |
+|                          | ``DomainRecord``, ``RdapRecord`` |
 | ``models.scanner`` | ``NmapMode``, ``NmapBanner``, ``NmapScripts``, ``NmapService``, |
 |                    | ``NmapHostResult``, ``NmapScanResult``, ``HttpxMode`` |
 | ``models.h1`` | HackerOne shapes incl. ``ProgrammeReportSummary`` |
@@ -58,6 +58,7 @@ from models.asset import (
     TLSCertificate,
     VulnProperty,
 )
+from models.asset.network import AsnRecord, Contact, ContactRole, DomainRecord, RdapRecord
 from models.attack import (
     AttackForest,
     AttackForestFinalisationError,
@@ -77,7 +78,6 @@ from models.insight import (
     ReconFinalisationError,
 )
 from models.metrics import RunMetrics
-from models.network import AsnRecord, Contact, ContactRole, DomainRecord, RdapRecord
 from models.owasp import OWASPEntry
 from models.primitives import FQDN, Email, HttpUrl, IPAddress, Severity
 from models.report import AuthoredDraft

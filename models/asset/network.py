@@ -1,5 +1,5 @@
 """
-models/network.py - typed shapes for the asset-layer network properties
+models.asset.network - typed shapes for the OAM registrant / network assets
 of an attack surface.
 
 Sits between ``models.primitives.IPAddress`` (the typed address) and

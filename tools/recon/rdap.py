@@ -41,7 +41,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from models.network import Contact, ContactRole, RdapRecord
+from models.asset.network import Contact, ContactRole, RdapRecord
 from models.primitives import IPAddress
 from tools import http
 

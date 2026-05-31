@@ -23,7 +23,7 @@ class TestIpAsset:
     def test_composes_typed_records(self, target_apex):
         # The nested ``AsnRecord`` / ``RdapRecord`` / PTR hostnames
         # arrive as separate lookups; IpAsset is the join point.
-        from models.network import AsnRecord
+        from models.asset.network import AsnRecord
 
         asset = IpAsset(
             ip="8.8.8.8",

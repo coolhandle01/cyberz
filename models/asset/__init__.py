@@ -27,6 +27,8 @@ through the scope filter.
 | ``models.asset.service`` | ``Service``, ``Product``, ``ProductRelease`` |
 | ``models.asset.certificate`` | ``TLSCertificate`` |
 | ``models.asset.ip`` | ``IpAsset`` |
+| ``models.asset.network`` | ``AsnRecord``, ``Contact``, ``ContactRole``, |
+|                          | ``RdapRecord``, ``DomainRecord`` |
 | ``models.asset.graph`` | ``AttackGraph`` |
 
 The intra-package import order is a DAG: ``vuln`` / ``certificate`` are
@@ -47,11 +49,22 @@ from models.asset.host import (
     OpenPortsMap,
 )
 from models.asset.ip import IpAsset
+from models.asset.network import (
+    AsnRecord,
+    Contact,
+    ContactRole,
+    DomainRecord,
+    RdapRecord,
+)
 from models.asset.service import Product, ProductRelease, Service
 from models.asset.vuln import VulnProperty
 
 __all__ = [
+    "AsnRecord",
     "AttackGraph",
+    "Contact",
+    "ContactRole",
+    "DomainRecord",
     "Endpoint",
     "EndpointPage",
     "HostInsight",
@@ -63,6 +76,7 @@ __all__ = [
     "OpenPortsMap",
     "Product",
     "ProductRelease",
+    "RdapRecord",
     "Service",
     "TLSCertificate",
     "VulnProperty",

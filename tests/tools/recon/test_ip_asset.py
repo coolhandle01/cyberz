@@ -7,8 +7,8 @@ from unittest.mock import patch
 import pytest
 
 from models import IpAsset
+from models.asset.network import AsnRecord, RdapRecord
 from models.dns import PtrRecord
-from models.network import AsnRecord, RdapRecord
 from tools.recon.ip_asset import compose_ip_assets
 
 pytestmark = pytest.mark.unit
