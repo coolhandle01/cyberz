@@ -135,6 +135,13 @@ class TestSearchCpes:
         with patch("tools.nvd.http.get", side_effect=Exception("boom")):
             assert nvd.search_cpes("nginx") == []
 
+    def test_result_is_cached_second_call_no_request(self):
+        with patch("tools.nvd.http.get", return_value=_ok(_cpe_payload())) as mget:
+            first = nvd.search_cpes("apache")
+            second = nvd.search_cpes("apache")
+        assert first == second
+        assert mget.call_count == 1
+
 
 class TestApiKeyHeader:
     def test_sends_api_key_header_when_configured(self, monkeypatch):
