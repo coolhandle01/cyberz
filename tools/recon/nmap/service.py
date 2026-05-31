@@ -18,9 +18,15 @@ from __future__ import annotations
 
 from typing import NamedTuple
 
-from models import Product, ProductRelease, Relation, RelationType, Service
+from models import Product, ProductRelease, Relation, RelationType, Service, SourceProperty
 from models.scanner import NmapHostResult
 from tools.cpe import product_release_from_cpe
+
+# nmap -sV directly observes the open port and its banner, so its assets carry
+# a full-confidence provenance stamp. (nmap's per-match `conf` 1-10 score is not
+# captured on NmapService yet; wiring it could refine this per #45.)
+_NMAP_SOURCE = "nmap"
+_NMAP_CONFIDENCE = 100
 
 
 class NmapAssets(NamedTuple):
@@ -71,6 +77,7 @@ def services_from_nmap(result: NmapHostResult) -> NmapAssets:
                 output=output,
                 output_length=len(output),
                 attributes=attributes,
+                sources=[SourceProperty(source=_NMAP_SOURCE, confidence=_NMAP_CONFIDENCE)],
             )
         )
         relations.append(
@@ -86,6 +93,9 @@ def services_from_nmap(result: NmapHostResult) -> NmapAssets:
 
         if svc.cpe and (decomposed := product_release_from_cpe(svc.cpe)) is not None:
             product, release = decomposed
+            nmap_source = SourceProperty(source=_NMAP_SOURCE, confidence=_NMAP_CONFIDENCE)
+            product.sources = [nmap_source]
+            release.sources = [nmap_source]
             products.setdefault(product.name, product)
             releases.setdefault(release.name, release)
             relations.append(
