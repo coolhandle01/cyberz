@@ -28,7 +28,7 @@ from pathlib import Path
 from pydantic import TypeAdapter
 
 import runtime
-from models import HostInsight, HostScore, RawFinding, Service, TLSCertificate
+from models import HostInsight, HostScore, RawFinding, Service, TLSCertificate, Url
 from models.primitives import FQDN
 
 _HOSTS_SUBDIR = "hosts"
@@ -134,6 +134,7 @@ def load_tls_certificates() -> list[TLSCertificate]:
 _HOST_FINDINGS = TypeAdapter(list[RawFinding])
 _HOST_PORTS = TypeAdapter(list[int])
 _HOST_SERVICES = TypeAdapter(list[Service])
+_HOST_URLS = TypeAdapter(list[Url])
 
 
 def host_score_path(hostname: FQDN) -> Path:
@@ -253,6 +254,32 @@ def load_host_services(hostname: FQDN) -> list[Service]:
     return _HOST_SERVICES.validate_json(path.read_text(encoding="utf-8"))
 
 
+def urls_path(hostname: FQDN) -> Path:
+    """Per-host URLs file: ``<host_dir>/urls.json``."""
+    return host_dir(hostname) / "urls.json"
+
+
+def save_host_urls(hostname: FQDN, urls: list[Url]) -> Path:
+    """Persist a host's OAM ``Url`` assets to ``hosts/<host>/urls.json``.
+
+    The OAM ``URL``-asset facet of the host node: one structured URL per row
+    (scheme / host / port / path / ...), the on-disk form of what #45 upserts
+    as amass URL nodes related to the FQDN. Sibling of ``services.json``.
+    """
+    path = urls_path(hostname)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(_HOST_URLS.dump_json(urls, indent=2))
+    return path
+
+
+def load_host_urls(hostname: FQDN) -> list[Url]:
+    """Load a host's ``Url`` assets; empty when none were written."""
+    path = urls_path(hostname)
+    if not path.is_file():
+        return []
+    return _HOST_URLS.validate_json(path.read_text(encoding="utf-8"))
+
+
 __all__ = [
     "findings_path",
     "host_dir",
@@ -262,6 +289,7 @@ __all__ = [
     "load_host_ports",
     "load_host_scores",
     "load_host_services",
+    "load_host_urls",
     "load_insights",
     "load_tls_certificates",
     "notes_path",
@@ -271,8 +299,10 @@ __all__ = [
     "save_host_ports",
     "save_host_score",
     "save_host_services",
+    "save_host_urls",
     "save_insight",
     "save_tls_certificate",
     "services_path",
     "tls_path",
+    "urls_path",
 ]

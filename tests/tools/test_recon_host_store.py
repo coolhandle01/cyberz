@@ -12,6 +12,7 @@ from models import (
     HostScore,
     RawFinding,
     TLSCertificate,
+    Url,
 )
 from tools.recon_host_store import (
     findings_path,
@@ -21,6 +22,7 @@ from tools.recon_host_store import (
     load_host_findings,
     load_host_ports,
     load_host_scores,
+    load_host_urls,
     load_insights,
     load_tls_certificates,
     ports_path,
@@ -28,12 +30,29 @@ from tools.recon_host_store import (
     save_host_notes,
     save_host_ports,
     save_host_score,
+    save_host_urls,
     save_insight,
     save_tls_certificate,
     tls_path,
+    urls_path,
 )
 
 pytestmark = pytest.mark.unit
+
+
+class TestUrlPersistence:
+    def test_save_and_load_round_trip(self, run_dir, target_apex):
+        host = f"api.{target_apex}"
+        url = Url(raw=f"https://{host}:8443/v1?q=1#f", scheme="https", host=host, port=8443)
+        path = save_host_urls(host, [url])
+        assert path == urls_path(host)
+        assert path.exists()
+        loaded = load_host_urls(host)
+        assert [u.raw for u in loaded] == [f"https://{host}:8443/v1?q=1#f"]
+        assert loaded[0].port == 8443
+
+    def test_load_missing_returns_empty(self, run_dir, target_apex):
+        assert load_host_urls(f"ghost.{target_apex}") == []
 
 
 class TestInsightPersistence:

@@ -234,6 +234,42 @@ class TestFinaliseRecon:
         assert len(data["endpoints"]) == len(sweep.endpoints)
 
 
+class TestMaterialiseUrls:
+    def test_finalise_writes_urls_per_host(
+        self, make_host_insight, sweep, programme, run_dir, target_apex
+    ):
+        from tools.recon_host_store import load_host_urls
+
+        _write_sweep(run_dir, sweep)
+        save_insight(make_host_insight())  # api.example.com, HIGH
+        finalise_recon(programme)
+
+        urls = load_host_urls(f"api.{target_apex}")
+        assert len(urls) == 1
+        assert urls[0].scheme == "https"
+        assert urls[0].host == f"api.{target_apex}"
+
+    def test_finalise_skips_unparseable_url(
+        self, make_host_insight, sweep, programme, run_dir, target_apex
+    ):
+        from models import Endpoint
+        from tools.recon_host_store import load_host_urls
+
+        # A URL between 2048 (the Url.raw cap) and 2083 (HttpUrl's own cap)
+        # passes Endpoint but fails the Url shape; it must be skipped, not
+        # abort finalisation (the good api endpoint on the same host persists).
+        base = f"https://api.{target_apex}/"
+        oversize = Endpoint(url=base + "a" * (2070 - len(base)))
+        bad_sweep = sweep.model_copy(update={"endpoints": [*sweep.endpoints, oversize]})
+        _write_sweep(run_dir, bad_sweep)
+        save_insight(make_host_insight())
+        finalise_recon(programme)
+
+        urls = load_host_urls(f"api.{target_apex}")
+        assert urls  # the good api URL persisted
+        assert all(len(u.raw) <= 2048 for u in urls)  # the oversize one was skipped
+
+
 class TestFinaliseMaterialisesHostDirs:
     def test_writes_every_facet(self, make_host_insight, sweep, programme, run_dir, target_apex):
         from models import RawFinding
