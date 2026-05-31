@@ -13,7 +13,8 @@ across every consumer.
 | ``models.asset`` | assets ``Endpoint``, ``EndpointPage``, ``IpAsset``, |
 |                  | ``Service``, ``Product``, ``ProductRelease``, ``Url``, |
 |                  | ``TLSCertificate``, ``LlmEndpoint``; properties |
-|                  | ``SimpleProperty``, ``SourceProperty``, ``VulnProperty``; |
+|                  | ``DNSRecordProperty``, ``SimpleProperty``, ``SourceProperty``, |
+|                  | ``VulnProperty``; |
 |                  | relations ``RelationType``, ``RRHeader``, ``Relation`` |
 | ``models.asset.network`` | ``AsnRecord``, ``Contact``, ``ContactRole``, |
 |                          | ``DomainRecord``, ``RdapRecord`` |
@@ -50,6 +51,7 @@ from models.asset import (
     Contact,
     ContactRecord,
     ContactRole,
+    DNSRecordProperty,
     DomainRecord,
     Endpoint,
     EndpointPage,
@@ -134,6 +136,7 @@ __all__ = [
     "ContactRecord",
     "ContactRole",
     "CveEntry",
+    "DNSRecordProperty",
     "DomainRecord",
     "Email",
     "Endpoint",

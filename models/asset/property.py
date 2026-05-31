@@ -2,17 +2,21 @@
 models.asset.property - the OAM properties hung off asset nodes.
 
 OAM models a fact about an asset - a vulnerability, an arbitrary key/value, a
-provenance stamp - not as a standalone asset but as a *property* attached to
-the asset node. This module mirrors amass's ``property`` package: the three
-property shapes an asset can carry.
+provenance stamp, a DNS record - not as a standalone asset but as a *property*
+attached to the asset node. This module gathers the four OAM property shapes an
+asset can carry (amass splits them across its ``general`` and ``dns`` packages;
+cybersquad groups them here).
 
 OAM properties:
-<https://owasp-amass.github.io/docs/open_asset_model/properties/vuln_property/>
+* ``VulnProperty`` <https://owasp-amass.github.io/docs/open_asset_model/properties/vuln_property/>
+* ``DNSRecordProperty`` <https://owasp-amass.github.io/docs/open_asset_model/properties/dns_property/>
 """
 
 from __future__ import annotations
 
 from pydantic import BaseModel, Field
+
+from models.asset.relation import RRHeader
 
 
 class SimpleProperty(BaseModel):
@@ -40,6 +44,28 @@ class SourceProperty(BaseModel):
 
     source: str = Field(min_length=1, max_length=64)  # name (the tool / feed)
     confidence: int = Field(default=0, ge=0, le=100)  # confidence
+
+
+class DNSRecordProperty(BaseModel):
+    """The cybersquad shape that maps to amass's OAM ``DNSRecordProperty``.
+
+    A DNS resource record OAM hangs off the ``FQDN`` node as a property (the
+    record's *content*), complementing the DNS *relations* that model the edge
+    to the answer asset. Mirrors amass's ``DNSRecordProperty`` field for field
+    (OAM json tag in parentheses):
+
+    * ``property_name`` (``property_name``) -> the record's name / label.
+    * ``header`` (``header``) -> the resource-record header (``RRHeader``:
+      rr_type / class / ttl), reused from ``models.asset.relation``.
+    * ``data`` (``data``) -> the record's RDATA, kept verbatim.
+    """
+
+    property_name: str = Field(min_length=1, max_length=255)  # property_name
+    header: RRHeader  # header (rr_type / class / ttl)
+    # Tool-captured RDATA (the resolver's record value). Defence
+    # (cybersquad-models skill, tool-captured text): a boundary length cap; read
+    # as data, never re-issued to an LLM as instruction context.
+    data: str = Field(default="", max_length=2048)  # data
 
 
 class VulnProperty(BaseModel):

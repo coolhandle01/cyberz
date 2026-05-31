@@ -25,7 +25,8 @@ through the scope filter.
 
 | Module | Contents |
 |---|---|
-| ``models.asset.property`` | ``SimpleProperty``, ``SourceProperty``, ``VulnProperty`` |
+| ``models.asset.property`` | ``DNSRecordProperty``, ``SimpleProperty``, |
+|                           | ``SourceProperty``, ``VulnProperty`` |
 | ``models.asset.relation`` | ``RelationType``, ``RRHeader``, ``Relation`` |
 | ``models.asset.endpoint`` | ``Endpoint``, ``EndpointPage``, ``LlmEndpoint`` |
 | ``models.asset.url`` | ``Url`` |
@@ -40,9 +41,11 @@ through the scope filter.
 | ``models.asset.identifier`` | ``Identifier`` |
 | ``models.asset.ip`` | ``IpAsset`` (legacy composition, migrating) |
 
-The intra-package import order is a DAG: the per-asset / property / relation
-modules are leaves (they import only primitives); ``endpoint`` / ``service`` /
-``ip`` build on them. No cycles, so no ``model_rebuild`` is needed.
+The intra-package import order is a DAG: ``relation`` is a leaf (primitives
+only); ``property`` builds on ``relation`` (``DNSRecordProperty`` reuses
+``RRHeader``); the per-asset modules build on ``property`` / ``relation``;
+``endpoint`` / ``service`` / ``ip`` build on those. No cycles, so no
+``model_rebuild`` is needed.
 """
 
 from __future__ import annotations
@@ -62,7 +65,12 @@ from models.asset.network import (
 )
 from models.asset.org import Organization
 from models.asset.people import Person
-from models.asset.property import SimpleProperty, SourceProperty, VulnProperty
+from models.asset.property import (
+    DNSRecordProperty,
+    SimpleProperty,
+    SourceProperty,
+    VulnProperty,
+)
 from models.asset.registration import AutnumRecord, DomainRecord, IPNetRecord
 from models.asset.relation import Relation, RelationType, RRHeader
 from models.asset.service import Product, ProductRelease, Service
@@ -75,6 +83,7 @@ __all__ = [
     "Contact",
     "ContactRecord",
     "ContactRole",
+    "DNSRecordProperty",
     "DomainRecord",
     "Endpoint",
     "EndpointPage",

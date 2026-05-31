@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from models import SimpleProperty, SourceProperty, VulnProperty
+from models import DNSRecordProperty, RRHeader, SimpleProperty, SourceProperty, VulnProperty
 
 pytestmark = pytest.mark.unit
 
@@ -36,6 +36,34 @@ class TestSourceProperty:
     def test_rejects_confidence_out_of_range(self):
         with pytest.raises(ValidationError):
             SourceProperty(source="nmap", confidence=101)
+
+
+class TestDNSRecordProperty:
+    def test_record(self):
+        # The DNS record's content OAM hangs off the FQDN node, reusing the
+        # RRHeader (rr_type / class / ttl) from the relation module.
+        rec = DNSRecordProperty(
+            property_name="www.example.com",
+            header=RRHeader(rr_type=1, rr_class=1, ttl=300),
+            data="93.184.216.34",
+        )
+        assert rec.property_name == "www.example.com"
+        assert rec.header.rr_type == 1
+        assert rec.data == "93.184.216.34"
+
+    def test_data_defaults_empty(self):
+        rec = DNSRecordProperty(property_name="example.com", header=RRHeader(rr_type=2))
+        assert rec.data == ""
+
+    def test_rejects_empty_name(self):
+        with pytest.raises(ValidationError):
+            DNSRecordProperty(property_name="", header=RRHeader(rr_type=1))
+
+    def test_rejects_oversize_data(self):
+        with pytest.raises(ValidationError):
+            DNSRecordProperty(
+                property_name="example.com", header=RRHeader(rr_type=16), data="x" * 2049
+            )
 
 
 class TestVulnProperty:
