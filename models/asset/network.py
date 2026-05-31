@@ -39,7 +39,7 @@ from __future__ import annotations
 from datetime import datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from models.primitives import Cidr, Email, IpAddr, IPType
 
@@ -65,7 +65,25 @@ class Netblock(BaseModel):
     """
 
     cidr: Cidr  # cidr (e.g. "8.8.8.0/24") - validated IPv4/IPv6 network prefix
-    type: IPType | None = None  # type ("IPv4" / "IPv6")
+    type: IPType  # type ("IPv4" / "IPv6") - exhaustive; must match cidr's family
+
+    @model_validator(mode="after")
+    def _type_matches_cidr(self) -> Netblock:
+        """``type`` is exhaustive (IPv4 / IPv6) and fully determined by
+        ``cidr``'s family, so it is required rather than optional - and a
+        ``type`` that disagrees with ``cidr`` is a producer bug we reject
+        rather than persist (``cidr`` is already canonical via the ``Cidr``
+        primitive, so ``ip_network`` here cannot raise).
+        """
+        import ipaddress
+
+        version = ipaddress.ip_network(self.cidr).version
+        expected = IPType.IPV6 if version == 6 else IPType.IPV4
+        if self.type != expected:
+            raise ValueError(
+                f"type {self.type!r} does not match cidr {self.cidr!r} (expected {expected})"
+            )
+        return self
 
 
 class AsnRecord(BaseModel):

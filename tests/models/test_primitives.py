@@ -305,13 +305,19 @@ class TestCidr:
     def test_valid_cidr_normalises(self, raw, expected):
         assert _CidrProbe(value=raw).value == expected
 
-    @pytest.mark.parametrize(
-        "bad",
-        ["", "   ", "8.8.8.8", "not-a-cidr", "999.0.0.0/8", "example.com/24"],
-    )
-    def test_rejects_non_cidr(self, bad):
-        with pytest.raises(ValidationError):
-            _CidrProbe(value=bad)
+    def test_rejects_non_cidr(self, target_url):
+        """The bare cases stay literal; the hostname-shaped case derives its
+        host from target_url so "a domain where a CIDR was expected" reads at
+        the call site. Parametrize can't consume fixtures, so a single method
+        loops the corpus (mirrors TestFQDN / TestHttpUrl).
+        """
+        from urllib.parse import urlparse
+
+        host = urlparse(target_url).hostname or ""
+        cases: list[str] = ["", "   ", "8.8.8.8", "not-a-cidr", "999.0.0.0/8", f"{host}/24"]
+        for bad in cases:
+            with pytest.raises(ValidationError):
+                _CidrProbe(value=bad)
 
     def test_runtime_type_is_str(self):
         # Cidr is Annotated[str, ...] so consumers keep treating it as a string.

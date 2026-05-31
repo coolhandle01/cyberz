@@ -35,21 +35,30 @@ class TestNetblock:
         assert nb.cidr == "8.8.8.0/24"
         assert nb.type == "IPv4"  # coerced to the IPType StrEnum
 
+    def test_ipv6_type(self):
+        assert Netblock(cidr="2001:db8::/32", type="IPv6").type == "IPv6"
+
     def test_host_bits_normalise_to_network(self):
         # Cidr validates via ipaddress.ip_network(strict=False): a host-bit-set
         # prefix normalises to its network rather than rejecting.
-        assert Netblock(cidr="8.8.8.8/24").cidr == "8.8.8.0/24"
+        assert Netblock(cidr="8.8.8.8/24", type="IPv4").cidr == "8.8.8.0/24"
+
+    def test_rejects_type_mismatched_with_cidr(self):
+        # type is exhaustive and determined by cidr's family; a disagreement
+        # is a producer bug, rejected rather than persisted.
+        with pytest.raises(ValidationError):
+            Netblock(cidr="8.8.8.0/24", type="IPv6")
 
     def test_rejects_empty_cidr(self):
         with pytest.raises(ValidationError):
-            Netblock(cidr="")
+            Netblock(cidr="", type="IPv4")
 
     def test_rejects_non_cidr(self):
         # A bare address (no prefix) is an IpAddr, not a Cidr; garbage rejects.
         with pytest.raises(ValidationError):
-            Netblock(cidr="8.8.8.8")
+            Netblock(cidr="8.8.8.8", type="IPv4")
         with pytest.raises(ValidationError):
-            Netblock(cidr="not-a-cidr")
+            Netblock(cidr="not-a-cidr", type="IPv4")
 
 
 class TestOrganization:
