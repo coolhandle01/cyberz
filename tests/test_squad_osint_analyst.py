@@ -34,6 +34,36 @@ class TestOsintAnalystTools:
         assert result == ["api.example.com", "admin.example.com"]
         mimpl.assert_called_once_with("attack_graph.json", host_filter="api")
 
+    def test_list_endpoints_tool_returns_endpoint_page(self, target_apex) -> None:
+        # Thin wrapper over the recon_endpoints slicer: forwards the filter
+        # args and hands back the typed EndpointPage the agent reads.
+        from models import Endpoint, EndpointPage
+        from squad.osint_analyst import list_endpoints_tool
+
+        page = EndpointPage(
+            endpoints=[Endpoint(url=f"https://api.{target_apex}", status_code=200)],
+            total=1,
+            offset=0,
+            returned=1,
+        )
+        with patch(
+            "squad.osint_analyst.discovery.recon_endpoints",
+            return_value=page,
+        ) as mimpl:
+            result = list_endpoints_tool.func(
+                attack_graph_path="attack_graph.json", status=200, tech="nginx"
+            )
+
+        assert result is page
+        mimpl.assert_called_once_with(
+            "attack_graph.json",
+            status=200,
+            tech="nginx",
+            host_contains=None,
+            offset=0,
+            limit=50,
+        )
+
     def test_list_open_ports_tool_wraps_dict_as_open_ports_map(self) -> None:
         # Wrapper turns the impl's ``{host: [ports]}`` into the typed
         # ``OpenPortsMap`` the agent reads back.
@@ -113,7 +143,7 @@ class TestOsintAnalystTools:
         assert "notes" in sections
 
     def test_list_uncovered_hosts_tool_returns_missing(
-        self, programme, recon_result, run_dir
+        self, programme, recon_result, run_dir, target_apex
     ) -> None:
         from squad.osint_analyst import list_uncovered_hosts_tool
 
@@ -121,8 +151,9 @@ class TestOsintAnalystTools:
         result = list_uncovered_hosts_tool.func()
 
         assert isinstance(result, list)
-        # recon_result fixture has https://api.example.com with status 200 -> interesting
-        assert "api.example.com" in result
+        # recon_result's endpoint (https://api.<apex>, status 200) is interesting
+        # and uncovered -> surfaces here, as a typed FQDN.
+        assert f"api.{target_apex}" in result
 
     def test_finalise_recon_tool_writes_recon_json(
         self, programme_in_workspace, recon_result, run_dir, target_apex
@@ -269,31 +300,36 @@ class TestOsintAnalystTools:
         assert all(isinstance(r, OWASPEntry) for r in result)
         assert any("SQL_Injection_Prevention" in r.url for r in result)
 
-    def test_discover_subdomains_tool(self) -> None:
+    def test_discover_subdomains_tool(self, target_apex) -> None:
         from squad.osint_analyst import discover_subdomains_tool
 
-        sentinel = ["api.example.com", "admin.example.com"]
+        names = [f"api.{target_apex}", f"admin.{target_apex}"]
         with patch(
             "squad.osint_analyst.discovery.cert_transparency",
-            return_value=sentinel,
+            return_value=names,
         ) as m:
-            result = discover_subdomains_tool.func("example.com")
+            result = discover_subdomains_tool.func(target_apex)
 
-        assert result == sentinel
-        m.assert_called_once_with("example.com")
+        # The wrapper coerces crt.sh's raw hostnames into typed FQDNs.
+        assert result == names
+        m.assert_called_once_with(target_apex)
 
     def test_discover_historical_urls_tool(self, target_apex) -> None:
         from squad.osint_analyst import discover_historical_urls_tool
 
-        sentinel = [f"https://{target_apex}/old"]
+        good = f"https://{target_apex}/old"
+        # waybackurls occasionally emits a schemeless / malformed entry; the
+        # wrapper drops it rather than failing the whole batch.
         with patch(
             "squad.osint_analyst.discovery.historical_urls",
-            return_value=sentinel,
+            return_value=[good, "not a url", f"{target_apex}/no-scheme"],
         ) as m:
-            result = discover_historical_urls_tool.func("example.com")
+            result = discover_historical_urls_tool.func(target_apex)
 
-        assert result == sentinel
-        m.assert_called_once_with("example.com")
+        # The wrapper coerces waybackurls' raw strings into typed HttpUrls,
+        # keeping only the well-formed ones.
+        assert result == [good]
+        m.assert_called_once_with(target_apex)
 
     def test_discover_llm_endpoints_tool(self, programme_in_workspace, endpoint) -> None:
         from models import LlmEndpoint

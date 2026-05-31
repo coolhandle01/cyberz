@@ -8,7 +8,7 @@ hosts that have not yet been annotated, and consolidate everything into
 the typed artefact downstream agents (VR research, PT probes) consume.
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, TypeAdapter
 
 from models import (
     FQDN,
@@ -37,6 +37,10 @@ from tools.recon_insights import (
 from tools.recon_insights import (
     load_insights as load_insights_impl,
 )
+
+# A bare ``FQDN(x)`` call does not run the AfterValidator; validate the
+# uncovered-host list through Pydantic so the typed return is real.
+_FQDN_LIST_ADAPTER: TypeAdapter[list[FQDN]] = TypeAdapter(list[FQDN])
 
 
 class _OsintLookupCweArgs(BaseModel):
@@ -200,16 +204,19 @@ class _ListUncoveredHostsArgs(BaseModel):
 
 
 @cyber_tool("List Uncovered Hosts", args_schema=_ListUncoveredHostsArgs)
-def list_uncovered_hosts_tool(attack_graph_path: str = "attack_graph.json") -> list[str]:
+def list_uncovered_hosts_tool(attack_graph_path: str = "attack_graph.json") -> list[FQDN]:
     """
     Return interesting-status hostnames in the sweep (200, 301, 302, 401,
-    403, ...) that have no insight yet. Use as a checklist before calling
-    Finalise Recon - hosts you choose to leave uncovered should at least be
-    a deliberate decision.
+    403, ...) that have no insight yet, as typed FQDNs. Use as a checklist
+    before calling Finalise Recon - hosts you choose to leave uncovered
+    should at least be a deliberate decision.
     """
     sweep = load_attack_graph_impl(attack_graph_path)
     insights = load_insights_impl()
-    return uncovered_interesting_hosts(sweep, insights)
+    # Validate + normalise to typed FQDNs through Pydantic - a bare
+    # ``FQDN(x)`` call does not run the AfterValidator. The hosts come from
+    # parsed in-scope endpoint URLs, so they are already well-formed.
+    return _FQDN_LIST_ADAPTER.validate_python(uncovered_interesting_hosts(sweep, insights))
 
 
 class _FinaliseReconArgs(BaseModel):

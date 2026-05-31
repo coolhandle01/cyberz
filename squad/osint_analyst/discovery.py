@@ -8,13 +8,14 @@ transparency, historical URL archive), spot LLM-bearing endpoints,
 and follow up with active probes against newly-surfaced hostnames.
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, TypeAdapter, ValidationError
 
 import runtime
 from models import (
     FQDN,
     Endpoint,
     EndpointPage,
+    HttpUrl,
     LlmEndpoint,
     OpenPortsMap,
     TakeoverCandidate,
@@ -35,6 +36,15 @@ from tools.recon.scope import (
     TargetFQDN,
     TargetFQDNs,
 )
+
+# A bare ``FQDN(x)`` / ``HttpUrl(x)`` call does NOT run the AfterValidator -
+# the typed-string aliases only validate + normalise through Pydantic. These
+# adapters are the coercion point for the tool-captured strings the recon
+# binaries return, so the typed return shapes are real, not cosmetic. The
+# single-value ``HttpUrl`` adapter is used per-entry so one malformed archive
+# URL can be dropped without failing the batch.
+_FQDN_LIST_ADAPTER: TypeAdapter[list[FQDN]] = TypeAdapter(list[FQDN])
+_HTTP_URL_ADAPTER: TypeAdapter[HttpUrl] = TypeAdapter(HttpUrl)
 
 
 class _RunInitialSweepArgs(BaseModel):
@@ -228,13 +238,14 @@ class _DiscoverSubdomainsArgs(BaseModel):
 
 
 @cyber_tool("Discover Subdomains", args_schema=_DiscoverSubdomainsArgs)
-def discover_subdomains_tool(domain: FQDN) -> list[str]:
+def discover_subdomains_tool(domain: FQDN) -> list[FQDN]:
     """
     Query crt.sh certificate transparency logs to discover subdomains not
-    found by active enumeration. Returns deduplicated hostnames. Feed
-    newly discovered hosts to Discover Webpages to determine which are live.
+    found by active enumeration. Returns deduplicated hostnames as typed
+    FQDNs. Feed newly discovered hosts to Discover Webpages to determine
+    which are live.
     """
-    return cert_transparency(domain)
+    return _FQDN_LIST_ADAPTER.validate_python(cert_transparency(domain))
 
 
 class _DiscoverHistoricalUrlsArgs(BaseModel):
@@ -252,13 +263,25 @@ class _DiscoverHistoricalUrlsArgs(BaseModel):
 
 
 @cyber_tool("Discover Historical URLs", args_schema=_DiscoverHistoricalUrlsArgs)
-def discover_historical_urls_tool(domain: FQDN) -> list[str]:
+def discover_historical_urls_tool(domain: FQDN) -> list[HttpUrl]:
     """
     Use waybackurls to find historical endpoints for a domain from the
     Wayback Machine. Surfaces paths that may no longer be linked but still
     exist - candidates for Discover Webpages.
+
+    Returns typed URL strings, not ``Endpoint`` objects: these are archive
+    entries, *unprobed*, so we have no status code or liveness to put on an
+    ``Endpoint`` yet. Malformed archive entries (no scheme / host) are
+    dropped rather than failing the batch. Feed the survivors to Discover
+    Webpages to confirm which are live.
     """
-    return historical_urls(domain)
+    urls: list[HttpUrl] = []
+    for raw in historical_urls(domain):
+        try:
+            urls.append(_HTTP_URL_ADAPTER.validate_python(raw))
+        except ValidationError:
+            continue
+    return urls
 
 
 class _DiscoverLlmEndpointsArgs(BaseModel):

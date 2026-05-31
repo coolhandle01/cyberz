@@ -68,7 +68,7 @@ class TestProbeEndpoints:
             patch("shutil.which", return_value="/usr/bin/httpx"),
             patch("subprocess.run", return_value=mock_result),
         ):
-            result = probe_endpoints(["api.example.com", "admin.example.com"])
+            result = probe_endpoints([f"api.{target_apex}", f"admin.{target_apex}"])
 
         assert len(result) == 2
         assert result[0].url == f"https://api.{target_apex}"
