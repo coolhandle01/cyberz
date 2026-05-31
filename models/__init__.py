@@ -14,6 +14,7 @@ across every consumer.
 |                  | ``HostInsight``, ``HostScore``, ``IpAsset``, ``OpenPortsMap``, |
 |                  | ``Service``, ``TLSCertificate``, ``LlmEndpoint``, ``AttackGraph`` |
 | ``models.workspace`` | ``RunFile``, ``RunFileContent`` |
+| ``models.briefing`` | ``OperationBriefing`` |
 | ``models.cve`` | ``CveEntry`` |
 | ``models.cwe`` | ``CWEEntry`` |
 | ``models.owasp`` | ``OWASPEntry`` |
@@ -60,6 +61,7 @@ from models.attack import (
     AttackForestValidationReport,
     AttackTree,
 )
+from models.briefing import OperationBriefing
 from models.cve import CveEntry
 from models.cwe import CWEEntry
 from models.dns import PtrRecord, TakeoverCandidate
@@ -126,6 +128,7 @@ __all__ = [
     "NmapService",
     "OWASPEntry",
     "OpenPortsMap",
+    "OperationBriefing",
     "ProgrammeReportSummary",
     "PtrRecord",
     "RawFinding",
