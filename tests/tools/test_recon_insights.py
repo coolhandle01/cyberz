@@ -10,12 +10,17 @@ from pydantic import ValidationError
 from models import (
     AttackGraph,
     Endpoint,
+    HostInsight,
     HostPriority,
+    HostRole,
     TLSCertificate,
+    VulnProperty,
 )
 from tools.recon_insights import (
     ReconFinalisationError,
+    annotate_host_vulns,
     finalise_recon,
+    load_insights,
     load_tls_certificates,
     save_insight,
     uncovered_interesting_hosts,
@@ -288,3 +293,42 @@ class TestFinaliseMaterialisesHostDirs:
         final = AttackGraph.model_validate_json(out.read_text(encoding="utf-8"))
         assert len(final.ip_assets) == 1
         assert len(final.tls_certificates) == 1
+
+
+class TestAnnotateHostVulns:
+    """The VR's hook onto the OAM graph: VulnProperty merged onto a host."""
+
+    def _seed(self, target_apex: str) -> str:
+        hostname = f"blog.{target_apex}"
+        save_insight(
+            HostInsight(
+                hostname=hostname,
+                role=HostRole.APP,
+                priority=HostPriority.HIGH,
+                notes="WordPress 5.8.1 blog host - dated core, worth a CVE pass here.",
+                detected_tech=["WordPress 5.8.1"],
+            )
+        )
+        return hostname
+
+    def test_merges_and_persists(self, run_dir, target_apex):
+        hostname = self._seed(target_apex)
+        updated = annotate_host_vulns(
+            hostname, [VulnProperty(id="CVE-2021-44223", source="nvd", enumeration="CVE")]
+        )
+        assert updated.vulns[0].id == "CVE-2021-44223"
+        reloaded = next(i for i in load_insights() if i.hostname == hostname)
+        assert reloaded.vulns[0].id == "CVE-2021-44223"
+
+    def test_dedups_by_id(self, run_dir, target_apex):
+        hostname = self._seed(target_apex)
+        annotate_host_vulns(hostname, [VulnProperty(id="CVE-2021-44223")])
+        updated = annotate_host_vulns(
+            hostname,
+            [VulnProperty(id="CVE-2021-44223"), VulnProperty(id="CVE-2022-21661")],
+        )
+        assert [v.id for v in updated.vulns] == ["CVE-2021-44223", "CVE-2022-21661"]
+
+    def test_raises_when_host_has_no_insight(self, run_dir, target_apex):
+        with pytest.raises(ValueError, match="no host insight"):
+            annotate_host_vulns(f"ghost.{target_apex}", [VulnProperty(id="CVE-2021-44223")])

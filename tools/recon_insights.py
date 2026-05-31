@@ -35,7 +35,7 @@ import re
 from pathlib import Path
 
 import runtime
-from models import AttackGraph, HostInsight, HostPriority, HostScore, RawFinding
+from models import AttackGraph, HostInsight, HostPriority, HostScore, RawFinding, VulnProperty
 from models.h1 import Programme
 
 # The insight shapes (HostAnnotation, InsightValidationIssue,
@@ -224,6 +224,32 @@ def load_attack_graph(attack_graph_filename: str = _ATTACK_GRAPH_FILENAME) -> At
     return AttackGraph.model_validate_json(path.read_text(encoding="utf-8"))
 
 
+def annotate_host_vulns(hostname: str, vulns: list[VulnProperty]) -> HostInsight:
+    """Merge OAM ``VulnProperty`` annotations onto an existing host insight.
+
+    The Vulnerability Researcher's hook onto the OAM graph: after an NVD CVE
+    lookup matches a host's detected technology, the VR attaches the CVEs as
+    ``VulnProperty`` values on that host's FQDN asset. Loads the OA-authored
+    insight, appends the vulns the host does not already carry (dedup by
+    ``id``), persists, and returns the updated insight.
+
+    Raises ``ValueError`` if the host has no insight yet - the OSINT Analyst
+    curates the asset (Annotate Host) before the VR annotates its vulns.
+    """
+    target = hostname.strip().lower()
+    match = next((i for i in load_insights() if i.hostname.strip().lower() == target), None)
+    if match is None:
+        raise ValueError(
+            f"no host insight for {target!r}; the OSINT Analyst must Annotate Host "
+            "before the Vulnerability Researcher annotates its vulns"
+        )
+    existing_ids = {v.id for v in match.vulns}
+    merged = list(match.vulns) + [v for v in vulns if v.id not in existing_ids]
+    updated = match.model_copy(update={"vulns": merged})
+    save_insight(updated)
+    return updated
+
+
 # Finalisation
 
 # Status codes whose hosts deserve an annotation: 2xx is a live target,
@@ -394,6 +420,7 @@ __all__ = [
     "InsightValidationIssue",
     "InsightValidationReport",
     "ReconFinalisationError",
+    "annotate_host_vulns",
     "finalise_recon",
     "findings_path",
     "host_dir",
