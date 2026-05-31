@@ -10,9 +10,8 @@ across every consumer.
 |---|---|
 | ``models.primitives`` | ``Severity``, ``FQDN``, ``HttpUrl``, ``IPAddress``, ``Email`` |
 | ``models.finding`` | ``RawFinding``, ``VerifiedVulnerability``, ``RawFindingSummary`` |
-| ``models.asset`` | ``Endpoint``, ``EndpointPage``, ``HostRole``, ``HostPriority``, |
-|                  | ``HostInsight``, ``HostScore``, ``IpAsset``, ``OpenPortsMap``, |
-|                  | ``Service``, ``TLSCertificate``, ``VulnProperty``, ``Product``, |
+| ``models.asset`` | ``Endpoint``, ``EndpointPage``, ``IpAsset``, ``Service``, |
+|                  | ``TLSCertificate``, ``VulnProperty``, ``Product``, |
 |                  | ``ProductRelease``, ``LlmEndpoint`` |
 | ``models.asset.network`` | ``AsnRecord``, ``Contact``, ``ContactRole``, |
 |                          | ``DomainRecord``, ``RdapRecord`` |
@@ -21,7 +20,8 @@ across every consumer.
 | ``models.cwe`` | ``CWEEntry`` |
 | ``models.owasp`` | ``OWASPEntry`` |
 | ``models.dns`` | ``PtrRecord``, ``TakeoverCandidate`` |
-| ``models.insight`` | ``HostAnnotation``, ``InsightValidationIssue``, |
+| ``models.insight`` | ``HostRole``, ``HostPriority``, ``HostInsight``, ``HostScore``, |
+|                    | ``OpenPortsMap``, ``HostAnnotation``, ``InsightValidationIssue``, |
 |                    | ``InsightValidationReport``, ``ReconFinalisationError`` |
 | ``models.metrics`` | ``RunMetrics`` |
 | ``models.scanner`` | ``NmapMode``, ``NmapBanner``, ``NmapScripts``, ``NmapService``, |
@@ -44,13 +44,8 @@ from __future__ import annotations
 from models.asset import (
     Endpoint,
     EndpointPage,
-    HostInsight,
-    HostPriority,
-    HostRole,
-    HostScore,
     IpAsset,
     LlmEndpoint,
-    OpenPortsMap,
     Product,
     ProductRelease,
     Service,
@@ -73,8 +68,13 @@ from models.finding import RawFinding, RawFindingSummary, VerifiedVulnerability
 from models.h1 import ProgrammeReportSummary
 from models.insight import (
     HostAnnotation,
+    HostInsight,
+    HostPriority,
+    HostRole,
+    HostScore,
     InsightValidationIssue,
     InsightValidationReport,
+    OpenPortsMap,
     ReconFinalisationError,
 )
 from models.metrics import RunMetrics

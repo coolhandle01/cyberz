@@ -1,4 +1,4 @@
-"""tests/models/asset/test_host.py - unit tests for models/asset/host.py."""
+"""tests/models/test_insight.py - unit tests for models/insight.py."""
 
 from __future__ import annotations
 

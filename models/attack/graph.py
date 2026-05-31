@@ -13,9 +13,10 @@ from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field
 
-from models.asset import Endpoint, HostInsight, IpAsset, TLSCertificate
+from models.asset import Endpoint, IpAsset, TLSCertificate
 from models.finding import RawFinding
 from models.h1 import Programme
+from models.insight import HostInsight
 from models.primitives import FQDN
 
 
