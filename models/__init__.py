@@ -10,7 +10,7 @@ across every consumer.
 |---|---|
 | ``models.primitives`` | ``Severity``, ``FQDN``, ``HttpUrl``, ``IpAddr``, ``Email`` |
 | ``models.finding`` | ``RawFinding``, ``VerifiedVulnerability``, ``RawFindingSummary`` |
-| ``models.asset`` | assets ``Endpoint``, ``EndpointPage``, ``IpAsset``, |
+| ``models.asset`` | assets ``Endpoint``, ``EndpointPage``, ``IpEnrichment``, |
 |                  | ``Service``, ``Product``, ``ProductRelease``, ``Url``, |
 |                  | ``TLSCertificate``, ``LlmEndpoint``; properties |
 |                  | ``DNSRecordProperty``, ``SimpleProperty``, ``SourceProperty``, |
@@ -57,7 +57,7 @@ from models.asset import (
     EndpointPage,
     Identifier,
     IPAddress,
-    IpAsset,
+    IpEnrichment,
     IPNetRecord,
     LlmEndpoint,
     Location,
@@ -156,7 +156,7 @@ __all__ = [
     "InsightValidationIssue",
     "InsightValidationReport",
     "IpAddr",
-    "IpAsset",
+    "IpEnrichment",
     "LlmEndpoint",
     "Location",
     "Netblock",

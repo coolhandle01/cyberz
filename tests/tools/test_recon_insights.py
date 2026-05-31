@@ -315,11 +315,20 @@ class TestFinaliseMaterialisesHostDirs:
     def test_carries_enrichment_into_recon_json(
         self, make_host_insight, sweep, programme, run_dir, target_apex
     ):
-        from models import IpAsset
+        from models import DNSRecordProperty, IPAddress, IpEnrichment, RRHeader
 
         enriched = sweep.model_copy(
             update={
-                "ip_assets": [IpAsset(ip="8.8.8.8")],
+                "ip_enrichment": IpEnrichment(
+                    ip_addresses=[IPAddress(address="8.8.8.8", type="IPv4")]
+                ),
+                "dns_records": [
+                    DNSRecordProperty(
+                        property_name=f"api.{target_apex}",
+                        header=RRHeader(rr_type=1),
+                        data="8.8.8.8",
+                    )
+                ],
                 "tls_certificates": [TLSCertificate(host=f"api.{target_apex}")],
             }
         )
@@ -327,7 +336,10 @@ class TestFinaliseMaterialisesHostDirs:
         save_insight(make_host_insight())
         out = finalise_recon(programme)
         final = AttackGraph.model_validate_json(out.read_text(encoding="utf-8"))
-        assert len(final.ip_assets) == 1
+        # finalise rebuilds the graph by field; every sweep-gathered field must
+        # survive the round-trip (the IP subgraph, DNS records, certs).
+        assert len(final.ip_enrichment.ip_addresses) == 1
+        assert len(final.dns_records) == 1
         assert len(final.tls_certificates) == 1
 
 

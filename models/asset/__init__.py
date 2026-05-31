@@ -3,7 +3,7 @@ models.asset - the recon-output / OAM inventory shapes (OSINT Analyst -> PT).
 
 The OAM asset shapes the OSINT Analyst's sweep emits and the PT consumes:
 endpoints discovered, the ``Service`` / ``Product`` / ``ProductRelease`` /
-``TLSCertificate`` / ``IpAsset`` assets and the registrant shapes in
+``TLSCertificate`` assets, the ``IpEnrichment`` subgraph, and the registrant shapes in
 ``network``, plus the ``VulnProperty`` annotations hung off them and the
 LLM-backed endpoint marker.
 
@@ -39,7 +39,7 @@ through the scope filter.
 | ``models.asset.contact`` | ``ContactRecord``, ``Phone``, ``Location`` |
 | ``models.asset.people`` | ``Person`` |
 | ``models.asset.identifier`` | ``Identifier`` |
-| ``models.asset.ip`` | ``IpAsset`` (legacy composition, migrating) |
+| ``models.asset.ip`` | ``IpEnrichment`` (the IP-rooted OAM subgraph bundle) |
 
 The intra-package import order is a DAG: ``relation`` is a leaf (primitives
 only); ``property`` builds on ``relation`` (``DNSRecordProperty`` reuses
@@ -54,7 +54,7 @@ from models.asset.certificate import TLSCertificate
 from models.asset.contact import ContactRecord, Location, Phone
 from models.asset.endpoint import Endpoint, EndpointPage, LlmEndpoint
 from models.asset.identifier import Identifier
-from models.asset.ip import IpAsset
+from models.asset.ip import IpEnrichment
 from models.asset.network import (
     AsnRecord,
     AutonomousSystem,
@@ -91,7 +91,7 @@ __all__ = [
     "IPAddress",
     "IPNetRecord",
     "Identifier",
-    "IpAsset",
+    "IpEnrichment",
     "LlmEndpoint",
     "Location",
     "Netblock",

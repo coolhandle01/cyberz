@@ -6,7 +6,8 @@ and the slicers over it), this module carries the tools the OA reaches
 for *after* the sweep to enrich and pivot on what it surfaced:
 
 - ``Lookup IP Assets`` - ASN + RDAP + PTR for IPs the sweep surfaced,
-  composed into one ``IpAsset`` per IP (the amass IPAddress-asset shape).
+  composed into the faithful OAM ``IpEnrichment`` subgraph (IPAddress /
+  Netblock / AutonomousSystem nodes + registry / registrant assets + edges).
 
 These are the "explore, don't just record" half: the sweep records the
 surface; these tools let the agent follow a thread off it with
@@ -20,11 +21,11 @@ boundary, not the IP one - see the per-tool notes below.
 
 from pydantic import BaseModel, Field
 
-from models import IpAddr, IpAsset, RdapRecord, Service
+from models import IpAddr, IpEnrichment, RdapRecord, Service
 from models.primitives import FQDN
 from models.scanner import NmapMode, NmapScripts
 from squad import cyber_tool
-from tools.recon.ip_asset import compose_ip_assets
+from tools.recon.ip_enrichment import compose_ip_enrichment
 from tools.recon.nmap import nmap_scan, services_from_nmap
 from tools.recon.rdap import lookup_rdap_for_asn
 from tools.recon.scope import TargetFQDN
@@ -53,26 +54,31 @@ class _LookupIpAssetsArgs(BaseModel):
 
 
 @cyber_tool("Lookup IP Assets", args_schema=_LookupIpAssetsArgs)
-def lookup_ip_assets_tool(ips: list[IpAddr]) -> list[IpAsset]:
+def lookup_ip_assets_tool(ips: list[IpAddr]) -> IpEnrichment:
     """
     Enrich a set of IPs with ASN, RDAP, and reverse-DNS (PTR) data,
-    returning one ``IpAsset`` per unique IP. This is the IP-rooted pivot:
-    given IPs the sweep surfaced, find the netblock / AS-owner (Team
-    Cymru), the registrant + abuse contact (RDAP), and any cohabiting
-    hostnames that PTR back to the same IP.
+    returning the faithful OAM ``IpEnrichment`` subgraph. This is the
+    IP-rooted pivot: given IPs the sweep surfaced, find the netblock /
+    AS-owner (Team Cymru), the registrant org + abuse contact (RDAP), and
+    the hostnames that PTR back to each IP.
 
-    Fires outbound lookups per IP: Team Cymru bulk-whois (ASN), an RDAP
-    HTTP fetch (registrant), and a dnsx ``-ptr`` reverse query. Each
-    source degrades independently - an IP with only ASN data still
-    returns a useful ``IpAsset`` rather than being dropped.
+    Fires outbound lookups per IP: Team Cymru bulk-whois (ASN), RDAP HTTP
+    fetches (registrant, per IP and per AS), and a dnsx ``-ptr`` reverse
+    query. Each source degrades independently - an IP with only ASN data
+    still yields its ``IPAddress`` / ``Netblock`` / ``AutonomousSystem``
+    nodes rather than being dropped.
 
-    Returns ``list[IpAsset]`` ({ip, asn, rdap, ptr}), ordered by the
-    de-duplicated input; empty list on empty input. PTR-discovered
-    hostnames ride in on ``IpAsset.ptr`` and are out-of-scope by
-    default - they are pivot evidence, not in-scope assets, until the
-    annotation pass promotes any that share the programme's apex.
+    Returns an ``IpEnrichment`` bundle: ``ip_addresses`` / ``netblocks`` /
+    ``autonomous_systems`` nodes, the ``autnum_records`` / ``ipnet_records``
+    registry records, the registrant ``organizations`` / ``identifiers``
+    (abuse + registrant emails), and the ``relations`` joining them
+    (``contains`` / ``announces`` / ``managed_by`` / ``registrant_org`` /
+    ``ptr_record``). Empty bundle on empty input. PTR-discovered hostnames
+    ride in on the ``ptr_record`` edges and are out-of-scope by default -
+    pivot evidence, not in-scope assets, until the annotation pass promotes
+    any that share the programme's apex.
     """
-    return compose_ip_assets(ips)
+    return compose_ip_enrichment(ips)
 
 
 class _LookupRdapAsnArgs(BaseModel):
@@ -84,8 +90,9 @@ class _LookupRdapAsnArgs(BaseModel):
         description=(
             "Autonomous System Number to look up, as a bare integer (e.g."
             " 13335 for Cloudflare) - no ``AS`` prefix; a non-numeric"
-            " string rejects upstream. Read it off an ``IpAsset.asn``"
-            " record surfaced by Lookup IP Assets. Out-of-range values"
+            " string rejects upstream. Read it off an"
+            " ``autonomous_systems`` entry surfaced by Lookup IP Assets."
+            " Out-of-range values"
             " (negative, or above the 32-bit ceiling) reject at the"
             " boundary."
         ),
@@ -98,9 +105,9 @@ def lookup_rdap_asn_tool(asn: int) -> RdapRecord | None:
     Look up the RDAP (RFC 7483) registration record for one ASN: the
     AS-owner organisation, abuse / registrant contacts, and registration
     events. This is the ASN-side pivot - IP-side RDAP already rides in on
-    ``Lookup IP Assets`` (``IpAsset.rdap``), so reach for this when the
-    question is about the AS itself: who to disclose to, or building a
-    pattern-of-life view of an org's address space.
+    ``Lookup IP Assets`` (its ``ipnet_records`` / ``organizations``), so
+    reach for this when the question is about the AS itself: who to disclose
+    to, or building a pattern-of-life view of an org's address space.
 
     Fires one RDAP HTTP fetch against the authoritative RIR (resolved via
     the IANA bootstrap registry). Returns an ``RdapRecord`` ({query,

@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field
 
-from models.asset import DNSRecordProperty, Endpoint, IpAsset, Relation, TLSCertificate
+from models.asset import DNSRecordProperty, Endpoint, IpEnrichment, Relation, TLSCertificate
 from models.finding import RawFinding
 from models.h1 import Programme
 from models.insight import HostInsight
@@ -38,12 +38,12 @@ class AttackGraph(BaseModel):
     # Per-host curation the OSINT Analyst authors via Annotate Host. Empty on
     # the OA's internal attack_graph.json; populated on the final recon.json.
     host_insights: list[HostInsight] = Field(default_factory=list)
-    # IP-rooted enrichment: one IpAsset per unique IP observed across the
-    # in-scope hosts' A records. Composes Cymru ASN data, RDAP registrant
-    # data, and dnsx PTR hostnames into the cybersquad equivalent of an
-    # amass IPAddress asset + its hanging SimpleProperty values. Empty when
-    # the resolve / enrichment pass did not run.
-    ip_assets: list[IpAsset] = Field(default_factory=list)
+    # IP-rooted enrichment: the faithful OAM subgraph composed from the
+    # in-scope hosts' A records - IPAddress / Netblock / AutonomousSystem nodes,
+    # the AutnumRecord / IPNetRecord registry records, the registrant
+    # Organization / Identifier assets, and their Relation edges (Cymru ASN +
+    # RDAP registrant + dnsx PTR). Empty when the enrichment pass did not run.
+    ip_enrichment: IpEnrichment = Field(default_factory=IpEnrichment)
     # Forward-DNS records (A / CNAME) resolved for the in-scope hosts, as OAM
     # DNSRecordProperty entries - the record content hung off each host's FQDN
     # node. The property side of DNS; the relation edges to the answer assets

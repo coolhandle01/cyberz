@@ -19,7 +19,8 @@ from __future__ import annotations
 
 import pytest
 
-from models.asset import IpAsset, Service
+from models import IPType
+from models.asset import IPAddress, IpEnrichment, Service
 from models.asset.network import RdapRecord
 from models.scanner import NmapHostResult, NmapMode, NmapScanResult, NmapScripts, NmapService
 from squad.osint_analyst import (
@@ -35,7 +36,7 @@ pytestmark = pytest.mark.unit
 
 
 class TestLookupIpAssets:
-    """``Lookup IP Assets`` wraps ``compose_ip_assets`` - no scope filter.
+    """``Lookup IP Assets`` wraps ``compose_ip_enrichment`` - no scope filter.
 
     The IPs come from the sweep, which was already scope-filtered upstream
     (the programme scope model is FQDN-shaped, so there is no IP-level
@@ -54,16 +55,16 @@ class TestLookupIpAssets:
         with pytest.raises(ValidationError):
             _LookupIpAssetsArgs.model_validate({"ips": ["not-an-ip"]})
 
-    def test_returns_composed_assets(self, invoke_tool, monkeypatch) -> None:
-        """The wrapper returns ``compose_ip_assets``' typed result verbatim."""
-        composed = [IpAsset(ip="1.2.3.4"), IpAsset(ip="8.8.8.8")]
+    def test_returns_composed_bundle(self, invoke_tool, monkeypatch) -> None:
+        """The wrapper returns ``compose_ip_enrichment``' typed bundle verbatim."""
+        composed = IpEnrichment(ip_addresses=[IPAddress(address="1.2.3.4", type=IPType.IPV4)])
         captured: dict[str, object] = {}
 
         def _fake_compose(ips):
             captured["ips"] = ips
             return composed
 
-        monkeypatch.setattr("squad.osint_analyst.enrichment.compose_ip_assets", _fake_compose)
+        monkeypatch.setattr("squad.osint_analyst.enrichment.compose_ip_enrichment", _fake_compose)
 
         result = invoke_tool(lookup_ip_assets_tool, ips=["1.2.3.4", "8.8.8.8"])
 
@@ -74,10 +75,10 @@ class TestLookupIpAssets:
 class TestLookupRdapAsn:
     """``Lookup RDAP for ASN`` wraps ``lookup_rdap_for_asn`` - no scope filter.
 
-    The ASN-side pivot: IP-side RDAP is already embedded in ``IpAsset``,
-    so this is the genuinely new lookup (who owns the AS, what's its
-    registrant / abuse contact). The ASN is a number the agent read off
-    an ``IpAsset.asn`` record, not a scope-bearing target.
+    The ASN-side pivot: IP-side RDAP is already in the ``Lookup IP Assets``
+    enrichment bundle, so this is the genuinely new lookup (who owns the AS,
+    what's its registrant / abuse contact). The ASN is a number the agent
+    read off an ``autonomous_systems`` entry, not a scope-bearing target.
     """
 
     def test_schema_accepts_asn(self) -> None:

@@ -411,10 +411,13 @@ def finalise_recon(
         technologies=sweep.technologies,
         passive_findings=sweep.passive_findings,
         network_hops=sweep.network_hops,
-        # Carry the sweep's enrichment forward - finalise previously dropped
-        # ip_assets (and would drop tls_certificates), losing it from the
-        # PT-facing recon.json even though the sweep gathered it.
-        ip_assets=sweep.ip_assets,
+        # Carry the sweep's enrichment forward - finalise rebuilds the graph by
+        # field, so every sweep-gathered field must be relisted here or it is
+        # dropped from the PT-facing recon.json (the IP subgraph, the DNS
+        # records, the relation edges, the certs).
+        ip_enrichment=sweep.ip_enrichment,
+        dns_records=sweep.dns_records,
+        relations=sweep.relations,
         tls_certificates=sweep.tls_certificates,
         host_insights=insights,
         notes=_build_notes(sweep, insights),

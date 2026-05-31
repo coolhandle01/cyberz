@@ -4,51 +4,56 @@ from __future__ import annotations
 
 import pytest
 
-from models import IpAsset
+from models import (
+    AutonomousSystem,
+    IPAddress,
+    IpEnrichment,
+    Netblock,
+    Organization,
+    Relation,
+    RelationType,
+)
 
 pytestmark = pytest.mark.unit
 
 
-class TestIpAsset:
-    def test_ip_only_minimum(self):
-        # An IpAsset with only an IP is a useful starting record - the
-        # asn / rdap / ptr fields populate as enrichment completes.
+class TestIpEnrichment:
+    def test_empty_default(self):
+        # The bundle is useful with whatever subset of enrichment returned;
+        # every list defaults empty.
+        bundle = IpEnrichment()
+        assert bundle.ip_addresses == []
+        assert bundle.netblocks == []
+        assert bundle.autonomous_systems == []
+        assert bundle.organizations == []
+        assert bundle.relations == []
 
-        asset = IpAsset(ip="8.8.8.8")
-        assert asset.ip == "8.8.8.8"
-        assert asset.asn is None
-        assert asset.rdap is None
-        assert asset.ptr == []
-
-    def test_composes_typed_records(self, target_apex):
-        # The nested ``AsnRecord`` / ``RdapRecord`` / PTR hostnames
-        # arrive as separate lookups; IpAsset is the join point.
-        from models.asset.network import AsnRecord
-
-        asset = IpAsset(
-            ip="8.8.8.8",
-            asn=AsnRecord(
-                ip="8.8.8.8",
-                asn=15169,
-                prefix="8.8.8.0/24",
-                country="US",
-                organisation="GOOGLE, US",
-            ),
-            ptr=[f"api.{target_apex}"],
+    def test_carries_the_faithful_subgraph(self):
+        bundle = IpEnrichment(
+            ip_addresses=[IPAddress(address="8.8.8.8", type="IPv4")],
+            netblocks=[Netblock(cidr="8.8.8.0/24", type="IPv4")],
+            autonomous_systems=[AutonomousSystem(number=15169)],
+            organizations=[Organization(name="Google LLC")],
+            relations=[
+                Relation(
+                    relation_type=RelationType.SIMPLE,
+                    label="contains",
+                    from_key="8.8.8.0/24",
+                    to_key="8.8.8.8",
+                )
+            ],
         )
-        assert asset.asn is not None
-        assert asset.asn.asn == 15169
-        assert asset.ptr == [f"api.{target_apex}"]
+        assert bundle.ip_addresses[0].address == "8.8.8.8"
+        assert bundle.autonomous_systems[0].number == 15169
+        assert bundle.relations[0].label == "contains"
 
     def test_serialise_roundtrip(self):
+        original = IpEnrichment(ip_addresses=[IPAddress(address="1.1.1.1", type="IPv4")])
+        restored = IpEnrichment.model_validate_json(original.model_dump_json())
+        assert restored.ip_addresses[0].address == "1.1.1.1"
 
-        original = IpAsset(ip="1.1.1.1", ptr=["one.one.one.one"])
-        restored = IpAsset.model_validate_json(original.model_dump_json())
-        assert restored.ip == "1.1.1.1"
-        assert restored.ptr == ["one.one.one.one"]
-
-    def test_invalid_ip_rejects(self):
+    def test_rejects_invalid_address_in_node(self):
         from pydantic import ValidationError
 
         with pytest.raises(ValidationError):
-            IpAsset(ip="not an ip")
+            IpEnrichment(ip_addresses=[IPAddress(address="not an ip", type="IPv4")])

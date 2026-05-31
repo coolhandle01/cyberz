@@ -1,48 +1,43 @@
 """
-models.asset.ip - the cybersquad ``IpAsset`` (amass IPAddress asset).
+models.asset.ip - the ``IpEnrichment`` bundle: the IP-rooted OAM subgraph.
 
-Composes the per-IP enrichment lookups (Cymru ASN, RDAP registrant, dnsx
-PTR) into one typed record. Depends on the ``models.asset.network``
-registrant / ASN shapes.
+The OSINT Analyst's IP enrichment pass (Cymru ASN, RDAP registrant, dnsx PTR)
+produces a set of faithful OAM assets - ``IPAddress`` / ``Netblock`` /
+``AutonomousSystem`` nodes, the ``AutnumRecord`` / ``IPNetRecord`` registry
+records, the registrant ``Organization`` and contact ``Identifier`` assets -
+joined by typed ``Relation`` edges. This bundle carries that subgraph as one
+typed return, the IP-layer counterpart to ``AttackGraph`` for the web layer.
 
-OAM asset (``IPAddress``):
-<https://owasp-amass.github.io/docs/open_asset_model/assets/ip_address/>
+Replaces the legacy ``IpAsset`` composition (which nested the raw Cymru / RDAP
+parse rows per IP): the producers in ``tools/recon`` now decompose those rows
+into the faithful assets above, and this bundle gathers them.
 """
 
 from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from models.asset.network import AsnRecord, RdapRecord
-from models.primitives import FQDN, IpAddr
+from models.asset.identifier import Identifier
+from models.asset.network import AutonomousSystem, IPAddress, Netblock
+from models.asset.org import Organization
+from models.asset.registration import AutnumRecord, IPNetRecord
+from models.asset.relation import Relation
 
 
-class IpAsset(BaseModel):
-    """The cybersquad shape that maps to amass's IPAddress asset.
+class IpEnrichment(BaseModel):
+    """The IP-rooted OAM subgraph the OA's enrichment pass produces.
 
-    Composes the lookups we run for one IP into a single typed record:
-    ASN data via Cymru (``asn``), registrant data via RDAP (``rdap``),
-    reverse-DNS hostnames via dnsx PTR (``ptr``). One IpAsset = one
-    amass IPAddress asset with its hanging Property values.
-
-    When amass lands (#45), each nested record becomes one or more
-    ``SimpleProperty`` / ``DNSRecordProperty`` entries on the
-    IPAddress asset node:
-
-    * ``asn`` -> ``SimpleProperty{name:"asn", value:<n>}`` +
-      ``SimpleProperty{name:"asn_org", value:<name>}`` etc.; the
-      ``prefix`` field separately surfaces the parent Netblock asset.
-    * ``rdap`` -> ``SimpleProperty`` per registrant field +
-      a join into the ``RIROrganization`` asset.
-    * ``ptr`` -> one ``DNSRecordProperty`` per reverse-DNS hostname.
-
-    All three fields default to None / empty - an IP is useful with
-    whatever subset of enrichment landed. The OA's enrichment pass
-    composes one IpAsset per unique IP observed in the sweep,
-    populating whichever sources succeeded.
+    The asset nodes plus the ``Relation`` edges that join them (``contains`` /
+    ``announces`` / ``managed_by`` / ``registrant_org`` / ``<role>_email`` /
+    ``ptr_record``). All lists default empty - an enrichment pass is useful with
+    whatever subset of Cymru / RDAP / PTR data returned.
     """
 
-    ip: IpAddr
-    asn: AsnRecord | None = None
-    rdap: RdapRecord | None = None
-    ptr: list[FQDN] = Field(default_factory=list)
+    ip_addresses: list[IPAddress] = Field(default_factory=list)
+    netblocks: list[Netblock] = Field(default_factory=list)
+    autonomous_systems: list[AutonomousSystem] = Field(default_factory=list)
+    autnum_records: list[AutnumRecord] = Field(default_factory=list)
+    ipnet_records: list[IPNetRecord] = Field(default_factory=list)
+    organizations: list[Organization] = Field(default_factory=list)
+    identifiers: list[Identifier] = Field(default_factory=list)
+    relations: list[Relation] = Field(default_factory=list)
