@@ -22,11 +22,10 @@ from models import Product, ProductRelease, Relation, RelationType, Service, Sou
 from models.scanner import NmapHostResult
 from tools.cpe import product_release_from_cpe
 
-# nmap -sV directly observes the open port and its banner, so its assets carry
-# a full-confidence provenance stamp. (nmap's per-match `conf` 1-10 score is not
-# captured on NmapService yet; wiring it could refine this per #45.)
+# nmap reports a 1-10 service-detection confidence per match (NmapService.conf);
+# the OAM SourceProperty.confidence is 0-100, so scale by 10 when stamping.
 _NMAP_SOURCE = "nmap"
-_NMAP_CONFIDENCE = 100
+_NMAP_CONF_SCALE = 10
 
 
 class NmapAssets(NamedTuple):
@@ -77,7 +76,9 @@ def services_from_nmap(result: NmapHostResult) -> NmapAssets:
                 output=output,
                 output_length=len(output),
                 attributes=attributes,
-                sources=[SourceProperty(source=_NMAP_SOURCE, confidence=_NMAP_CONFIDENCE)],
+                sources=[
+                    SourceProperty(source=_NMAP_SOURCE, confidence=svc.conf * _NMAP_CONF_SCALE)
+                ],
             )
         )
         relations.append(
@@ -93,7 +94,9 @@ def services_from_nmap(result: NmapHostResult) -> NmapAssets:
 
         if svc.cpe and (decomposed := product_release_from_cpe(svc.cpe)) is not None:
             product, release = decomposed
-            nmap_source = SourceProperty(source=_NMAP_SOURCE, confidence=_NMAP_CONFIDENCE)
+            nmap_source = SourceProperty(
+                source=_NMAP_SOURCE, confidence=svc.conf * _NMAP_CONF_SCALE
+            )
             product.sources = [nmap_source]
             release.sources = [nmap_source]
             products.setdefault(product.name, product)

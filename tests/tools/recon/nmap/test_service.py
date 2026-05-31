@@ -27,6 +27,7 @@ class TestServicesFromNmap:
                     version="7.4",
                     extra_info="Ubuntu",
                     cpe="cpe:2.3:a:openbsd:openssh:7.4:*:*:*:*:*:*:*",
+                    conf=10,
                 )
             ],
         )
@@ -46,10 +47,12 @@ class TestServicesFromNmap:
         assert [p.name for p in assets.products] == ["openssh"]
         assert [r.name for r in assets.product_releases] == ["openssh 7.4"]
 
-        # Provenance: every nmap-produced asset carries a SourceProperty stamp.
+        # Provenance: every nmap-produced asset carries a SourceProperty stamp,
+        # confidence scaled from nmap's 1-10 conf (10) to the OAM 0-100 range.
         assert svc.sources[0].source == "nmap"
-        assert assets.products[0].sources[0].source == "nmap"
-        assert assets.product_releases[0].sources[0].source == "nmap"
+        assert svc.sources[0].confidence == 100
+        assert assets.products[0].sources[0].confidence == 100
+        assert assets.product_releases[0].sources[0].confidence == 100
 
         # port (host -> Service) + product_used (Service -> ProductRelease) edges.
         port_edge = next(r for r in assets.relations if r.relation_type == RelationType.PORT)
