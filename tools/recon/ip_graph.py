@@ -23,8 +23,10 @@ from models import (
     AutonomousSystem,
     IPAddress,
     Netblock,
+    PtrRecord,
     Relation,
     RelationType,
+    RRHeader,
     SourceProperty,
 )
 from models.asset.network import AsnRecord
@@ -34,6 +36,15 @@ from models.primitives import IPType
 # ASN / prefix layer - so its assets carry a full-confidence provenance stamp.
 _CYMRU_SOURCE = "team-cymru"
 _CYMRU_CONFIDENCE = 100
+
+# dnsx directly resolves the PTR, so a PTR-only IP node it surfaces carries a
+# full-confidence dnsx provenance stamp.
+_DNSX_SOURCE = "dnsx"
+_DNSX_CONFIDENCE = 100
+
+# The PTR resource-record type code (IANA / RFC 1035) and the IN class.
+_RR_TYPE_PTR = 12
+_RR_CLASS_IN = 1
 
 
 class IpGraph(NamedTuple):
@@ -118,4 +129,46 @@ def ip_assets_from_asn(asn_records: list[AsnRecord]) -> IpGraph:
     )
 
 
-__all__ = ["IpGraph", "ip_assets_from_asn"]
+def compose_ip_graph(
+    asn_records: list[AsnRecord],
+    ptr_records: list[PtrRecord],
+) -> IpGraph:
+    """Compose the IP-routing spine with reverse-DNS into one OAM subgraph.
+
+    Builds the Cymru routing spine via ``ip_assets_from_asn``, then folds in
+    dnsx PTR: each reverse-DNS hostname becomes a ``ptr_record`` edge
+    (``BasicDNSRelation``: IPAddress -> FQDN). An IP seen only in PTR (no Cymru
+    row) still gets its ``IPAddress`` node, stamped with a dnsx provenance
+    source rather than Cymru's.
+    """
+    spine = ip_assets_from_asn(asn_records)
+    addresses: dict[str, IPAddress] = {a.address: a for a in spine.addresses}
+    relations: list[Relation] = list(spine.relations)
+
+    for record in ptr_records:
+        if record.ip not in addresses:
+            addresses[record.ip] = IPAddress(
+                address=record.ip,
+                type=_ip_type(record.ip),
+                sources=[SourceProperty(source=_DNSX_SOURCE, confidence=_DNSX_CONFIDENCE)],
+            )
+        for hostname in record.hostnames:
+            relations.append(
+                Relation(
+                    relation_type=RelationType.BASIC_DNS,
+                    label="ptr_record",
+                    from_key=record.ip,
+                    to_key=hostname,
+                    header=RRHeader(rr_type=_RR_TYPE_PTR, rr_class=_RR_CLASS_IN),
+                )
+            )
+
+    return IpGraph(
+        list(addresses.values()),
+        spine.netblocks,
+        spine.autonomous_systems,
+        relations,
+    )
+
+
+__all__ = ["IpGraph", "compose_ip_graph", "ip_assets_from_asn"]
