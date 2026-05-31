@@ -28,6 +28,7 @@ from squad import cyber_tool
 from tools.recon.ip_enrichment import compose_ip_enrichment
 from tools.recon.nmap import nmap_scan, services_from_nmap
 from tools.recon.rdap import lookup_rdap_for_asn
+from tools.recon.rdap_assets import registrant_assets_from_rdap
 from tools.recon.scope import TargetFQDN
 from tools.recon_host_store import (
     save_host_product_releases,

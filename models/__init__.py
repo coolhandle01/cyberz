@@ -181,6 +181,7 @@ __all__ = [
     "RawFindingSummary",
     "RdapRecord",
     "ReconFinalisationError",
+    "RegistrantBundle",
     "Relation",
     "RelationType",
     "RunFile",
