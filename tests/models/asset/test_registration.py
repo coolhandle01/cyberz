@@ -39,6 +39,10 @@ class TestIPNetRecord:
         with pytest.raises(ValidationError):
             IPNetRecord(cidr="")
 
+    def test_rejects_non_cidr(self):
+        with pytest.raises(ValidationError):
+            IPNetRecord(cidr="8.8.8.8")  # bare address, not a CIDR prefix
+
 
 class TestAutnumRecord:
     def test_carries_asn_registration(self):

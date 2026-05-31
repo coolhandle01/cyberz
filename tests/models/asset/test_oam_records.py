@@ -33,11 +33,23 @@ class TestNetblock:
     def test_cidr_and_type(self):
         nb = Netblock(cidr="8.8.8.0/24", type="IPv4")
         assert nb.cidr == "8.8.8.0/24"
-        assert nb.type == "IPv4"
+        assert nb.type == "IPv4"  # coerced to the IPType StrEnum
+
+    def test_host_bits_normalise_to_network(self):
+        # Cidr validates via ipaddress.ip_network(strict=False): a host-bit-set
+        # prefix normalises to its network rather than rejecting.
+        assert Netblock(cidr="8.8.8.8/24").cidr == "8.8.8.0/24"
 
     def test_rejects_empty_cidr(self):
         with pytest.raises(ValidationError):
             Netblock(cidr="")
+
+    def test_rejects_non_cidr(self):
+        # A bare address (no prefix) is an IPAddress, not a Cidr; garbage rejects.
+        with pytest.raises(ValidationError):
+            Netblock(cidr="8.8.8.8")
+        with pytest.raises(ValidationError):
+            Netblock(cidr="not-a-cidr")
 
 
 class TestOrganization:

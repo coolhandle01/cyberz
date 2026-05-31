@@ -41,7 +41,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
-from models.primitives import Email, IPAddress
+from models.primitives import Cidr, Email, IPAddress, IPType
 
 
 class AutonomousSystem(BaseModel):
@@ -64,8 +64,8 @@ class Netblock(BaseModel):
     Mirrors amass field for field (OAM json tag in parentheses).
     """
 
-    cidr: str = Field(min_length=1, max_length=64)  # cidr (e.g. "8.8.8.0/24")
-    type: str = Field(default="", max_length=8)  # type ("IPv4" / "IPv6")
+    cidr: Cidr  # cidr (e.g. "8.8.8.0/24") - validated IPv4/IPv6 network prefix
+    type: IPType | None = None  # type ("IPv4" / "IPv6")
 
 
 class AsnRecord(BaseModel):

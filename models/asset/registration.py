@@ -17,6 +17,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from models.primitives import Cidr
+
 
 class DomainRecord(BaseModel):
     """The cybersquad shape that maps to amass's OAM ``DomainRecord`` asset.
@@ -50,7 +52,7 @@ class IPNetRecord(BaseModel):
     ``netip`` types; cybersquad keeps the registry text verbatim).
     """
 
-    cidr: str = Field(min_length=1, max_length=64)  # cidr
+    cidr: Cidr  # cidr - validated IPv4/IPv6 network prefix
     handle: str = Field(default="", max_length=128)  # handle
     # Tool-captured raw RDAP text; boundary length cap, human / audit-facing.
     raw: str = Field(default="", max_length=8000)  # raw

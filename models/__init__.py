@@ -101,7 +101,7 @@ from models.insight import (
 )
 from models.metrics import RunMetrics
 from models.owasp import OWASPEntry
-from models.primitives import FQDN, Email, HttpUrl, IPAddress, Severity
+from models.primitives import FQDN, Cidr, Email, HttpUrl, IPAddress, IPType, Severity
 from models.report import AuthoredDraft
 from models.scanner import (
     HttpxMode,
@@ -129,6 +129,7 @@ __all__ = [
     "AutnumRecord",
     "AutonomousSystem",
     "CWEEntry",
+    "Cidr",
     "Contact",
     "ContactRecord",
     "ContactRole",
@@ -146,6 +147,7 @@ __all__ = [
     "HttpxMode",
     "IPAddress",
     "IPNetRecord",
+    "IPType",
     "Identifier",
     "InsightValidationIssue",
     "InsightValidationReport",

@@ -230,3 +230,51 @@ def _validate_email(value: str) -> str:
 
 
 Email = Annotated[str, AfterValidator(_validate_email)]
+
+
+class IPType(StrEnum):
+    """The OAM IP-family ``type`` stamped on ``IPAddress`` / ``Netblock``
+    assets - ``IPv4`` or ``IPv6``.
+
+    Distinct from ``IPNetRecord.type``, which is the RDAP *allocation* type
+    (e.g. "ALLOCATED", "ASSIGNED PORTABLE") and stays a free string.
+    """
+
+    IPV4 = "IPv4"
+    IPV6 = "IPv6"
+
+
+# ``Cidr`` - typed string for an IPv4 / IPv6 network prefix, the netblock
+# counterpart to ``IPAddress``. Validates via stdlib ``ipaddress.ip_network``
+# (``strict=False`` so a host-bit-set value like ``8.8.8.8/24`` normalises to
+# its network ``8.8.8.0/24`` rather than rejecting). Runtime stays ``str`` to
+# match the ``FQDN`` / ``HttpUrl`` / ``IPAddress`` convention. Used by the OAM
+# ``Netblock`` / ``IPNetRecord`` assets.
+
+
+def _validate_cidr(value: str) -> str:
+    """Validate that ``value`` is a parseable IPv4 / IPv6 CIDR prefix.
+
+    Delegates to stdlib ``ipaddress.ip_network`` with ``strict=False`` (so a
+    host-bit-set prefix normalises to its network rather than rejecting) and
+    returns the canonical form so equality holds across input variants.
+    Rejects a bare address (no prefix length - that is an ``IPAddress``),
+    hostnames, and garbage.
+    """
+    import ipaddress
+
+    if not isinstance(value, str):  # pragma: no cover - Pydantic enforces str upstream
+        raise ValueError(f"CIDR must be a string, got {type(value).__name__}")
+    cleaned = value.strip()
+    if not cleaned:
+        raise ValueError("CIDR cannot be empty")
+    if "/" not in cleaned:
+        raise ValueError(f"CIDR must include a prefix length (got a bare address?): {value!r}")
+    try:
+        parsed = ipaddress.ip_network(cleaned, strict=False)
+    except ValueError as exc:
+        raise ValueError(f"invalid CIDR {value!r}: {exc}") from exc
+    return str(parsed)
+
+
+Cidr = Annotated[str, AfterValidator(_validate_cidr)]

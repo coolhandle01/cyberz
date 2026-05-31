@@ -7,9 +7,11 @@ from pydantic import BaseModel, ValidationError
 
 from models import (
     FQDN,
+    Cidr,
     Email,
     HttpUrl,
     IPAddress,
+    IPType,
     Severity,
 )
 
@@ -273,3 +275,50 @@ class TestEmail:
         probe = _EmailProbe(value="abuse@example.com")
         assert isinstance(probe.value, str)
         assert "@" in probe.value
+
+
+class TestIPType:
+    def test_values(self):
+        assert {t.value for t in IPType} == {"IPv4", "IPv6"}
+
+    def test_is_string_enum(self):
+        assert isinstance(IPType.IPV4, str)
+        assert IPType.IPV4 == "IPv4"
+
+
+class _CidrProbe(BaseModel):
+    """Thin probe model used to drive the Cidr validator in isolation."""
+
+    value: Cidr
+
+
+class TestCidr:
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [
+            ("8.8.8.0/24", "8.8.8.0/24"),
+            ("8.8.8.8/24", "8.8.8.0/24"),  # host bits normalise to the network
+            (" 10.0.0.0/8 ", "10.0.0.0/8"),  # whitespace stripped
+            ("2001:db8::/32", "2001:db8::/32"),
+        ],
+    )
+    def test_valid_cidr_normalises(self, raw, expected):
+        assert _CidrProbe(value=raw).value == expected
+
+    @pytest.mark.parametrize(
+        "bad",
+        ["", "   ", "8.8.8.8", "not-a-cidr", "999.0.0.0/8", "example.com/24"],
+    )
+    def test_rejects_non_cidr(self, bad):
+        with pytest.raises(ValidationError):
+            _CidrProbe(value=bad)
+
+    def test_runtime_type_is_str(self):
+        # Cidr is Annotated[str, ...] so consumers keep treating it as a string.
+        probe = _CidrProbe(value="8.8.8.0/24")
+        assert isinstance(probe.value, str)
+
+    def test_serialisation_roundtrip(self):
+        original = _CidrProbe(value="2001:db8::/32")
+        restored = _CidrProbe.model_validate_json(original.model_dump_json())
+        assert restored.value == "2001:db8::/32"
