@@ -300,6 +300,14 @@ class AppConfig:
     # can reach the operator directly instead of banning the IP. See #46.
     contact_email: str = field(default_factory=lambda: os.environ["CYBERSQUAD_CONTACT_EMAIL"])
     reports_dir: str = field(default_factory=lambda: os.getenv("REPORTS_DIR", "./reports"))
+    # CrewAI writes its task / tool / event stream to this log for post-hoc
+    # inspection (see #167). build_crew() resolves it to
+    # {reports_dir}/{run_id}/crew.log - alongside metrics.json - so the log
+    # and the run it describes archive as a unit. On by default; flip off
+    # with CYBERSQUAD_OUTPUT_LOG=false.
+    output_log_enabled: bool = field(
+        default_factory=lambda: os.getenv("CYBERSQUAD_OUTPUT_LOG", "true").lower() == "true"
+    )
     verbose: bool = field(default_factory=lambda: os.getenv("VERBOSE", "false").lower() == "true")
     human_input: bool = field(
         default_factory=lambda: os.getenv("CYBERSQUAD_HUMAN_INPUT", "true").lower() == "true"
