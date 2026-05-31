@@ -7,6 +7,9 @@ sibling module): ``Endpoint`` is a recon *observation* (a URL string plus the
 status / technologies / TLS / vulns httpx saw), whereas ``Url`` is the OAM
 *asset* - just the identity, with the observations hung off it as properties /
 relations when #45 lands.
+
+OAM asset:
+<https://owasp-amass.github.io/docs/open_asset_model/assets/url/>
 """
 
 from __future__ import annotations

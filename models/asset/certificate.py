@@ -3,6 +3,9 @@ models.asset.certificate - the OAM ``TLSCertificate`` asset shape.
 
 One X.509 leaf certificate as observed on a host's HTTPS service. A leaf
 shape (primitives only) the endpoint and graph modules compose.
+
+OAM asset:
+<https://owasp-amass.github.io/docs/open_asset_model/assets/tls_certificate/>
 """
 
 from __future__ import annotations

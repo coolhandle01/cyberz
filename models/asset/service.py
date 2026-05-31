@@ -5,6 +5,18 @@ assets.
 The open-network-service asset the OA's deep-scan pass emits, plus the
 product line and version-specific release the ``Service.product_used`` edge
 points at (and the spec-proper anchor a ``VulnProperty`` hangs off).
+
+OAM assets:
+* ``Service`` <https://owasp-amass.github.io/docs/open_asset_model/assets/service/>
+* ``Product`` <https://owasp-amass.github.io/docs/open_asset_model/assets/product/>
+* ``ProductRelease``
+  <https://owasp-amass.github.io/docs/open_asset_model/assets/product_release/>
+
+Fidelity note: our ``Service`` is the cybersquad nmap-banner shape (host /
+port / product / version / cpe). It maps to the OAM ``Service`` *concept* but
+is not field-identical to the spec struct (``unique_id`` / ``service_type`` /
+``output`` / ``attributes``) - the CPE-keyed product detail is what the VR's
+CVE workflow keys on.
 """
 
 from __future__ import annotations

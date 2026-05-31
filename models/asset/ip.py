@@ -4,6 +4,9 @@ models.asset.ip - the cybersquad ``IpAsset`` (amass IPAddress asset).
 Composes the per-IP enrichment lookups (Cymru ASN, RDAP registrant, dnsx
 PTR) into one typed record. Depends on the ``models.asset.network``
 registrant / ASN shapes.
+
+OAM asset (``IPAddress``):
+<https://owasp-amass.github.io/docs/open_asset_model/assets/ip_address/>
 """
 
 from __future__ import annotations

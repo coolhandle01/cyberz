@@ -5,6 +5,9 @@ OAM models a vulnerability not as a standalone asset but as a property on
 the vulnerable asset (an ``Endpoint`` / ``Service`` / ``HostInsight`` /
 ``ProductRelease``). This is the leaf shape the other asset modules import to
 carry their ``vulns`` lists.
+
+OAM property:
+<https://owasp-amass.github.io/docs/open_asset_model/properties/vuln_property/>
 """
 
 from __future__ import annotations

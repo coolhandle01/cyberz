@@ -13,9 +13,17 @@ there as ``SimpleProperty`` / ``SourceProperty`` values on amass's
 in-memory shape; the amass-side property is the persisted shape. Two
 layers, one model.
 
-Reference: the Open Asset Model's IPAddress / AutonomousSystem /
-Netblock / RIROrganization asset types
-(https://github.com/owasp-amass/open-asset-model).
+OAM assets this module maps to (each pinned in its class docstring below):
+``AutonomousSystem``
+<https://owasp-amass.github.io/docs/open_asset_model/assets/autonomous_system/>,
+``ContactRecord``
+<https://owasp-amass.github.io/docs/open_asset_model/assets/contact_record/>,
+``Organization``
+<https://owasp-amass.github.io/docs/open_asset_model/assets/organization/>,
+``DomainRecord``
+<https://owasp-amass.github.io/docs/open_asset_model/assets/domain_record/>,
+and ``Netblock``
+<https://owasp-amass.github.io/docs/open_asset_model/assets/netblock/>.
 
 ``RdapRecord`` is the structured-registrant sibling of ``AsnRecord``.
 RFC 7483 / RDAP gives us per-field registrant_organisation /

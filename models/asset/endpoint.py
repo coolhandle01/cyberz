@@ -3,6 +3,12 @@ models.asset.endpoint - discovered HTTP/S endpoints and the LLM-endpoint marker.
 
 The recon-discovery shapes the OSINT Analyst's httpx pass produces, plus the
 paginated slice the recon query tools return.
+
+``Endpoint`` is a cybersquad recon *observation*, not an OAM asset type: the
+OAM asset for a web address is ``URL`` (modelled in ``models.asset.url``), and
+the status / tech / TLS / vulns an ``Endpoint`` carries become properties hung
+off that ``URL`` when #45 lands.
+<https://owasp-amass.github.io/docs/open_asset_model/assets/url/>
 """
 
 from __future__ import annotations
