@@ -5,14 +5,14 @@ Analyst's ``recon.json``.
 The PT does not run recon itself - the OA produced ``recon.json`` -
 but it needs narrow views (subdomain list, filtered endpoint page,
 per-host port map) to choose which probes to run without loading the
-whole ReconResult. These three @cyber_tool wrappers are those typed
+whole AttackGraph. These three @cyber_tool wrappers are those typed
 slicers. They are read-only, idempotent, and write nothing to the
 workspace.
 """
 
 from pydantic import BaseModel, Field
 
-from models import EndpointPage, Hostname, OpenPortsMap
+from models import FQDN, EndpointPage, OpenPortsMap
 from squad import cyber_tool
 from tools.recon.query import recon_endpoints, recon_open_ports, recon_subdomains
 
@@ -44,7 +44,7 @@ class _PtReconSubdomainsArgs(BaseModel):
 
 
 @cyber_tool("Recon Subdomains", args_schema=_PtReconSubdomainsArgs)
-def recon_subdomains_tool(recon_path: str, host_filter: str | None = None) -> list[Hostname]:
+def recon_subdomains_tool(recon_path: str, host_filter: str | None = None) -> list[FQDN]:
     """
     Return the in-scope subdomains discovered during recon. Pass the recon.json
     path you received from the OSINT Analyst. ``host_filter`` is a
@@ -54,7 +54,7 @@ def recon_subdomains_tool(recon_path: str, host_filter: str | None = None) -> li
     port-specific probes (``Recon Open Ports``, ``Unauthenticated
     Elasticsearch Check``, etc.) without further normalisation.
     """
-    return [Hostname(h) for h in recon_subdomains(recon_path, host_filter=host_filter)]
+    return [FQDN(h) for h in recon_subdomains(recon_path, host_filter=host_filter)]
 
 
 class _PtReconEndpointsArgs(BaseModel):
@@ -128,7 +128,7 @@ def recon_endpoints_tool(
 ) -> EndpointPage:
     """
     Query the endpoints discovered during recon without loading the whole
-    ReconResult. Filters are conjunctive: ``status=200`` and ``tech="wordpress"``
+    AttackGraph. Filters are conjunctive: ``status=200`` and ``tech="wordpress"``
     returns endpoints satisfying both. ``host_contains`` matches the URL
     case-insensitively. Returns an EndpointPage with total, offset, returned,
     and a typed endpoints list - paginate by re-calling with a larger offset.
@@ -159,7 +159,7 @@ class _PtReconOpenPortsArgs(BaseModel):
             " filtered to a single host or in full."
         ),
     )
-    host: Hostname | None = Field(
+    host: FQDN | None = Field(
         default=None,
         description=(
             "Optional bare hostname to restrict the open-port map to a"
@@ -178,6 +178,6 @@ def recon_open_ports_tool(recon_path: str, host: str | None = None) -> OpenPorts
     Return the open-port map per host from recon.json. Passing a ``host``
     restricts the result to that single host. Use this to decide which of the
     port-specific probes to run (Elasticsearch on 9200, Redis on 6379, etc.)
-    without loading the whole ReconResult.
+    without loading the whole AttackGraph.
     """
     return OpenPortsMap(hosts=recon_open_ports(recon_path, host=host))

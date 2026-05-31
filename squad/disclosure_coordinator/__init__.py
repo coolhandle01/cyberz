@@ -8,6 +8,7 @@ import runtime
 from models import ProgrammeReportSummary
 from models.h1 import DisclosureReport, SubmissionResult
 from squad import SquadMember, cyber_tool, read_run_file_tool, read_run_filelist_tool
+from squad.workspace_tools import _ListRunFilesArgs, _ReadRunFileArgs
 from tools.h1_api import h1
 from tools.report_tools import save_report
 
@@ -97,4 +98,11 @@ MEMBER = SquadMember(
         read_run_filelist_tool,
         read_run_file_tool,
     ],
+    schemas={
+        "Submit Report": _SubmitReportArgs,
+        "Check H1 Duplicate": _CheckDuplicateArgs,
+        # Shared workspace wrappers (re-exported via squad.workspace_tools)
+        "List Run Files": _ListRunFilesArgs,
+        "Read Run File": _ReadRunFileArgs,
+    },
 )

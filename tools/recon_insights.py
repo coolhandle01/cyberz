@@ -13,13 +13,17 @@ primitives:
 * ``HostInsight`` (from ``models``) - the agent's working artefact per host.
 * ``validate_insight(insight, sweep, programme)`` - quality gate. Returns the
   issue list. Hard errors block ``finalise_recon``.
+* ``host_dir(fqdn)`` - the per-host evidence directory under
+  ``<run_dir>/hosts/<fqdn>/``. Future recon tools (screenshots, scan
+  output, response bodies) write per-host artefacts here so each
+  directory carries one FQDN asset's worth of evidence end-to-end.
 * ``save_insight`` / ``load_insights`` - persist insights under
-  ``<run_dir>/host_insights/<hostname>.json``.
-* ``finalise_recon(programme, sweep_path)`` - load the sweep, validate every
-  insight, build the canonical ``ReconResult`` for downstream agents, and
+  ``<run_dir>/hosts/<fqdn>/insight.json``.
+* ``finalise_recon(programme, attack_graph_path)`` - load the sweep, validate every
+  insight, build the canonical ``AttackGraph`` for downstream agents, and
   write ``recon.json``. Refuses on hard errors or insufficient curation.
 
-The OA's initial sweep is written to ``sweep.json``; ``finalise_recon``
+The OA's initial sweep is written to ``attack_graph.json``; ``finalise_recon``
 copies the inventory through, attaches insights, and emits the final
 ``recon.json`` that the Vulnerability Researcher and Penetration Tester
 consume.
@@ -31,7 +35,7 @@ import re
 from pathlib import Path
 
 import runtime
-from models import HostInsight, HostPriority, ReconResult
+from models import AttackGraph, HostInsight, HostPriority, HostScore, RawFinding
 from models.h1 import Programme
 
 # The insight shapes (HostAnnotation, InsightValidationIssue,
@@ -47,14 +51,33 @@ from models.insight import (
 )
 from tools.recon.scope import filter_in_scope
 
-_INSIGHTS_SUBDIR = "host_insights"
-_SWEEP_FILENAME = "sweep.json"
-_RECON_FILENAME = "recon.json"
+# Per-host workspace I/O moved to tools.recon_host_store. Imported here
+# both for finalise's own use and re-exported (via __all__) so existing
+# ``from tools.recon_insights import save_insight`` consumers (the
+# Annotate Host tool) keep working unchanged.
+from tools.recon_host_store import (
+    findings_path,
+    host_dir,
+    host_score_path,
+    insight_path,
+    load_host_findings,
+    load_host_ports,
+    load_host_scores,
+    load_insights,
+    load_tls_certificates,
+    notes_path,
+    ports_path,
+    save_host_findings,
+    save_host_notes,
+    save_host_ports,
+    save_host_score,
+    save_insight,
+    save_tls_certificate,
+    tls_path,
+)
 
-# Hostnames must be made filesystem-safe before persisting under
-# ``host_insights/<hostname>.json``. The replacement is reversible because we
-# never reverse it - the JSON body carries the original hostname.
-_HOSTNAME_SANITISE = re.compile(r"[^A-Za-z0-9.\-_]")
+_ATTACK_GRAPH_FILENAME = "attack_graph.json"
+_RECON_FILENAME = "recon.json"
 
 
 # Validation
@@ -62,7 +85,7 @@ _HOSTNAME_SANITISE = re.compile(r"[^A-Za-z0-9.\-_]")
 
 def validate_insight(
     insight: HostInsight,
-    sweep: ReconResult,
+    sweep: AttackGraph,
     programme: Programme,
 ) -> InsightValidationReport:
     """Apply quality heuristics to a HostInsight. Returns the issue list."""
@@ -171,7 +194,7 @@ def validate_insight(
     return InsightValidationReport(ok=ok, issues=issues)
 
 
-def _sweep_tech_by_host(sweep: ReconResult) -> dict[str, list[str]]:
+def _sweep_tech_by_host(sweep: AttackGraph) -> dict[str, list[str]]:
     """Build a hostname -> tech-list map from the sweep's endpoints."""
     from urllib.parse import urlparse
 
@@ -193,53 +216,12 @@ def _strip_version(tech: str) -> str:
     return re.sub(r"\s*[0-9][\w.\-]*$", "", tech).strip().lower()
 
 
-# Persistence
-
-
-def _insights_dir() -> Path:
-    return runtime.run_dir() / _INSIGHTS_SUBDIR
-
-
-def insight_path(hostname: str) -> Path:
-    """Return the on-disk path of the insight for ``hostname``.
-
-    Hostnames are used directly as filenames (with a small character
-    sanitisation pass). The body carries the original hostname.
-    """
-    safe = _HOSTNAME_SANITISE.sub("_", hostname.strip().lower())
-    if not safe or safe.strip("_") == "":
-        raise ValueError("hostname is empty after sanitisation")
-    return _insights_dir() / f"{safe}.json"
-
-
-def save_insight(insight: HostInsight) -> Path:
-    """Persist an insight to ``<run_dir>/host_insights/<host>.json``."""
-    path = insight_path(insight.hostname)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(insight.model_dump_json(indent=2), encoding="utf-8")
-    return path
-
-
-def load_insights() -> list[HostInsight]:
-    """Load every insight in the current run, ordered by hostname."""
-    dir_ = _insights_dir()
-    if not dir_.is_dir():
-        return []
-    return sorted(
-        (
-            HostInsight.model_validate_json(p.read_text(encoding="utf-8"))
-            for p in dir_.glob("*.json")
-        ),
-        key=lambda i: i.hostname,
-    )
-
-
-def load_sweep(sweep_filename: str = _SWEEP_FILENAME) -> ReconResult:
+def load_attack_graph(attack_graph_filename: str = _ATTACK_GRAPH_FILENAME) -> AttackGraph:
     """Load the OA's internal sweep artefact."""
-    path = runtime.run_dir() / sweep_filename
+    path = runtime.run_dir() / attack_graph_filename
     if not path.is_file():
-        raise FileNotFoundError(f"{sweep_filename} not found; run Run Initial Sweep first")
-    return ReconResult.model_validate_json(path.read_text(encoding="utf-8"))
+        raise FileNotFoundError(f"{attack_graph_filename} not found; run Run Initial Sweep first")
+    return AttackGraph.model_validate_json(path.read_text(encoding="utf-8"))
 
 
 # Finalisation
@@ -250,9 +232,58 @@ def load_sweep(sweep_filename: str = _SWEEP_FILENAME) -> ReconResult:
 _INTERESTING_STATUSES = {200, 201, 204, 301, 302, 307, 308, 401, 403}
 
 
+def _finding_host(target: str) -> str:
+    """Best-effort hostname from a ``RawFinding`` target (URL or bare host)."""
+    from urllib.parse import urlparse
+
+    candidate = target if "://" in target else f"//{target}"
+    return (urlparse(candidate).hostname or target).strip().lower()
+
+
+def _materialise_host_dirs(sweep: AttackGraph, insights: list[HostInsight]) -> None:
+    """Write each host's OAM-node directory under ``hosts/<fqdn>/``.
+
+    The OA's per-node handoff, split into typed facets so #45 can swap each
+    JSON write for an amass insert one day:
+
+    * ``host.json`` / ``notes.md`` - the curation: the typed score+priority,
+      and the prose "look here, because ..." lifted out of the data shape.
+    * ``ports.json`` / ``findings.json`` / ``tls.json`` - the recon facts,
+      read back off the sweep.
+
+    Dormant facets stay unwritten (empty ports, no certs) rather than
+    littering empty files.
+    """
+    for insight in insights:
+        save_host_score(
+            HostScore(
+                hostname=insight.hostname,
+                role=insight.role,
+                priority=insight.priority,
+                annotated_at=insight.annotated_at,
+            )
+        )
+        save_host_notes(insight.hostname, insight.notes)
+
+    for hostname, ports in sweep.open_ports.items():
+        if ports:
+            save_host_ports(hostname, ports)
+
+    findings_by_host: dict[str, list[RawFinding]] = {}
+    for finding in sweep.passive_findings:
+        host = _finding_host(finding.target)
+        if host:
+            findings_by_host.setdefault(host, []).append(finding)
+    for hostname, host_findings in findings_by_host.items():
+        save_host_findings(hostname, host_findings)
+
+    for certificate in sweep.tls_certificates:
+        save_tls_certificate(certificate)
+
+
 def finalise_recon(
     programme: Programme,
-    sweep_filename: str = _SWEEP_FILENAME,
+    attack_graph_filename: str = _ATTACK_GRAPH_FILENAME,
     recon_filename: str = _RECON_FILENAME,
 ) -> Path:
     """Validate every host insight, merge them with the sweep, and write the
@@ -269,12 +300,12 @@ def finalise_recon(
       * an interesting-status host in the sweep has no insight
       * a high-priority host is missing detected_tech
     """
-    sweep = load_sweep(sweep_filename)
+    sweep = load_attack_graph(attack_graph_filename)
     insights = load_insights()
 
     if not insights:
         raise ReconFinalisationError(
-            "no host_insights have been authored; call Annotate Host for the "
+            "no host insights have been authored; call Annotate Host for the "
             "interesting hosts in the sweep before finalising"
         )
 
@@ -303,7 +334,9 @@ def finalise_recon(
             "needs at least one focus target on a non-empty surface"
         )
 
-    final = ReconResult(
+    _materialise_host_dirs(sweep, insights)
+
+    final = AttackGraph(
         programme=sweep.programme,
         subdomains=sweep.subdomains,
         endpoints=sweep.endpoints,
@@ -311,6 +344,11 @@ def finalise_recon(
         technologies=sweep.technologies,
         passive_findings=sweep.passive_findings,
         network_hops=sweep.network_hops,
+        # Carry the sweep's enrichment forward - finalise previously dropped
+        # ip_assets (and would drop tls_certificates), losing it from the
+        # PT-facing recon.json even though the sweep gathered it.
+        ip_assets=sweep.ip_assets,
+        tls_certificates=sweep.tls_certificates,
         host_insights=insights,
         notes=_build_notes(sweep, insights),
     )
@@ -321,7 +359,7 @@ def finalise_recon(
     return out_path
 
 
-def _build_notes(sweep: ReconResult, insights: list[HostInsight]) -> str:
+def _build_notes(sweep: AttackGraph, insights: list[HostInsight]) -> str:
     """Compose the recon-level notes string from sweep stats + insight tally."""
     by_priority: dict[HostPriority, int] = dict.fromkeys(HostPriority, 0)
     for i in insights:
@@ -338,7 +376,7 @@ def _build_notes(sweep: ReconResult, insights: list[HostInsight]) -> str:
 # Coverage check (informational)
 
 
-def uncovered_interesting_hosts(sweep: ReconResult, insights: list[HostInsight]) -> list[str]:
+def uncovered_interesting_hosts(sweep: AttackGraph, insights: list[HostInsight]) -> list[str]:
     """Return interesting-status hostnames in the sweep that have no insight."""
     from urllib.parse import urlparse
 
@@ -357,10 +395,25 @@ __all__ = [
     "InsightValidationReport",
     "ReconFinalisationError",
     "finalise_recon",
+    "findings_path",
+    "host_dir",
+    "host_score_path",
     "insight_path",
+    "load_attack_graph",
+    "load_host_findings",
+    "load_host_ports",
+    "load_host_scores",
     "load_insights",
-    "load_sweep",
+    "load_tls_certificates",
+    "notes_path",
+    "ports_path",
+    "save_host_findings",
+    "save_host_notes",
+    "save_host_ports",
+    "save_host_score",
     "save_insight",
+    "save_tls_certificate",
+    "tls_path",
     "uncovered_interesting_hosts",
     "validate_insight",
 ]

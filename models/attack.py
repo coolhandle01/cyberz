@@ -16,8 +16,22 @@ from pydantic import BaseModel, Field, field_validator
 from models.primitives import Severity
 
 
-class AttackPlanItem(BaseModel):
-    """One probe-target hypothesis from the VR's research pass."""
+class AttackTree(BaseModel):
+    """One probe-target hypothesis from the VR's research pass.
+
+    Rooted at a goal (probe + target) the PT searches for. Today a
+    degenerate tree - the root IS the leaf, all fields describe both
+    the goal and the only executable step. The ``Tree`` name is
+    forward-looking: once the VR starts emitting AND/OR subgoal
+    decomposition ("RCE on api.example.com" -OR-> "SSRF -> internal
+    Redis" / "auth bypass -> admin panel" / ...), an explicit
+    ``children: list[AttackTree]`` slot lands here with a
+    ``decomposition: Literal["AND", "OR"]`` discriminator (Schneier
+    1999 attack-tree shape). The PT's kill chain becomes a derived
+    path search from the root down to a viable leaf (backwards
+    shortest-path / A* on the AttackForest, online re-planned as
+    probes succeed or fail).
+    """
 
     probe: str  # CVE id or vulnerability-class name, e.g. "CVE-2022-22965" or "reflected XSS"
     target: str  # hostname or URL drawn from recon
@@ -32,9 +46,9 @@ class AttackPlanItem(BaseModel):
 
         Lives on the model so every constructor (CrewAI args_schema
         validation, ``model_validate_json`` on a re-loaded attack plan,
-        a direct ``AttackPlanItem(...)`` call) sees the same cleaned
-        list. Pairs with ``validate_attack_plan``'s
-        ``if not item.recon_evidence:`` hard error - an item that was
+        a direct ``AttackTree(...)`` call) sees the same cleaned
+        list. Pairs with ``validate_attack_forest``'s
+        ``if not tree.recon_evidence:`` hard error - a tree that was
         passed whitespace-only entries ends up with an empty list and
         the validator catches it, instead of the persisted artefact
         carrying junk the PT then has to reason around.
@@ -42,15 +56,37 @@ class AttackPlanItem(BaseModel):
         return [entry.strip() for entry in value if entry.strip()]
 
 
-class AttackPlan(BaseModel):
-    """The VR's attack plan, handed to the PT and re-read at triage time."""
+class AttackForest(BaseModel):
+    """The VR's attack plan - a forest of AttackTrees, one per goal.
+
+    The OA describes the asset graph (``AttackGraph``); the VR finds
+    the trees rooted at goals worth pursuing on that graph; the PT
+    searches the forest for the shortest viable path to each goal
+    (the kill chain - a derived projection, not a stored type).
+
+    The PT's reasoning is closer to A* with a domain heuristic plus
+    MDPs over attack graphs (Sheyner et al. 2002, *Automated Generation
+    and Analysis of Attack Graphs*) than literal travelling-salesman,
+    but the salesman intuition holds: optimise a route through a
+    discovered topology, working backwards from the goal, with online
+    re-planning as probes succeed or fail.
+
+    Today a flat ``trees`` list with no inter-tree relations. Two
+    forward-looking expansions land here when the VR matures:
+
+    * Per-tree AND/OR subgoal decomposition (see ``AttackTree``).
+    * Tree overlap sorting - trees sharing nodes on the underlying
+      ``AttackGraph`` get ranked together so the PT's search amortises
+      shared subgoals across goals (probe once, satisfy multiple
+      kill-chain prerequisites).
+    """
 
     programme_handle: str
     drafted_at: datetime
-    items: list[AttackPlanItem]
+    trees: list[AttackTree]
 
 
-class AttackPlanValidationIssue(BaseModel):
+class AttackForestValidationIssue(BaseModel):
     """One issue produced by attack-plan validation."""
 
     section: str
@@ -58,21 +94,21 @@ class AttackPlanValidationIssue(BaseModel):
     message: str
 
 
-class AttackPlanValidationReport(BaseModel):
-    """Result of validating an AttackPlan."""
+class AttackForestValidationReport(BaseModel):
+    """Result of validating an AttackForest."""
 
     ok: bool
-    issues: list[AttackPlanValidationIssue] = Field(default_factory=list)
+    issues: list[AttackForestValidationIssue] = Field(default_factory=list)
 
 
-class AttackPlanFinalisationError(RuntimeError):
-    """Raised when an AttackPlan cannot be persisted to attack_plan.json."""
+class AttackForestFinalisationError(RuntimeError):
+    """Raised when an AttackForest cannot be persisted to attack_forest.json."""
 
 
 __all__ = [
-    "AttackPlan",
-    "AttackPlanFinalisationError",
-    "AttackPlanItem",
-    "AttackPlanValidationIssue",
-    "AttackPlanValidationReport",
+    "AttackForest",
+    "AttackForestFinalisationError",
+    "AttackForestValidationIssue",
+    "AttackForestValidationReport",
+    "AttackTree",
 ]

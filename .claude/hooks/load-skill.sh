@@ -113,6 +113,17 @@ case "$file_path" in
         matches+=(cybersquad-agent-llm)
         ;;
 esac
+# cybersquad-mcp covers the MCP provisioning discipline - the
+# build-time wiring rule and the disjoint-set rule for provisioned
+# vs. discovered MCPs. Triggers on any file in the provisioning
+# package (which holds the orchestrator + one submodule per MCP),
+# and stacks on crew.py edits because crew.py is where the
+# provisioned-tool list is distributed to agents.
+case "$file_path" in
+    */mcp_servers/*.py|*/crew.py)
+        matches+=(cybersquad-mcp)
+        ;;
+esac
 case "$file_path" in
     */tasks.py)
         matches+=(cybersquad-task)

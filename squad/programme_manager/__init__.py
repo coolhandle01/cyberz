@@ -197,4 +197,9 @@ def save_programme_tool(handle: str) -> str:
 MEMBER = SquadMember(
     dir=Path(__file__).parent,
     tools=[browse_programmes_tool, hydrate_programme_tool, save_programme_tool],
+    schemas={
+        "Browse HackerOne Programmes": _BrowseProgrammesArgs,
+        "Hydrate HackerOne Programme": _HydrateProgrammeArgs,
+        "Save Selected Programme": _SaveProgrammeArgs,
+    },
 )

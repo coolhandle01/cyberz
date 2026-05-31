@@ -2,7 +2,7 @@
 models.primitives - foundational typed-string and enum primitives shared
 across the model graph.
 
-Both ``Severity`` and ``Hostname`` are leaf dependencies - they have no
+Both ``Severity`` and ``FQDN`` are leaf dependencies - they have no
 forward references into other model modules - so they live in the
 deepest layer of the package. ``models.finding``, ``models.asset``,
 ``models.h1`` and the rest depend on them; nothing here depends on the
@@ -26,7 +26,7 @@ class Severity(StrEnum):
     CRITICAL = "critical"
 
 
-# ``Hostname`` is the typed string every scope-guard input flows through.
+# ``FQDN`` is the typed string every scope-guard input flows through.
 # Using ``Annotated[str, AfterValidator(...)]`` keeps the runtime type as
 # ``str`` (anything expecting ``str`` keeps working) while pydantic applies
 # the validator at model_validate time - so the schema rejects URLs / ports /
@@ -41,7 +41,7 @@ class Severity(StrEnum):
 _HOSTNAME_LABEL_RE = re.compile(r"^[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?$")
 
 
-def _validate_hostname(value: str) -> str:
+def _validate_fqdn(value: str) -> str:
     """Normalise and validate a hostname per RFC 1123.
 
     Lowercases and strips, then enforces: non-empty, no scheme (``://``),
@@ -69,7 +69,7 @@ def _validate_hostname(value: str) -> str:
     return cleaned
 
 
-Hostname = Annotated[str, AfterValidator(_validate_hostname)]
+FQDN = Annotated[str, AfterValidator(_validate_fqdn)]
 
 
 # ``HttpUrl`` - URL validation delegated to Pydantic's built-in
@@ -95,8 +95,8 @@ def _validate_endpoint_url(value: str) -> str:
 
     URL shape (scheme / authority / RFC-3986 well-formedness) delegates
     to ``pydantic.HttpUrl``; the host component then runs through
-    ``_validate_hostname`` so RFC 1123 hostname strictness (no leading
-    hyphens, no oversized labels) holds inside URLs too. The Hostname
+    ``_validate_fqdn`` so RFC 1123 hostname strictness (no leading
+    hyphens, no oversized labels) holds inside URLs too. The FQDN
     primitive guards "the LLM handed us a URL when we asked for a
     hostname" - the same RFC 1123 contract should hold when a hostname
     is wrapped in a URL, otherwise ``-evil.example.com`` rejects but
@@ -130,8 +130,103 @@ def _validate_endpoint_url(value: str) -> str:
     # field-level error.
     parsed = _PydanticHttpUrl(cleaned)
     if parsed.host:
-        _validate_hostname(parsed.host)
+        _validate_fqdn(parsed.host)
     return cleaned
 
 
 HttpUrl = Annotated[str, AfterValidator(_validate_endpoint_url)]
+
+
+# ``IPAddress`` - typed string for an IPv4 or IPv6 address. Validates
+# via stdlib ``ipaddress.ip_address`` (handles both versions; rejects
+# malformed strings, CIDR notation, hostnames). Keeps the runtime as
+# ``str`` to match the ``FQDN`` / ``HttpUrl`` convention - every
+# consumer that does ``f"https://{ip}"`` / ``ip.startswith(...)`` /
+# dict-key works without coercion. The ASN-lookup (`tools/recon/asn.py`
+# via Team Cymru) and the future amass ``IPAddress`` asset type both
+# read this primitive at the boundary.
+#
+# Deliberately separate from `FQDN` even though both end up in
+# DNS-resolution paths: the validators are mutually exclusive (a string
+# is either a valid IP literal or a valid hostname, never both), so
+# union-typing them would let one slip past the wrong validator. Two
+# primitives, two strict gates.
+
+
+def _validate_ip_address(value: str) -> str:
+    """Validate that ``value`` is a parseable IPv4 or IPv6 address literal.
+
+    Delegates to stdlib ``ipaddress.ip_address``. Rejects:
+
+    * CIDR notation (``1.2.3.0/24``) - that is a netblock, not an IP
+    * FQDNs (``example.com``) - validator-distinct from ``FQDN``
+    * IPv6 zone identifiers (``fe80::1%eth0``) - link-local scope IDs
+      are not stable across hosts and shouldn't appear in recon JSON
+    * Empty / whitespace-only input
+
+    Returns the normalised form from ``ipaddress.ip_address`` so equality
+    holds across input variations (``::1`` and ``0:0:0:0:0:0:0:1`` both
+    resolve to the same canonical string).
+    """
+    import ipaddress
+
+    if not isinstance(value, str):  # pragma: no cover - Pydantic enforces str upstream
+        raise ValueError(f"IP address must be a string, got {type(value).__name__}")
+    cleaned = value.strip()
+    if not cleaned:
+        raise ValueError("IP address cannot be empty")
+    if "/" in cleaned:
+        raise ValueError(f"IP address must not include CIDR notation: {value!r}")
+    if "%" in cleaned:
+        raise ValueError(f"IP address must not include IPv6 zone identifier: {value!r}")
+    try:
+        parsed = ipaddress.ip_address(cleaned)
+    except ValueError as exc:
+        raise ValueError(f"invalid IP address {value!r}: {exc}") from exc
+    return str(parsed)
+
+
+IPAddress = Annotated[str, AfterValidator(_validate_ip_address)]
+
+
+# ``Email`` - typed string for an RFC 5321 / 5322 email address.
+# Validates via the ``email_validator`` library (the same one Pydantic's
+# ``EmailStr`` uses under the hood). Runtime stays ``str`` to match the
+# ``FQDN`` / ``HttpUrl`` / ``IPAddress`` convention - consumers that do
+# ``.split("@")`` / ``.lower()`` / dict-key work without an audit.
+#
+# Used by ``models.network.Contact.email`` for the structured-registrant
+# entries pulled from RDAP (abuse / registrant / admin / technical
+# vCards). Capped at 254 chars per RFC 5321 §4.5.3.1.1 by the validator;
+# the cap is enforced inside ``validate_email`` rather than as a
+# separate Field constraint so callers cannot bypass it via direct
+# construction.
+
+
+def _validate_email(value: str) -> str:
+    """Validate that ``value`` is a parseable email address.
+
+    Delegates to ``email_validator.validate_email`` with
+    ``check_deliverability=False`` - we want syntactic validation, not
+    an MX-lookup that fires a DNS query inside every model construction.
+    Returns the normalised form (case-folded domain, Unicode
+    normalisation) so equality holds across input variants
+    (``Abuse@Example.COM`` and ``abuse@example.com`` both resolve to the
+    same canonical string).
+    """
+    if not isinstance(value, str):  # pragma: no cover - Pydantic enforces str upstream
+        raise ValueError(f"Email must be a string, got {type(value).__name__}")
+    cleaned = value.strip()
+    if not cleaned:
+        raise ValueError("Email cannot be empty")
+
+    from email_validator import EmailNotValidError, validate_email
+
+    try:
+        result = validate_email(cleaned, check_deliverability=False)
+    except EmailNotValidError as exc:
+        raise ValueError(f"invalid email {value!r}: {exc}") from exc
+    return result.normalized
+
+
+Email = Annotated[str, AfterValidator(_validate_email)]

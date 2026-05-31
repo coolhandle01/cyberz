@@ -1,0 +1,278 @@
+"""
+tools/recon_host_store.py - the per-host workspace artefact store.
+
+Every in-scope FQDN gets one directory under ``<run_dir>/hosts/<fqdn>/``,
+and this module is the typed reader/writer pair for the facets that hang
+off it - the on-disk form of one amass FQDN-asset node:
+
+* ``insight.json`` - the OSINT Analyst's full ``HostInsight`` annotation.
+* ``host.json`` - the ``HostScore`` (role + priority), the machine-
+  actionable curation split out of the prose.
+* ``notes.md`` - the agent's "look here, because ..." rationale.
+* ``tls.json`` - the leaf ``TLSCertificate`` observed on the host.
+* ``ports.json`` / ``findings.json`` - the host's open ports and its
+  node-local ``RawFinding`` rows.
+
+Split out of ``tools.recon_insights`` (which keeps the validation + the
+``finalise_recon`` orchestration that *drives* these writers) so neither
+module outgrows its single responsibility. Each ``save_X`` / ``load_X``
+pair is a writer/reader workspace contract; the JSON shapes are what #45
+swaps for amass inserts.
+"""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+from pydantic import TypeAdapter
+
+import runtime
+from models import HostInsight, HostScore, RawFinding, Service, TLSCertificate
+from models.primitives import FQDN
+
+_HOSTS_SUBDIR = "hosts"
+
+# FQDNs must be made filesystem-safe before persisting under
+# ``hosts/<fqdn>/``. The replacement is reversible because we never
+# reverse it - the persisted artefacts carry the original hostname in
+# their body.
+_HOSTNAME_SANITISE = re.compile(r"[^A-Za-z0-9.\-_]")
+
+
+def _hosts_dir() -> Path:
+    return runtime.run_dir() / _HOSTS_SUBDIR
+
+
+def host_dir(hostname: FQDN) -> Path:
+    """Return the per-host evidence directory under ``<run_dir>/hosts/``.
+
+    Each in-scope FQDN gets its own directory; ``insight_path`` writes
+    ``insight.json`` here, and future evidence-writing tools (httpx
+    screenshots, nmap output, response bodies) hang their per-host
+    artefacts off the same dir. The layout maps cleanly onto an amass
+    FQDN asset's worth of input: one directory = one node's evidence
+    trail.
+
+    Sanitises the hostname for filesystem use. The replacement is
+    reversible because we never reverse it - the persisted artefacts
+    inside carry the original hostname in their body.
+    """
+    safe = _HOSTNAME_SANITISE.sub("_", hostname.strip().lower())
+    if not safe or safe.strip("_") == "":
+        raise ValueError("hostname is empty after sanitisation")
+    return _hosts_dir() / safe
+
+
+def insight_path(hostname: FQDN) -> Path:
+    """Return the on-disk path of the insight for ``hostname``.
+
+    The insight lives at ``<host_dir>/insight.json`` - one file inside
+    the host's per-FQDN directory. Sibling files (screenshots, scan
+    output, response bodies) land alongside as recon tools write them.
+    """
+    return host_dir(hostname) / "insight.json"
+
+
+def save_insight(insight: HostInsight) -> Path:
+    """Persist an insight to ``<run_dir>/hosts/<host>/insight.json``."""
+    path = insight_path(insight.hostname)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(insight.model_dump_json(indent=2), encoding="utf-8")
+    return path
+
+
+def load_insights() -> list[HostInsight]:
+    """Load every insight in the current run, ordered by hostname."""
+    dir_ = _hosts_dir()
+    if not dir_.is_dir():
+        return []
+    return sorted(
+        (
+            HostInsight.model_validate_json(p.read_text(encoding="utf-8"))
+            for p in dir_.glob("*/insight.json")
+        ),
+        key=lambda i: i.hostname,
+    )
+
+
+def tls_path(hostname: FQDN) -> Path:
+    """Return the on-disk path of the TLS cert for ``hostname``.
+
+    The cert lives at ``<host_dir>/tls.json`` - the per-host sibling of
+    ``insight.json``, the leaf certificate hanging off the host's
+    per-FQDN directory the way ``host_dir`` reserves room for.
+    """
+    return host_dir(hostname) / "tls.json"
+
+
+def save_tls_certificate(certificate: TLSCertificate) -> Path:
+    """Persist a cert to ``<run_dir>/hosts/<host>/tls.json``."""
+    path = tls_path(certificate.host)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(certificate.model_dump_json(indent=2), encoding="utf-8")
+    return path
+
+
+def load_tls_certificates() -> list[TLSCertificate]:
+    """Load every per-host TLS cert in the current run, ordered by host."""
+    dir_ = _hosts_dir()
+    if not dir_.is_dir():
+        return []
+    return sorted(
+        (
+            TLSCertificate.model_validate_json(p.read_text(encoding="utf-8"))
+            for p in dir_.glob("*/tls.json")
+        ),
+        key=lambda c: c.host,
+    )
+
+
+# Typed adapters for the per-host facet files that hold bare collections
+# rather than a single model - so the JSON still round-trips through a
+# typed boundary (the #45 amass-read side validates the same way).
+_HOST_FINDINGS = TypeAdapter(list[RawFinding])
+_HOST_PORTS = TypeAdapter(list[int])
+_HOST_SERVICES = TypeAdapter(list[Service])
+
+
+def host_score_path(hostname: FQDN) -> Path:
+    """Per-host score file: ``<host_dir>/host.json``."""
+    return host_dir(hostname) / "host.json"
+
+
+def save_host_score(score: HostScore) -> Path:
+    """Persist a ``HostScore`` to ``<run_dir>/hosts/<host>/host.json``."""
+    path = host_score_path(score.hostname)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(score.model_dump_json(indent=2), encoding="utf-8")
+    return path
+
+
+def load_host_scores() -> list[HostScore]:
+    """Load every per-host score in the current run, ordered by hostname."""
+    dir_ = _hosts_dir()
+    if not dir_.is_dir():
+        return []
+    return sorted(
+        (
+            HostScore.model_validate_json(p.read_text(encoding="utf-8"))
+            for p in dir_.glob("*/host.json")
+        ),
+        key=lambda s: s.hostname,
+    )
+
+
+def notes_path(hostname: FQDN) -> Path:
+    """Per-host prose file: ``<host_dir>/notes.md``."""
+    return host_dir(hostname) / "notes.md"
+
+
+def save_host_notes(hostname: FQDN, notes: str) -> Path:
+    """Persist the OA's prose guidance to ``<run_dir>/hosts/<host>/notes.md``.
+
+    The "look here, because ..." half of the curation, kept as markdown
+    outside the typed data shape. Agent-authored prose: it is read back by
+    downstream agents as workspace context (that is the point of the
+    handoff), so no injection guard - the risk surface is *verbatim
+    tool-captured* strings, which live in the typed evidence facets
+    (findings / tls), not here.
+    """
+    path = notes_path(hostname)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(notes, encoding="utf-8")
+    return path
+
+
+def findings_path(hostname: FQDN) -> Path:
+    """Per-host findings file: ``<host_dir>/findings.json``."""
+    return host_dir(hostname) / "findings.json"
+
+
+def save_host_findings(hostname: FQDN, findings: list[RawFinding]) -> Path:
+    """Persist a host's node-local findings to ``hosts/<host>/findings.json``."""
+    path = findings_path(hostname)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(_HOST_FINDINGS.dump_json(findings, indent=2))
+    return path
+
+
+def load_host_findings(hostname: FQDN) -> list[RawFinding]:
+    """Load a host's node-local findings; empty when none were written."""
+    path = findings_path(hostname)
+    if not path.is_file():
+        return []
+    return _HOST_FINDINGS.validate_json(path.read_text(encoding="utf-8"))
+
+
+def ports_path(hostname: FQDN) -> Path:
+    """Per-host open-ports file: ``<host_dir>/ports.json``."""
+    return host_dir(hostname) / "ports.json"
+
+
+def save_host_ports(hostname: FQDN, ports: list[int]) -> Path:
+    """Persist a host's open ports to ``hosts/<host>/ports.json``."""
+    path = ports_path(hostname)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(_HOST_PORTS.dump_json(ports, indent=2))
+    return path
+
+
+def load_host_ports(hostname: FQDN) -> list[int]:
+    """Load a host's open ports; empty when none were written."""
+    path = ports_path(hostname)
+    if not path.is_file():
+        return []
+    return _HOST_PORTS.validate_json(path.read_text(encoding="utf-8"))
+
+
+def services_path(hostname: FQDN) -> Path:
+    """Per-host services file: ``<host_dir>/services.json``."""
+    return host_dir(hostname) / "services.json"
+
+
+def save_host_services(hostname: FQDN, services: list[Service]) -> Path:
+    """Persist a host's ``Service`` assets to ``hosts/<host>/services.json``.
+
+    The OAM ``Service``-asset facet of the host node: one open service per
+    row, each carrying its banner detail, the NIST CPE nmap matched, and
+    the detecting tool. The on-disk form of what #45 upserts as amass
+    Service nodes hanging off the FQDN.
+    """
+    path = services_path(hostname)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(_HOST_SERVICES.dump_json(services, indent=2))
+    return path
+
+
+def load_host_services(hostname: FQDN) -> list[Service]:
+    """Load a host's ``Service`` assets; empty when none were written."""
+    path = services_path(hostname)
+    if not path.is_file():
+        return []
+    return _HOST_SERVICES.validate_json(path.read_text(encoding="utf-8"))
+
+
+__all__ = [
+    "findings_path",
+    "host_dir",
+    "host_score_path",
+    "insight_path",
+    "load_host_findings",
+    "load_host_ports",
+    "load_host_scores",
+    "load_host_services",
+    "load_insights",
+    "load_tls_certificates",
+    "notes_path",
+    "ports_path",
+    "save_host_findings",
+    "save_host_notes",
+    "save_host_ports",
+    "save_host_score",
+    "save_host_services",
+    "save_insight",
+    "save_tls_certificate",
+    "services_path",
+    "tls_path",
+]

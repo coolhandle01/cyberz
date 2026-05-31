@@ -19,11 +19,11 @@ from pydantic import BaseModel, Field
 
 import runtime
 from models import RunFile, RunFileContent
-from models.attack import AttackPlan
+from models.attack import AttackForest
 from models.h1 import Programme
 from squad import cyber_tool
 from tools import workspace
-from tools.research_tools import attack_plan_path, load_attack_plan
+from tools.research_tools import attack_forest_path, load_attack_forest
 
 
 def current_programme() -> Programme:
@@ -33,7 +33,7 @@ def current_programme() -> Programme:
     Manager's ``Save Selected Programme`` tool at run start
     (``squad/programme_manager/__init__.py``). Every downstream agent
     and every ``@cyber_tool``-wrapped tool that takes a typed-target
-    field (``Hostname`` / ``Endpoint``) sources its Programme through
+    field (``FQDN`` / ``Endpoint``) sources its Programme through
     this function rather than hitting the H1 API again: the workspace
     snapshot is the contract.
 
@@ -72,7 +72,7 @@ class _ReadRunFileArgs(BaseModel):
         description=(
             "Path of the artefact to read, relative to the current run"
             " directory (e.g. ``recon.json``, ``findings.json``,"
-            " ``attack_plan.json``). Absolute paths and any segment"
+            " ``attack_forest.json``). Absolute paths and any segment"
             " containing ``..`` are rejected by the workspace layer; the"
             " agent should pass the bare filename a finalise tool returned"
             " (or one List Run Files surfaced). A wrong ``relative_path``"
@@ -92,23 +92,23 @@ def read_run_file_tool(relative_path: str) -> RunFileContent:
     return RunFileContent(**workspace.read_run_file(relative_path))
 
 
-class _ReadAttackPlanArgs(BaseModel):
+class _ReadAttackForestArgs(BaseModel):
     """Explicit args_schema for the Read Attack Plan tool.
 
     The tool takes no parameters - the attack plan path is resolved
-    from ``runtime.run_dir()`` via ``attack_plan_path()`` at call
+    from ``runtime.run_dir()`` via ``attack_forest_path()`` at call
     time. The empty schema is still declared so the closed-world
     contract test in each consuming agent's ``test_args_schemas.py``
     accounts for the tool.
     """
 
 
-@cyber_tool("Read Attack Plan", args_schema=_ReadAttackPlanArgs)
-def read_attack_plan_tool() -> AttackPlan:
+@cyber_tool("Read Attack Plan", args_schema=_ReadAttackForestArgs)
+def read_attack_forest_tool() -> AttackForest:
     """Load the Vulnerability Researcher's typed attack plan from
-    ``attack_plan.json`` in the current run directory.
+    ``attack_forest.json`` in the current run directory.
 
-    Returns the typed ``AttackPlan`` with ``programme_handle``, ``drafted_at``,
+    Returns the typed ``AttackForest`` with ``programme_handle``, ``drafted_at``,
     and ``items`` - each item carrying ``probe``, ``target``,
     ``expected_ceiling``, ``rationale``, and ``recon_evidence``. Use this in
     preference to Read Run File on the same artefact: this tool deserialises
@@ -117,4 +117,4 @@ def read_attack_plan_tool() -> AttackPlan:
 
     Raises if no attack plan exists yet for the current run.
     """
-    return load_attack_plan(attack_plan_path())
+    return load_attack_forest(attack_forest_path())
