@@ -1,6 +1,6 @@
 ---
 name: recon-flow
-description: How the OSINT Analyst works the surface after the initial sweep - sweep first, then pivot with judgement using Lookup IP Assets, Lookup RDAP for ASN, and Deep Scan Host. Activate when the sweep is done and you are deciding whether a host, IP, or ASN is worth a follow-up lookup or a deeper scan, or when an engagement's posture should hold you back.
+description: How the OSINT Analyst works the surface after the initial sweep - sweep first, then pivot with judgement using Lookup IP Assets, Lookup RDAP for ASN, and Discover Host Services. Activate when the sweep is done and you are deciding whether a host, IP, or ASN is worth a follow-up lookup or a deeper scan, or when an engagement's posture should hold you back.
 ---
 
 # Recon flow: sweep first, then pivot
@@ -18,7 +18,7 @@ Always sweep before you pivot. The pivot tools take inputs the sweep
 produced - the IPs behind in-scope hosts, an ASN read off an enriched
 IP, the open-port map for one host. Reaching for a pivot before the
 sweep means you have nothing grounded to feed it. Inspect the sweep
-with Recon Subdomains / Recon Endpoints / Recon Open Ports first, then
+with List Subdomains / List Endpoints / List Open Ports first, then
 decide where a thread is worth pulling.
 
 ## When to enrich an IP - Lookup IP Assets
@@ -59,9 +59,9 @@ autonomous system itself, not one address in it:
 Pass the ASN as the bare number you read off an enriched IP. A miss
 returns nothing and you move on - not every AS has a clean record.
 
-## When to deep-scan - Deep Scan Host
+## When to deep-scan - Discover Host Services
 
-Deep Scan Host runs a focused service / version scan against one host's
+Discover Host Services runs a focused service / version scan against one host's
 known-open ports. The sweep's port scan tells you *which* ports are
 open; this tells you *what is listening* on them - service names,
 version banners, the technology behind a port.
@@ -69,7 +69,7 @@ version banners, the technology behind a port.
 Reach for it when the sweep's open-port map shows a non-HTTP service on
 an in-scope host: a database port, an SSH / RDP / SMTP banner, a
 message-queue or admin port worth fingerprinting. The HTTP surface is
-already covered - Probe FQDNs and the sweep's httpx pass fingerprint
+already covered - Discover Webpages and the sweep's httpx pass fingerprint
 web technology, so a plain web host rarely needs this. Pass the ports
 the sweep already found open; the scan focuses on exactly those rather
 than re-sweeping.
@@ -86,7 +86,7 @@ particular puts focused traffic on a host. Match the depth to the
 engagement:
 
 - A programme that forbids scanning, or limits you to manual testing,
-  rules out Deep Scan Host entirely - the same scope and policy
+  rules out Discover Host Services entirely - the same scope and policy
   discipline that governs the sweep governs the pivots.
 - A stealthy posture means the sweep itself already ran quieter; hold
   the deep scan for the few hosts where the payoff is clear rather than

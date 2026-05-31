@@ -29,25 +29,6 @@ class TestParseXml:
         assert ssh_svc.version == "7.6p1"
         assert ssh_svc.extra_info == "Ubuntu"
 
-    def test_emits_typed_technologies_from_banners(self, nmap_xml_two_hosts):
-        results = _parse_xml(nmap_xml_two_hosts)
-        # nginx + OpenSSH are in the seed catalogue; the parser routes
-        # them through coerce_technologies and lands typed Technology
-        # rows on the result.
-        nginx_host = next(r for r in results if r.host == "93.184.216.34")
-        names = {t.name for t in nginx_host.detected_technologies}
-        assert "nginx" in names
-        assert "openssh" in names
-
-    def test_redis_falls_back_to_service_name(self, nmap_xml_two_hosts):
-        # Second host has only a service name (no product banner). The
-        # parser falls back to the service name as the coerce input,
-        # which is enough to land Redis as a typed Technology.
-        results = _parse_xml(nmap_xml_two_hosts)
-        redis_host = next(r for r in results if r.host == "93.184.216.35")
-        names = {t.name for t in redis_host.detected_technologies}
-        assert "redis" in names
-
     def test_empty_xml_returns_empty(self):
         assert _parse_xml("") == []
 
@@ -114,6 +95,36 @@ class TestParseXml:
             "</nmaprun>"
         )
         assert _parse_xml(xml) == []
+
+    def test_captures_application_cpe_from_service(self):
+        # nmap emits one or more <cpe> children per service; the parser
+        # captures the application CPE, normalised to the 2.3 formatted
+        # string, on NmapService.cpe (preferring it over the host-OS CPE).
+        xml = (
+            "<?xml version='1.0'?><nmaprun>"
+            '<host><address addr="1.1.1.1" addrtype="ipv4"/>'
+            '<ports><port protocol="tcp" portid="22">'
+            '<state state="open"/>'
+            '<service name="ssh" product="OpenSSH" version="7.4">'
+            "<cpe>cpe:/o:linux:linux_kernel</cpe>"
+            "<cpe>cpe:/a:openbsd:openssh:7.4</cpe>"
+            "</service></port></ports>"
+            "</host></nmaprun>"
+        )
+        results = _parse_xml(xml)
+        assert results[0].services[0].cpe == "cpe:2.3:a:openbsd:openssh:7.4:*:*:*:*:*:*:*"
+
+    def test_cpe_is_none_when_service_emits_no_cpe(self):
+        # A service-name-only row (no -sV banner, no <cpe>) leaves cpe None.
+        xml = (
+            "<?xml version='1.0'?><nmaprun>"
+            '<host><address addr="1.1.1.1" addrtype="ipv4"/>'
+            '<ports><port protocol="tcp" portid="22">'
+            '<state state="open"/><service name="ssh"/></port></ports>'
+            "</host></nmaprun>"
+        )
+        results = _parse_xml(xml)
+        assert results[0].services[0].cpe is None
 
     def test_skips_port_with_non_numeric_portid(self):
         xml = (

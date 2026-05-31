@@ -5,8 +5,8 @@ NDJSON line becomes one ``Endpoint``. Mode controls which fields the
 parser pulls off the JSON object:
 
 * ``LIVE``: ``url`` + ``status_code`` only.
-* ``TECH_DETECT``: + ``tech`` -> ``technologies`` /
-  ``detected_technologies``.
+* ``TECH_DETECT``: + ``tech`` -> ``technologies`` (the raw httpx
+  tech-detect strings, the detecting tool's own vocabulary).
 * ``WEB_INVENTORY``: + ``favicon`` + ``tls.subject_alt_names`` ->
   ``favicon_hash`` / ``tls_sans``.
 
@@ -26,7 +26,6 @@ from urllib.parse import urlparse
 
 from models.asset import Endpoint, TLSCertificate
 from models.scanner import HttpxMode
-from tools.recon.technology import coerce_technologies
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +106,6 @@ def _parse_ndjson(stdout: str, mode: HttpxMode) -> list[Endpoint]:
                 url=entry.get("url", ""),
                 status_code=entry.get("status_code"),
                 technologies=raw_tech,
-                detected_technologies=coerce_technologies(raw_tech),
                 favicon_hash=favicon if isinstance(favicon, str) else None,
                 tls_sans=sans_filtered,
             )
@@ -121,7 +119,6 @@ def _parse_ndjson(stdout: str, mode: HttpxMode) -> list[Endpoint]:
                     url=entry.get("url", ""),
                     status_code=entry.get("status_code"),
                     technologies=raw_tech,
-                    detected_technologies=coerce_technologies(raw_tech),
                 )
             except ValueError as exc2:
                 logger.debug("httpx row skipped: %s", exc2)

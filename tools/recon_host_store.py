@@ -28,7 +28,7 @@ from pathlib import Path
 from pydantic import TypeAdapter
 
 import runtime
-from models import HostInsight, HostScore, RawFinding, TLSCertificate
+from models import HostInsight, HostScore, RawFinding, Service, TLSCertificate
 from models.primitives import FQDN
 
 _HOSTS_SUBDIR = "hosts"
@@ -133,6 +133,7 @@ def load_tls_certificates() -> list[TLSCertificate]:
 # typed boundary (the #45 amass-read side validates the same way).
 _HOST_FINDINGS = TypeAdapter(list[RawFinding])
 _HOST_PORTS = TypeAdapter(list[int])
+_HOST_SERVICES = TypeAdapter(list[Service])
 
 
 def host_score_path(hostname: FQDN) -> Path:
@@ -225,6 +226,33 @@ def load_host_ports(hostname: FQDN) -> list[int]:
     return _HOST_PORTS.validate_json(path.read_text(encoding="utf-8"))
 
 
+def services_path(hostname: FQDN) -> Path:
+    """Per-host services file: ``<host_dir>/services.json``."""
+    return host_dir(hostname) / "services.json"
+
+
+def save_host_services(hostname: FQDN, services: list[Service]) -> Path:
+    """Persist a host's ``Service`` assets to ``hosts/<host>/services.json``.
+
+    The OAM ``Service``-asset facet of the host node: one open service per
+    row, each carrying its banner detail, the NIST CPE nmap matched, and
+    the detecting tool. The on-disk form of what #45 upserts as amass
+    Service nodes hanging off the FQDN.
+    """
+    path = services_path(hostname)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(_HOST_SERVICES.dump_json(services, indent=2))
+    return path
+
+
+def load_host_services(hostname: FQDN) -> list[Service]:
+    """Load a host's ``Service`` assets; empty when none were written."""
+    path = services_path(hostname)
+    if not path.is_file():
+        return []
+    return _HOST_SERVICES.validate_json(path.read_text(encoding="utf-8"))
+
+
 __all__ = [
     "findings_path",
     "host_dir",
@@ -233,6 +261,7 @@ __all__ = [
     "load_host_findings",
     "load_host_ports",
     "load_host_scores",
+    "load_host_services",
     "load_insights",
     "load_tls_certificates",
     "notes_path",
@@ -241,7 +270,9 @@ __all__ = [
     "save_host_notes",
     "save_host_ports",
     "save_host_score",
+    "save_host_services",
     "save_insight",
     "save_tls_certificate",
+    "services_path",
     "tls_path",
 ]

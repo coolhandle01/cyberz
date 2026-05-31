@@ -22,7 +22,6 @@ from models.finding import RawFinding
 from models.h1 import Programme
 from models.network import AsnRecord, RdapRecord
 from models.primitives import FQDN, HttpUrl, IPAddress
-from models.technology import Technology
 
 
 class Endpoint(BaseModel):
@@ -36,28 +35,20 @@ class Endpoint(BaseModel):
     audit. See ``models/primitives._validate_endpoint_url`` for the
     full contract.
 
-    Two technology channels coexist:
+    ``technologies`` is the raw httpx ``-tech-detect`` output
+    (Wappalyzer-shape strings like ``"Django:4.2"``) - the detecting
+    tool's own vocabulary, kept verbatim. We classify nothing and
+    maintain no catalogue: the tool's string is the identifier. The
+    raw strings populate at probe time in ``tools.recon.httpx.httpx_scan``.
 
-    * ``technologies`` is the **raw** httpx ``-tech-detect`` output
-      (Wappalyzer-shape strings like ``"Django:4.2"``). Free-text; the
-      historical surface every existing consumer already reads.
-    * ``detected_technologies`` is the **typed** channel - the same
-      signal coerced into ``list[Technology]`` via
-      ``tools.recon.technology.coerce_technologies``. The VR / PT
-      should prefer this for pattern-matching; ``technologies`` stays
-      for prose docstring vocabulary and back-compat.
-
-    Both populate at probe time in ``tools.recon.httpx.httpx_scan``.
-    Coverage of the typed channel is bounded by the recon-side
-    catalogue (``tools/recon/technology.py:_CATALOGUE``); unmapped raw
-    strings stay in ``technologies`` but do not appear in
-    ``detected_technologies``.
+    (Web technologies carry no CPE - httpx emits names, not CPEs - so
+    they stay as strings here. nmap-discovered services carry their
+    NIST CPE on the ``Service`` asset instead.)
     """
 
     url: HttpUrl
     status_code: int | None = None
     technologies: list[str] = Field(default_factory=list)
-    detected_technologies: list[Technology] = Field(default_factory=list)
     parameters: list[str] = Field(default_factory=list)
 
     # Favicon hash (MMH3 of the favicon bytes) emitted by httpx's
@@ -229,9 +220,17 @@ class Service(BaseModel):
     * ``name`` / ``product`` / ``version`` / ``extra_info`` ->
       ``SimpleProperty`` values on the Service node (the service-banner
       detail ``-sV`` recovered).
-    * ``technologies`` -> the same ``SimpleProperty`` / ``VulnProperty``
-      group ``Technology`` already projects (see ``models/technology.py``),
-      attached to the Service rather than the host.
+    * ``cpe`` -> a ``SimpleProperty`` carrying the NIST CPE 2.3 identifier
+      nmap matched - the authoritative product key (it encodes
+      vendor:product:version directly) the VR's CVE lookup queries NVD with.
+    * ``detected_by`` -> a ``SourceProperty`` naming the tool that observed
+      the service. Provenance is OAM's source-attribution slot, stamped on
+      every asset we upsert.
+
+    There is deliberately no separate ``Technology`` rows on a Service: the
+    service's own ``product`` / ``version`` / ``cpe`` *is* the technology.
+    Classification is not our job (we maintain no catalogue); the CPE is the
+    authoritative identity.
 
     OAM is a *presence* graph: a ``Service`` exists in the model only
     when the scan actually observed an open service. A host that is down,
@@ -249,17 +248,32 @@ class Service(BaseModel):
     # from the scanner layer's ``NmapService`` at the OA tool boundary.
     # Defence: each field carries the same boundary length cap as its
     # ``NmapService`` source so a malformed banner cannot smuggle a large
-    # injection across the OA -> PT handoff; the translation also
-    # normalises tech detail into the typed ``technologies`` rows below.
+    # injection across the OA -> PT handoff.
     name: str | None = Field(default=None, max_length=64)  # nmap "service" field
     product: str | None = Field(default=None, max_length=128)
     version: str | None = Field(default=None, max_length=64)
     extra_info: str | None = Field(default=None, max_length=255)
 
-    # Typed tech rows derived from the service banner via the recon-side
-    # ``coerce_technologies`` coercer - the per-service slice of what
-    # ``NmapHostResult.detected_technologies`` carries host-wide.
-    technologies: list[Technology] = Field(default_factory=list)
+    # CPE 2.3 identifier nmap matched for this service (normalised from its
+    # ``<cpe>`` 2.2 URI output via ``tools.cpe``). The authoritative product
+    # key: it encodes vendor:product:version and is what the VR's CVE lookup
+    # queries NVD against. ``None`` when nmap matched no CPE. A cybersquad
+    # extension to the OAM Service asset, persisted as a ``SimpleProperty``.
+    #
+    # FIXME(#45 / amass-integration): promote to a typed ``Cpe`` primitive in
+    # ``models.primitives`` once the CVE-lookup workflow lands - cpe sits on
+    # two fields (here + ``NmapService.cpe``), the multi-field threshold the
+    # cybersquad-models skill sets for a primitive; deferred alongside the
+    # existing ``CvssVector`` / ``CweId`` primitive plans.
+    cpe: str | None = Field(default=None, max_length=255)
+
+    # The tool that observed this service ("nmap"). OAM's ``SourceProperty``:
+    # provenance stamped on every asset we upsert. A tool-named closed
+    # vocabulary (not free text from an external source), so no injection
+    # guard needed; length-capped defensively. Mirrors the existing
+    # ``RawFinding.tool`` provenance field - a shared ``DetectionTool``
+    # StrEnum is the natural promotion once this lands on more asset types.
+    detected_by: str | None = Field(default=None, max_length=32)
 
 
 class TLSCertificate(BaseModel):
