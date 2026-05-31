@@ -10,6 +10,8 @@ from models import (
     HostPriority,
     HostRole,
     HostScore,
+    Product,
+    ProductRelease,
     RawFinding,
     Relation,
     RelationType,
@@ -23,16 +25,22 @@ from tools.recon_host_store import (
     insight_path,
     load_host_findings,
     load_host_ports,
+    load_host_product_releases,
+    load_host_products,
     load_host_relations,
     load_host_scores,
     load_host_urls,
     load_insights,
     load_tls_certificates,
     ports_path,
+    product_releases_path,
+    products_path,
     relations_path,
     save_host_findings,
     save_host_notes,
     save_host_ports,
+    save_host_product_releases,
+    save_host_products,
     save_host_relations,
     save_host_score,
     save_host_urls,
@@ -58,6 +66,24 @@ class TestUrlPersistence:
 
     def test_load_missing_returns_empty(self, run_dir, target_apex):
         assert load_host_urls(f"ghost.{target_apex}") == []
+
+
+class TestProductPersistence:
+    def test_products_round_trip(self, run_dir, target_apex):
+        host = f"api.{target_apex}"
+        path = save_host_products(host, [Product(name="nginx")])
+        assert path == products_path(host)
+        assert [p.name for p in load_host_products(host)] == ["nginx"]
+
+    def test_product_releases_round_trip(self, run_dir, target_apex):
+        host = f"api.{target_apex}"
+        path = save_host_product_releases(host, [ProductRelease(name="nginx 1.25.3")])
+        assert path == product_releases_path(host)
+        assert [r.name for r in load_host_product_releases(host)] == ["nginx 1.25.3"]
+
+    def test_load_missing_returns_empty(self, run_dir, target_apex):
+        assert load_host_products(f"ghost.{target_apex}") == []
+        assert load_host_product_releases(f"ghost.{target_apex}") == []
 
 
 class TestRelationPersistence:

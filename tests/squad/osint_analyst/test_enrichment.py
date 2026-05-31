@@ -171,10 +171,15 @@ class TestDeepScanHost:
     def test_runs_service_version_scan_and_persists_services(
         self, invoke_tool, programme_in_workspace, target_apex, monkeypatch
     ) -> None:
-        """The wrapper runs nmap in SERVICE_VERSION mode, translates the
-        open services into OAM ``Service`` assets (with CPE + provenance),
-        and writes them to the host's ``services.json``."""
-        from tools.recon_host_store import load_host_services
+        """The wrapper runs nmap in SERVICE_VERSION mode, decomposes the open
+        services into the OAM subgraph (Service + Product / ProductRelease +
+        port / product_used edges), and writes each facet to the host dir."""
+        from tools.recon_host_store import (
+            load_host_product_releases,
+            load_host_products,
+            load_host_relations,
+            load_host_services,
+        )
 
         host = f"api.{target_apex}"
         host_result = NmapHostResult(
@@ -212,20 +217,21 @@ class TestDeepScanHost:
         assert captured_kwargs["scripts"] == NmapScripts.DEFAULT
         assert captured_kwargs["ports"] == [22, 443]
 
-        # Returns OAM Service assets - only the OPEN service, with CPE +
-        # provenance; the filtered port is dropped.
-        assert [s.port for s in result] == [22]
+        # Returns OAM Service assets - only the OPEN service; the filtered
+        # port is dropped. host:port is the id; the banner is in attributes.
+        assert [s.id for s in result] == [f"{host}:22/tcp"]
         svc = result[0]
         assert isinstance(svc, Service)
-        assert svc.host == host
-        assert svc.product == "OpenSSH"
-        assert svc.cpe == "cpe:2.3:a:openbsd:openssh:7.4:*:*:*:*:*:*:*"
-        assert svc.detected_by == "nmap"
+        assert svc.type == "ssh"
+        assert svc.attributes["product"] == ["OpenSSH"]
+        assert svc.attributes["cpe"] == ["cpe:2.3:a:openbsd:openssh:7.4:*:*:*:*:*:*:*"]
 
-        # ... and persisted to the host's services.json
-        persisted = load_host_services(host)
-        assert [s.port for s in persisted] == [22]
-        assert persisted[0].cpe == "cpe:2.3:a:openbsd:openssh:7.4:*:*:*:*:*:*:*"
+        # ... and persisted: the Service facet, the Product / ProductRelease
+        # the CPE decomposed to, and the port / product_used edges.
+        assert [s.id for s in load_host_services(host)] == [f"{host}:22/tcp"]
+        assert [p.name for p in load_host_products(host)] == ["openssh"]
+        assert [r.name for r in load_host_product_releases(host)] == ["openssh 7.4"]
+        assert {r.label for r in load_host_relations(host)} == {"port", "product_used"}
 
     def test_returns_empty_when_nmap_finds_nothing(
         self, invoke_tool, programme_in_workspace, target_apex, monkeypatch

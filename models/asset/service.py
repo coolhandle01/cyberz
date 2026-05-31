@@ -2,21 +2,20 @@
 models.asset.service - the OAM ``Service`` / ``Product`` / ``ProductRelease``
 assets.
 
-The open-network-service asset the OA's deep-scan pass emits, plus the
-product line and version-specific release the ``Service.product_used`` edge
-points at (and the spec-proper anchor a ``VulnProperty`` hangs off).
+The OAM ``Service`` asset the OA's deep-scan pass emits, plus the product
+line and version-specific release the ``product_used`` edge points at (and
+the spec-proper anchor a ``VulnProperty`` hangs off).
 
-OAM assets:
+OAM assets (modelled field-for-field):
 * ``Service`` <https://owasp-amass.github.io/docs/open_asset_model/assets/service/>
 * ``Product`` <https://owasp-amass.github.io/docs/open_asset_model/assets/product/>
 * ``ProductRelease``
   <https://owasp-amass.github.io/docs/open_asset_model/assets/product_release/>
 
-Fidelity note: our ``Service`` is the cybersquad nmap-banner shape (host /
-port / product / version / cpe). It maps to the OAM ``Service`` *concept* but
-is not field-identical to the spec struct (``unique_id`` / ``service_type`` /
-``output`` / ``attributes``) - the CPE-keyed product detail is what the VR's
-CVE workflow keys on.
+nmap's host:port becomes the ``port`` relation (host -> Service) and its CPE
+is decomposed into ``Product`` / ``ProductRelease`` assets linked by a
+``product_used`` relation - none of that lives on the ``Service`` struct,
+faithful to OAM. The decomposition runs in ``tools/recon/nmap/service.py``.
 """
 
 from __future__ import annotations
@@ -24,89 +23,54 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 from models.asset.property import VulnProperty
-from models.primitives import FQDN, IPAddress
 
 
 class Service(BaseModel):
-    """The cybersquad shape that maps to amass's ``Service`` asset.
+    """The cybersquad shape that maps to amass's OAM ``Service`` asset.
 
-    One open network service on a single host:port, as the OSINT
-    Analyst's deep-scan pass (a focused nmap ``-sC -sV`` against a host's
-    known-open ports) observes it. The OAM-vernacular counterpart to the
-    scanner-internal ``NmapService`` (``models/scanner.py``): where
-    ``NmapService`` mirrors nmap's raw ``<port>`` / ``<service>`` XML,
-    ``Service`` is the asset-graph shape the OA emits for downstream
-    agents - the rich sibling of ``OpenPortsMap``, which carries bare
-    port numbers only.
+    One network-accessible service the OSINT Analyst's deep-scan pass (a
+    focused nmap ``-sV`` against a host's open ports) observed. Mirrors
+    amass's ``Service`` field for field (OAM json tag in parentheses):
 
-    When amass lands (#45), each ``Service`` becomes one amass
-    ``Service`` asset node related to its host's ``FQDN`` / ``IPAddress``
-    asset:
+    * ``id`` (``unique_id``) -> the service's stable identity. cybersquad
+      synthesises it as ``<host>:<port>/<protocol>``.
+    * ``type`` (``service_type``) -> the service kind nmap named ("http",
+      "ssh", ...).
+    * ``output`` (``output``) -> the service-detection banner text.
+    * ``output_length`` (``output_length``) -> ``len(output)``.
+    * ``attributes`` (``attributes``) -> the remaining nmap banner fields as
+      a key -> values map (``product`` / ``version`` / ``cpe``).
 
-    * ``host`` + ``port`` -> the Service asset's identity and the
-      ``port`` edge from the host asset.
-    * ``name`` / ``product`` / ``version`` / ``extra_info`` ->
-      ``SimpleProperty`` values on the Service node (the service-banner
-      detail ``-sV`` recovered).
-    * ``cpe`` -> a ``SimpleProperty`` carrying the NIST CPE 2.3 identifier
-      nmap matched - the authoritative product key (it encodes
-      vendor:product:version directly) the VR's CVE lookup queries NVD with.
-    * ``detected_by`` -> a ``SourceProperty`` naming the tool that observed
-      the service. Provenance is OAM's source-attribution slot, stamped on
-      every asset we upsert.
+    The service's host:port is *not* a field - it is the ``port`` relation
+    (host -> Service) in ``relations.json``. The product / version / CPE are
+    not fields either - nmap's CPE is decomposed into ``Product`` /
+    ``ProductRelease`` assets linked by a ``product_used`` relation, and the
+    CPE keys the CVE lookup whose ``VulnProperty`` results hang off the
+    release; ``attributes`` keeps the raw nmap values for provenance.
 
-    There is deliberately no separate ``Technology`` rows on a Service: the
-    service's own ``product`` / ``version`` / ``cpe`` *is* the technology.
-    Classification is not our job (we maintain no catalogue); the CPE is the
-    authoritative identity.
-
-    OAM is a *presence* graph: a ``Service`` exists in the model only
-    when the scan actually observed an open service. A host that is down,
-    or alive with nothing listening, contributes zero ``Service`` nodes -
-    absence carries "nothing here", so there is deliberately no
-    down / filtered / closed state on this shape (that lives in the
-    scanner layer's ``NmapService.state``, below the OA boundary).
+    OAM is a *presence* graph: a ``Service`` exists only where the scan
+    observed an open service - a filtered / closed port is absence, not a
+    node.
     """
 
-    host: FQDN | IPAddress
-    port: int = Field(ge=1, le=65535)
-    protocol: str = Field(max_length=8)  # "tcp" / "udp"
+    id: str = Field(min_length=1, max_length=255)  # unique_id ("<host>:<port>/<proto>")
+    type: str = Field(default="", max_length=64)  # service_type ("http" / "ssh")
 
-    # Tool-captured from nmap's service-version (-sV) output, translated
-    # from the scanner layer's ``NmapService`` at the OA tool boundary.
-    # Defence: each field carries the same boundary length cap as its
-    # ``NmapService`` source so a malformed banner cannot smuggle a large
-    # injection across the OA -> PT handoff.
-    name: str | None = Field(default=None, max_length=64)  # nmap "service" field
-    product: str | None = Field(default=None, max_length=128)
-    version: str | None = Field(default=None, max_length=64)
-    extra_info: str | None = Field(default=None, max_length=255)
+    # Tool-captured nmap service-detection banner. Defence (cybersquad-models
+    # skill, tool-captured text): length-capped at the boundary; it flows to
+    # the asset graph and the human-facing report, not re-issued to an LLM as
+    # instruction context.
+    output: str = Field(default="", max_length=2048)  # output
+    output_length: int = Field(default=0, ge=0)  # output_length
 
-    # CPE 2.3 identifier nmap matched for this service (normalised from its
-    # ``<cpe>`` 2.2 URI output via ``tools.cpe``). The authoritative product
-    # key: it encodes vendor:product:version and is what the VR's CVE lookup
-    # queries NVD against. ``None`` when nmap matched no CPE. A cybersquad
-    # extension to the OAM Service asset, persisted as a ``SimpleProperty``.
-    #
-    # FIXME(#45 / amass-integration): promote to a typed ``Cpe`` primitive in
-    # ``models.primitives`` once the CVE-lookup workflow lands - cpe sits on
-    # two fields (here + ``NmapService.cpe``), the multi-field threshold the
-    # cybersquad-models skill sets for a primitive; deferred alongside the
-    # existing ``CvssVector`` / ``CweId`` primitive plans.
-    cpe: str | None = Field(default=None, max_length=255)
+    # The remaining nmap banner fields, OAM's key -> values bag (product /
+    # version / cpe). Tool-captured: same defence posture as ``output`` - the
+    # values are nmap output, read as data, never fed back as instructions.
+    attributes: dict[str, list[str]] = Field(default_factory=dict)  # attributes
 
-    # The tool that observed this service ("nmap"). OAM's ``SourceProperty``:
-    # provenance stamped on every asset we upsert. A tool-named closed
-    # vocabulary (not free text from an external source), so no injection
-    # guard needed; length-capped defensively. Mirrors the existing
-    # ``RawFinding.tool`` provenance field - a shared ``DetectionTool``
-    # StrEnum is the natural promotion once this lands on more asset types.
-    detected_by: str | None = Field(default=None, max_length=32)
-
-    # OAM ``VulnProperty`` annotations hung off this service asset - the
-    # known vulnerabilities the VR / OA attributed to it, typically an NVD
-    # CVE matched against the service's ``cpe`` (the authoritative product
-    # key) or product / version. Additive and default-empty.
+    # OAM ``VulnProperty`` annotations hung off this service. Additive and
+    # default-empty; service-level CVEs land here, product-version CVEs on the
+    # related ``ProductRelease``.
     vulns: list[VulnProperty] = Field(default_factory=list)
 
 

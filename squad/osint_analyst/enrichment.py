@@ -28,7 +28,12 @@ from tools.recon.ip_asset import compose_ip_assets
 from tools.recon.nmap import nmap_scan, services_from_nmap
 from tools.recon.rdap import lookup_rdap_for_asn
 from tools.recon.scope import TargetFQDN
-from tools.recon_host_store import save_host_services
+from tools.recon_host_store import (
+    save_host_product_releases,
+    save_host_products,
+    save_host_relations,
+    save_host_services,
+)
 
 
 class _LookupIpAssetsArgs(BaseModel):
@@ -150,13 +155,14 @@ def discover_host_services_tool(host: FQDN, ports: list[int]) -> list[Service]:
     the HTTP surface is already covered by ``Discover Webpages`` / httpx.
 
     Returns the host's open ``Service`` assets (one per open port nmap
-    fingerprinted), each carrying its banner detail, the NIST CPE nmap
-    matched, and ``detected_by="nmap"``. Empty list when nmap found
-    nothing (host down / scan blocked) - the OA always gets a typed
-    result back. The services are also written to the host's
-    ``services.json`` so the finalised recon (and the future amass
-    upsert) carry them; the raw nmap XML is not persisted - this is a
-    focused pivot, not an evidence artefact.
+    fingerprinted), each carrying its banner in ``output`` / ``attributes``.
+    Empty list when nmap found nothing (host down / scan blocked) - the OA
+    always gets a typed result back. Alongside the return, the full OAM
+    subgraph is written to the host directory: ``services.json``, the
+    ``products.json`` / ``product_releases.json`` nmap's CPEs decomposed to,
+    and the ``port`` / ``product_used`` edges in ``relations.json`` - the
+    on-disk form of what #45 upserts. The raw nmap XML is not persisted -
+    this is a focused pivot, not an evidence artefact.
     """
     result = nmap_scan(
         [host],
@@ -170,13 +176,21 @@ def discover_host_services_tool(host: FQDN, ports: list[int]) -> list[Service]:
         # nmap surfaced no row for the queried host (down / blocked /
         # parse miss) - fall back to the first row if any, else nothing.
         host_result = result.hosts[0] if result.hosts else None
-    services = services_from_nmap(host_result) if host_result is not None else []
-    if services:
-        # Persist the Service-asset facet to the host's directory - the
-        # on-disk form of what #45 upserts as amass Service nodes. Skip
-        # the write when empty (presence graph: no services -> no node).
-        save_host_services(host, services)
-    return services
+    if host_result is None:
+        return []
+    assets = services_from_nmap(host_result)
+    # Persist each OAM facet to the host directory - the on-disk form of what
+    # #45 upserts (assets + their attached properties) and inserts
+    # (relations.json edges). Presence graph: skip the empty writes.
+    if assets.services:
+        save_host_services(host, assets.services)
+    if assets.products:
+        save_host_products(host, assets.products)
+    if assets.product_releases:
+        save_host_product_releases(host, assets.product_releases)
+    if assets.relations:
+        save_host_relations(host, assets.relations)
+    return assets.services
 
 
 __all__ = [

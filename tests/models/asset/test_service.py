@@ -12,79 +12,59 @@ pytestmark = pytest.mark.unit
 
 class TestService:
     def test_minimal_record(self):
-        # host + port + protocol is the floor; the -sV banner fields, the
-        # CPE and the detection-tool provenance populate only when the scan
-        # recovered them.
+        # id is the only floor; type / output / attributes populate as the
+        # nmap service-detection pass recovers them.
+        svc = Service(id="8.8.8.8:443/tcp")
+        assert svc.id == "8.8.8.8:443/tcp"
+        assert svc.type == ""
+        assert svc.output == ""
+        assert svc.attributes == {}
+        assert svc.vulns == []
 
-        svc = Service(host="8.8.8.8", port=443, protocol="tcp")
-        assert svc.host == "8.8.8.8"
-        assert svc.port == 443
-        assert svc.name is None
-        assert svc.product is None
-        assert svc.cpe is None
-        assert svc.detected_by is None
-
-    def test_carries_cpe_and_provenance(self, target_apex):
-        # The OA-boundary translation stamps the NIST CPE nmap matched and
-        # the detecting tool onto the Service - no separate Technology rows;
-        # the service's own product / version / cpe IS the technology.
+    def test_carries_banner_in_output_and_attributes(self, target_apex):
+        # host:port -> id; the nmap banner detail -> output / attributes (the
+        # product / version / cpe become Product / ProductRelease assets via
+        # the producer, not Service fields).
         svc = Service(
-            host=f"api.{target_apex}",
-            port=443,
-            protocol="tcp",
-            name="http",
-            product="nginx",
-            version="1.25.3",
-            cpe="cpe:2.3:a:nginx:nginx:1.25.3:*:*:*:*:*:*:*",
-            detected_by="nmap",
+            id=f"api.{target_apex}:443/tcp",
+            type="http",
+            output="nginx 1.25.3 (Ubuntu)",
+            output_length=len("nginx 1.25.3 (Ubuntu)"),
+            attributes={
+                "product": ["nginx"],
+                "version": ["1.25.3"],
+                "cpe": ["cpe:2.3:a:nginx:nginx:1.25.3:*:*:*:*:*:*:*"],
+            },
         )
-        assert svc.product == "nginx"
-        assert svc.cpe == "cpe:2.3:a:nginx:nginx:1.25.3:*:*:*:*:*:*:*"
-        assert svc.detected_by == "nmap"
+        assert svc.type == "http"
+        assert svc.attributes["cpe"] == ["cpe:2.3:a:nginx:nginx:1.25.3:*:*:*:*:*:*:*"]
 
     def test_serialise_roundtrip(self):
-
-        original = Service(host="1.1.1.1", port=53, protocol="udp", name="domain")
+        original = Service(id="1.1.1.1:53/udp", type="domain", attributes={"product": ["dnsmasq"]})
         restored = Service.model_validate_json(original.model_dump_json())
-        assert restored.host == "1.1.1.1"
-        assert restored.port == 53
-        assert restored.name == "domain"
+        assert restored.id == "1.1.1.1:53/udp"
+        assert restored.attributes == {"product": ["dnsmasq"]}
 
-    def test_rejects_out_of_range_port(self):
-
+    def test_rejects_empty_id(self):
         with pytest.raises(ValidationError):
-            Service(host="8.8.8.8", port=70000, protocol="tcp")
+            Service(id="")
 
-    def test_rejects_malformed_host(self):
-        # The FQDN | IPAddress union rejects a URL-shaped host upstream of
-        # any graph emission, the same boundary FQDN enforces elsewhere.
-
+    def test_rejects_oversize_output(self):
+        # The max_length cap on the tool-captured banner is the boundary
+        # defence against an outsize injection riding a malformed banner.
         with pytest.raises(ValidationError):
-            Service(host="https://evil.test/x", port=443, protocol="tcp")
-
-    def test_rejects_oversize_banner(self):
-        # The max_length cap on the tool-captured banner fields is the
-        # boundary defence against an outsize injection riding a malformed
-        # service banner across the OA -> PT handoff.
-
-        with pytest.raises(ValidationError):
-            Service(host="8.8.8.8", port=443, protocol="tcp", product="x" * 129)
+            Service(id="h:1/tcp", output="x" * 2049)
 
     def test_carries_vulns(self, target_apex):
         svc = Service(
-            host=f"api.{target_apex}",
-            port=443,
-            protocol="tcp",
-            cpe="cpe:2.3:a:nginx:nginx:1.25.3:*:*:*:*:*:*:*",
+            id=f"api.{target_apex}:443/tcp",
             vulns=[VulnProperty(id="CVE-2021-23017", source="nvd", enumeration="CVE")],
         )
         assert svc.vulns[0].id == "CVE-2021-23017"
 
-    def test_roundtrip_preserves_vulns(self, target_apex):
+    def test_roundtrip_preserves_vulns(self):
         svc = Service(
-            host=f"api.{target_apex}",
-            port=8080,
-            protocol="tcp",
+            id="api:8080/tcp",
             vulns=[VulnProperty(id="CVE-2022-22965", enumeration="CVE")],
         )
         restored = Service.model_validate_json(svc.model_dump_json())

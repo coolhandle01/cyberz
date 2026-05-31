@@ -28,7 +28,17 @@ from pathlib import Path
 from pydantic import TypeAdapter
 
 import runtime
-from models import HostInsight, HostScore, RawFinding, Relation, Service, TLSCertificate, Url
+from models import (
+    HostInsight,
+    HostScore,
+    Product,
+    ProductRelease,
+    RawFinding,
+    Relation,
+    Service,
+    TLSCertificate,
+    Url,
+)
 from models.primitives import FQDN
 
 _HOSTS_SUBDIR = "hosts"
@@ -136,6 +146,8 @@ _HOST_PORTS = TypeAdapter(list[int])
 _HOST_SERVICES = TypeAdapter(list[Service])
 _HOST_URLS = TypeAdapter(list[Url])
 _HOST_RELATIONS = TypeAdapter(list[Relation])
+_HOST_PRODUCTS = TypeAdapter(list[Product])
+_HOST_PRODUCT_RELEASES = TypeAdapter(list[ProductRelease])
 
 
 def host_score_path(hostname: FQDN) -> Path:
@@ -281,6 +293,56 @@ def load_host_urls(hostname: FQDN) -> list[Url]:
     return _HOST_URLS.validate_json(path.read_text(encoding="utf-8"))
 
 
+def products_path(hostname: FQDN) -> Path:
+    """Per-host products file: ``<host_dir>/products.json``."""
+    return host_dir(hostname) / "products.json"
+
+
+def save_host_products(hostname: FQDN, products: list[Product]) -> Path:
+    """Persist a host's OAM ``Product`` assets to ``hosts/<host>/products.json``.
+
+    The product lines nmap's CPEs decomposed to (e.g. ``nginx``), linked to
+    their services by ``product_used`` edges in ``relations.json``.
+    """
+    path = products_path(hostname)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(_HOST_PRODUCTS.dump_json(products, indent=2))
+    return path
+
+
+def load_host_products(hostname: FQDN) -> list[Product]:
+    """Load a host's ``Product`` assets; empty when none were written."""
+    path = products_path(hostname)
+    if not path.is_file():
+        return []
+    return _HOST_PRODUCTS.validate_json(path.read_text(encoding="utf-8"))
+
+
+def product_releases_path(hostname: FQDN) -> Path:
+    """Per-host product-releases file: ``<host_dir>/product_releases.json``."""
+    return host_dir(hostname) / "product_releases.json"
+
+
+def save_host_product_releases(hostname: FQDN, releases: list[ProductRelease]) -> Path:
+    """Persist a host's OAM ``ProductRelease`` assets to ``product_releases.json``.
+
+    The version-specific releases (e.g. ``nginx 1.25.3``) - the spec-proper
+    anchor the VR's CPE -> CVE ``VulnProperty`` results hang off.
+    """
+    path = product_releases_path(hostname)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(_HOST_PRODUCT_RELEASES.dump_json(releases, indent=2))
+    return path
+
+
+def load_host_product_releases(hostname: FQDN) -> list[ProductRelease]:
+    """Load a host's ``ProductRelease`` assets; empty when none were written."""
+    path = product_releases_path(hostname)
+    if not path.is_file():
+        return []
+    return _HOST_PRODUCT_RELEASES.validate_json(path.read_text(encoding="utf-8"))
+
+
 def relations_path(hostname: FQDN) -> Path:
     """Per-host relations file: ``<host_dir>/relations.json``."""
     return host_dir(hostname) / "relations.json"
@@ -316,6 +378,8 @@ __all__ = [
     "insight_path",
     "load_host_findings",
     "load_host_ports",
+    "load_host_product_releases",
+    "load_host_products",
     "load_host_relations",
     "load_host_scores",
     "load_host_services",
@@ -324,10 +388,14 @@ __all__ = [
     "load_tls_certificates",
     "notes_path",
     "ports_path",
+    "product_releases_path",
+    "products_path",
     "relations_path",
     "save_host_findings",
     "save_host_notes",
     "save_host_ports",
+    "save_host_product_releases",
+    "save_host_products",
     "save_host_relations",
     "save_host_score",
     "save_host_services",
