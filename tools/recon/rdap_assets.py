@@ -2,34 +2,45 @@
 
 RDAP answers "who owns this resource". This decomposes the recon-internal
 ``RdapRecord`` parse shape into faithful OAM assets - the analogue of
-``services_from_nmap`` for the registration layer.
+``services_from_nmap`` for the registration layer:
 
-This module covers the **autnum** (AS-registration) side: an RDAP-by-ASN lookup
-yields the ``AutnumRecord`` registry record, the registrant ``Organization``,
-and the contact emails as ``Identifier`` assets, joined by the spec relation
-labels (``registrant_org`` / ``managed_by`` / ``<role>_email``). The IP-network
-side (``IPNetRecord``, which needs the CIDR correlated from the Cymru netblock)
-lands in its own slice.
+* an RDAP-by-ASN record yields an ``AutnumRecord`` (the AS registry record) and
+  a ``managed_by`` edge from the ``AutonomousSystem`` to the registrant;
+* an RDAP-by-IP record yields an ``IPNetRecord`` (the IP-block registry record).
+  RDAP-by-IP does not return the block's CIDR, so it is **correlated** from the
+  Cymru netblock the IP sits in (the ``ip_to_cidr`` map) - a faithful
+  ``IPNetRecord`` needs its ``cidr``.
+
+Both yield the registrant ``Organization`` and the contact emails as
+``Identifier`` assets, joined by the spec relation labels (``registrant_org`` /
+``managed_by`` / ``<role>_email``).
 """
 
 from __future__ import annotations
 
 from typing import NamedTuple
 
-from models import AutnumRecord, Identifier, Organization, Relation, RelationType
+from models import (
+    AutnumRecord,
+    Identifier,
+    IPNetRecord,
+    Organization,
+    Relation,
+    RelationType,
+)
 from models.asset.network import RdapRecord
 
 
 class RegistrantGraph(NamedTuple):
     """The OAM registration subgraph a set of RDAP records decomposes into.
 
-    ``organizations`` / ``autnum_records`` / ``identifiers`` are the asset nodes
-    (de-duplicated by identity); ``relations`` are the ``registrant_org`` /
+    The asset nodes (de-duplicated by identity) plus the ``registrant_org`` /
     ``managed_by`` / ``<role>_email`` edges that ``relations.json`` holds.
     """
 
     organizations: list[Organization]
     autnum_records: list[AutnumRecord]
+    ipnet_records: list[IPNetRecord]
     identifiers: list[Identifier]
     relations: list[Relation]
 
@@ -37,35 +48,49 @@ class RegistrantGraph(NamedTuple):
 def _asn_from_query(query: str) -> int | None:
     """Parse the ASN out of an RDAP autnum query ("AS15169" -> 15169).
 
-    Returns ``None`` for an IP-network query (handled by the IPNetRecord
-    producer) or a mis-shaped value.
+    Returns ``None`` for an IP-network query (the IP-block branch handles it)
+    or a mis-shaped value.
     """
     if query.startswith("AS") and query[2:].isdigit():
         return int(query[2:])
     return None
 
 
-def autnum_assets_from_rdap(rdap_records: list[RdapRecord]) -> RegistrantGraph:
-    """Decompose RDAP-by-ASN records into the OAM registration subgraph.
+def registrant_assets_from_rdap(
+    rdap_records: list[RdapRecord],
+    ip_to_cidr: dict[str, str],
+) -> RegistrantGraph:
+    """Decompose RDAP records into the OAM registration subgraph.
 
-    One ``AutnumRecord`` per AS (de-duplicated by number), the registrant
-    ``Organization`` (by name), and an ``Identifier`` per contact email - with
-    a ``registrant_org`` edge (AutnumRecord -> Organization), a ``managed_by``
-    edge (AutonomousSystem -> Organization), and a ``<role>_email`` edge from
-    the registrant (or the AS record when no org) to each email. IP-network
-    RDAP records are skipped here.
+    Per record: an ``AutnumRecord`` (AS query, keyed by number) or an
+    ``IPNetRecord`` (IP query, CIDR correlated from ``ip_to_cidr`` - skipped if
+    the IP has no known netblock), the registrant ``Organization`` (by name),
+    and an ``Identifier`` per contact email. Edges: ``registrant_org`` (registry
+    record -> Organization), ``managed_by`` (AutonomousSystem -> Organization,
+    AS records only), and ``<role>_email`` from the registrant (or the registry
+    record when no org) to each email. All de-duplicated by identity.
     """
     organizations: dict[str, Organization] = {}
     autnum_by_number: dict[int, AutnumRecord] = {}
+    ipnet_by_cidr: dict[str, IPNetRecord] = {}
     identifiers: dict[str, Identifier] = {}
     relations: list[Relation] = []
 
     for rec in rdap_records:
         asn = _asn_from_query(rec.query)
-        if asn is None:
-            continue
-        autnum_by_number.setdefault(asn, AutnumRecord(number=asn, handle=rec.handle or ""))
-        autnum_key = rec.handle or f"AS{asn}"
+        if asn is not None:
+            autnum_by_number.setdefault(asn, AutnumRecord(number=asn, handle=rec.handle or ""))
+            record_key = rec.handle or f"AS{asn}"
+            managed_subject: str | None = f"AS{asn}"
+        else:
+            cidr = ip_to_cidr.get(rec.query)
+            if cidr is None:
+                # No netblock for this IP (Cymru miss): an IPNetRecord needs a
+                # cidr, so skip rather than fabricate one.
+                continue
+            ipnet_by_cidr.setdefault(cidr, IPNetRecord(cidr=cidr, handle=rec.handle or ""))
+            record_key = rec.handle or cidr
+            managed_subject = None  # managed_by is an AS -> Org edge only
 
         org_key: str | None = None
         if rec.registrant_organisation:
@@ -78,20 +103,21 @@ def autnum_assets_from_rdap(rdap_records: list[RdapRecord]) -> RegistrantGraph:
                 Relation(
                     relation_type=RelationType.SIMPLE,
                     label="registrant_org",
-                    from_key=autnum_key,
+                    from_key=record_key,
                     to_key=org_key,
                 )
             )
-            relations.append(
-                Relation(
-                    relation_type=RelationType.SIMPLE,
-                    label="managed_by",
-                    from_key=f"AS{asn}",
-                    to_key=org_key,
+            if managed_subject is not None:
+                relations.append(
+                    Relation(
+                        relation_type=RelationType.SIMPLE,
+                        label="managed_by",
+                        from_key=managed_subject,
+                        to_key=org_key,
+                    )
                 )
-            )
 
-        anchor = org_key or autnum_key
+        anchor = org_key or record_key
         for contact in rec.contacts:
             if contact.email:
                 ident = identifiers.setdefault(
@@ -109,9 +135,10 @@ def autnum_assets_from_rdap(rdap_records: list[RdapRecord]) -> RegistrantGraph:
     return RegistrantGraph(
         list(organizations.values()),
         list(autnum_by_number.values()),
+        list(ipnet_by_cidr.values()),
         list(identifiers.values()),
         relations,
     )
 
 
-__all__ = ["RegistrantGraph", "autnum_assets_from_rdap"]
+__all__ = ["RegistrantGraph", "registrant_assets_from_rdap"]
