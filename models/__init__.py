@@ -19,8 +19,8 @@ across every consumer.
 | ``models.asset.network`` | ``AsnRecord``, ``Contact``, ``ContactRole``, |
 |                          | ``DomainRecord``, ``RdapRecord`` |
 | ``models.workspace`` | ``RunFile``, ``RunFileContent`` |
-| ``models.nvd`` | ``CveEntry``, ``Severity`` |
-| ``models.mitre`` | ``CWEEntry`` |
+| ``models.nvd`` | ``CveEntry``, ``CvssVector``, ``Severity`` |
+| ``models.mitre`` | ``CWEEntry``, ``CweId`` |
 | ``models.owasp`` | ``OWASPEntry`` |
 | ``models.dns`` | ``PtrRecord``, ``TakeoverCandidate`` |
 | ``models.insight`` | ``HostRole``, ``HostPriority``, ``HostInsight``, ``HostScore``, |
@@ -102,8 +102,8 @@ from models.insight import (
     ReconFinalisationError,
 )
 from models.metrics import RunMetrics
-from models.mitre import CWEEntry
-from models.nvd import CveEntry, Severity
+from models.mitre import CWEEntry, CweId
+from models.nvd import CveEntry, CvssVector, Severity
 from models.owasp import OWASPEntry
 from models.primitives import FQDN, Cidr, Email, HttpUrl, IpAddr, IPType
 from models.report import AuthoredDraft
@@ -138,6 +138,8 @@ __all__ = [
     "ContactRecord",
     "ContactRole",
     "CveEntry",
+    "CvssVector",
+    "CweId",
     "DNSRecordProperty",
     "DomainRecord",
     "Email",

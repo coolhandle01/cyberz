@@ -25,7 +25,7 @@ A new constrained string deserves a typed primitive in `models/primitives.py` wh
 - The valid shape is checkable up-front (regex, parse, catalogue lookup), AND
 - A wrong-shape value reaching the tool body would do something silently bad (wrong target probed, wrong CWE attributed, wrong score computed).
 
-The pattern is `Annotated[str, AfterValidator(_validate_...)]` (or `Annotated[int, ...]` for integer primitives). Runtime type stays `str` / `int` so consumers do not have to migrate in lockstep - the validator fires at `model_validate` time. The reference shapes are `FQDN` (RFC 1123 strictness) and `HttpUrl` (delegates URL parsing to `pydantic.HttpUrl`, adds the host strictness on top); the in-line docstrings in `models/primitives.py` carry the full contract for each, including the `str` runtime-type rationale. `CvssVector` and `CweId` are flagged as FIXMEs in `models/report.py` - deferred to the amass-integration work where ID-shape validation is the natural home.
+The pattern is `Annotated[str, AfterValidator(_validate_...)]` (or `Annotated[int, ...]` for integer primitives). Runtime type stays `str` / `int` so consumers do not have to migrate in lockstep - the validator fires at `model_validate` time. The reference shapes are `FQDN` (RFC 1123 strictness) and `HttpUrl` (delegates URL parsing to `pydantic.HttpUrl`, adds the host strictness on top); the in-line docstrings in `models/primitives.py` carry the full contract for each, including the `str` runtime-type rationale. A primitive does not have to live in `models/primitives.py` - asset-identity / tool-boundary validators do, but a domain-scoped one belongs with its domain: `CvssVector` lives in `models/nvd/` and `CweId` in `models/mitre/`. `CweId` is a deliberate shape-only validator (positive int in range), *not* a catalogue-membership check - a real CWE the local `tools/cwe_data` catalogue has not vendored is still a valid id, so the catalogue miss stays a warning in `report_tools`, never a hard reject.
 
 Counter-example: a one-off internal field used only inside one model does not need a primitive - inline the validator on the field, or use a `Literal[...]` / `StrEnum` for a closed set.
 
@@ -65,7 +65,7 @@ Layering that falls out of this: `models/primitives.py` is the shared validation
 
 ## Anti-patterns
 
-- A bare `str` field for a value that has a constrained shape (hostname, URL, CVSS vector, CWE id, OWASP category). Use the matching primitive in `models/primitives.py`; if it does not exist, see "When to add a new typed primitive" above.
+- A bare `str` field for a value that has a constrained shape (hostname, URL, CVSS vector, CWE id, OWASP category). Use the matching primitive (`models/primitives.py` for asset-identity / boundary types; `models/nvd/` / `models/mitre/` for domain-scoped ones like `CvssVector` / `CweId`); if it does not exist, see "When to add a new typed primitive" above.
 - A `dict[str, Any]` field where the LLM both reads and writes. The LLM can stuff arbitrary content into `Any` and the next reader gets whatever the previous one decided to put there. Define a typed inner model instead.
 - A `Field()` with no `description=...` on an args_schema. The description is the LLM's per-parameter documentation; an empty one is the same gap the inferred-args path had.
 - A new top-level model added to `models/__init__.py` directly. The package is split per domain (`finding.py`, `h1.py`, `report.py`, `attack.py`, etc); put it in the matching module and let the re-export carry it.

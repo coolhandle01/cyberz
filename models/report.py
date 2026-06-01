@@ -19,6 +19,9 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from models.mitre import CweId
+from models.nvd import CvssVector
+
 
 class AuthoredDraft(BaseModel):
     """The LLM-authored half of one report draft.
@@ -101,10 +104,10 @@ class AuthoredDraft(BaseModel):
             " Guidance`` to find the matching URL."
         ),
     )
-    # FIXME #156: type as a ``CvssVector`` primitive in
-    # ``models.primitives`` so malformed vectors reject at args_schema
-    # validation time rather than at score-compute time.
-    cvss_vector: str = Field(
+    # CvssVector validates the vector's *structure* (CVSS:3.x prefix +
+    # well-formed metric tokens) at args_schema time; ``calculate_cvss_score``
+    # in the wrapper remains the source of truth for metric semantics + score.
+    cvss_vector: CvssVector = Field(
         description=(
             "Full CVSS 3.1 vector. The wrapper recomputes ``cvss_score``"
             " and the validator refuses drafts where the score does not"
@@ -112,10 +115,10 @@ class AuthoredDraft(BaseModel):
             " upstream to double-check."
         ),
     )
-    # FIXME #156: type as a ``CweId`` primitive in ``models.primitives``
-    # so unknown ids reject at args_schema validation time rather than
-    # at catalogue-lookup time.
-    cwe_id: int = Field(
+    # CweId validates id *shape* (positive int in range) at args_schema time,
+    # not catalogue membership - a real CWE we have not vendored is still valid;
+    # the wrapper warns (not errors) on a local-catalogue miss.
+    cwe_id: CweId = Field(
         description=(
             "Numeric CWE identifier matching the entry from ``Lookup"
             " CWE``. The validator verifies the id resolves to a real"

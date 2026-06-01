@@ -13,5 +13,6 @@ from it without a cycle.
 from __future__ import annotations
 
 from models.mitre.cwe import CWEEntry
+from models.mitre.cwe_id import CweId
 
-__all__ = ["CWEEntry"]
+__all__ = ["CWEEntry", "CweId"]
