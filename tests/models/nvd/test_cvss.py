@@ -22,7 +22,6 @@ class TestCvssVector:
         [
             "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
             "CVSS:3.0/AV:L/AC:H/PR:L/UI:R/S:C/C:L/I:N/A:N",
-            "CVSS:3.1/AV:N/AC:L",  # structure only - a short token list still parses
         ],
     )
     def test_accepts_well_formed_vectors(self, raw):
@@ -42,6 +41,8 @@ class TestCvssVector:
             "CVSS:3.1",  # prefix but no metric tokens
             "CVSS:3.1/AVN/AC:L",  # malformed token (no colon)
             "CVSS:3.1/av:n",  # lowercase - not the uppercase KEY:VALUE shape
+            "CVSS:3.1/AV:N/AC:L",  # incomplete - missing mandatory base metrics
+            "CVSS:3.1/AV:Z/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",  # invalid metric value
         ],
     )
     def test_rejects_malformed(self, bad):
