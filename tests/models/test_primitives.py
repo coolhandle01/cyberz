@@ -1,4 +1,4 @@
-"""tests/models/test_primitives.py - unit tests for models/primitives.py."""
+"""tests/models/test_primitives.py - unit tests for models/primitives/."""
 
 from __future__ import annotations
 

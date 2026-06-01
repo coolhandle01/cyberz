@@ -28,7 +28,7 @@ class Endpoint(BaseModel):
     the ``FQDN`` validator for RFC 1123 strictness; runtime stays
     ``str`` so consumers that ``.startswith(...)`` / ``.lower()`` /
     ``urlparse(ep.url)`` / dict-key / f-string keep working with no
-    audit. See ``models/primitives._validate_endpoint_url`` for the
+    audit. See ``models/primitives/http_url._validate_endpoint_url`` for the
     full contract.
 
     ``technologies`` is the raw httpx ``-tech-detect`` output
