@@ -10,12 +10,17 @@ from pydantic import ValidationError
 from models import (
     AttackGraph,
     Endpoint,
+    HostInsight,
     HostPriority,
+    HostRole,
     TLSCertificate,
+    VulnProperty,
 )
 from tools.recon_insights import (
     ReconFinalisationError,
+    annotate_host_vulns,
     finalise_recon,
+    load_insights,
     load_tls_certificates,
     save_insight,
     uncovered_interesting_hosts,
@@ -229,6 +234,42 @@ class TestFinaliseRecon:
         assert len(data["endpoints"]) == len(sweep.endpoints)
 
 
+class TestMaterialiseUrls:
+    def test_finalise_writes_urls_per_host(
+        self, make_host_insight, sweep, programme, run_dir, target_apex
+    ):
+        from tools.recon_host_store import load_host_urls
+
+        _write_sweep(run_dir, sweep)
+        save_insight(make_host_insight())  # api.example.com, HIGH
+        finalise_recon(programme)
+
+        urls = load_host_urls(f"api.{target_apex}")
+        assert len(urls) == 1
+        assert urls[0].scheme == "https"
+        assert urls[0].host == f"api.{target_apex}"
+
+    def test_finalise_skips_unparseable_url(
+        self, make_host_insight, sweep, programme, run_dir, target_apex
+    ):
+        from models import Endpoint
+        from tools.recon_host_store import load_host_urls
+
+        # A URL between 2048 (the Url.raw cap) and 2083 (HttpUrl's own cap)
+        # passes Endpoint but fails the Url shape; it must be skipped, not
+        # abort finalisation (the good api endpoint on the same host persists).
+        base = f"https://api.{target_apex}/"
+        oversize = Endpoint(url=base + "a" * (2070 - len(base)))
+        bad_sweep = sweep.model_copy(update={"endpoints": [*sweep.endpoints, oversize]})
+        _write_sweep(run_dir, bad_sweep)
+        save_insight(make_host_insight())
+        finalise_recon(programme)
+
+        urls = load_host_urls(f"api.{target_apex}")
+        assert urls  # the good api URL persisted
+        assert all(len(u.raw) <= 2048 for u in urls)  # the oversize one was skipped
+
+
 class TestFinaliseMaterialisesHostDirs:
     def test_writes_every_facet(self, make_host_insight, sweep, programme, run_dir, target_apex):
         from models import RawFinding
@@ -274,11 +315,20 @@ class TestFinaliseMaterialisesHostDirs:
     def test_carries_enrichment_into_recon_json(
         self, make_host_insight, sweep, programme, run_dir, target_apex
     ):
-        from models import IpAsset
+        from models import DNSRecordProperty, IPAddress, IpEnrichment, RRHeader
 
         enriched = sweep.model_copy(
             update={
-                "ip_assets": [IpAsset(ip="8.8.8.8")],
+                "ip_enrichment": IpEnrichment(
+                    ip_addresses=[IPAddress(address="8.8.8.8", type="IPv4")]
+                ),
+                "dns_records": [
+                    DNSRecordProperty(
+                        property_name=f"api.{target_apex}",
+                        header=RRHeader(rr_type=1),
+                        data="8.8.8.8",
+                    )
+                ],
                 "tls_certificates": [TLSCertificate(host=f"api.{target_apex}")],
             }
         )
@@ -286,5 +336,47 @@ class TestFinaliseMaterialisesHostDirs:
         save_insight(make_host_insight())
         out = finalise_recon(programme)
         final = AttackGraph.model_validate_json(out.read_text(encoding="utf-8"))
-        assert len(final.ip_assets) == 1
+        # finalise rebuilds the graph by field; every sweep-gathered field must
+        # survive the round-trip (the IP subgraph, DNS records, certs).
+        assert len(final.ip_enrichment.ip_addresses) == 1
+        assert len(final.dns_records) == 1
         assert len(final.tls_certificates) == 1
+
+
+class TestAnnotateHostVulns:
+    """The VR's hook onto the OAM graph: VulnProperty merged onto a host."""
+
+    def _seed(self, target_apex: str) -> str:
+        hostname = f"blog.{target_apex}"
+        save_insight(
+            HostInsight(
+                hostname=hostname,
+                role=HostRole.APP,
+                priority=HostPriority.HIGH,
+                notes="WordPress 5.8.1 blog host - dated core, worth a CVE pass here.",
+                detected_tech=["WordPress 5.8.1"],
+            )
+        )
+        return hostname
+
+    def test_merges_and_persists(self, run_dir, target_apex):
+        hostname = self._seed(target_apex)
+        updated = annotate_host_vulns(
+            hostname, [VulnProperty(id="CVE-2021-44223", source="nvd", enumeration="CVE")]
+        )
+        assert updated.vulns[0].id == "CVE-2021-44223"
+        reloaded = next(i for i in load_insights() if i.hostname == hostname)
+        assert reloaded.vulns[0].id == "CVE-2021-44223"
+
+    def test_dedups_by_id(self, run_dir, target_apex):
+        hostname = self._seed(target_apex)
+        annotate_host_vulns(hostname, [VulnProperty(id="CVE-2021-44223")])
+        updated = annotate_host_vulns(
+            hostname,
+            [VulnProperty(id="CVE-2021-44223"), VulnProperty(id="CVE-2022-21661")],
+        )
+        assert [v.id for v in updated.vulns] == ["CVE-2021-44223", "CVE-2022-21661"]
+
+    def test_raises_when_host_has_no_insight(self, run_dir, target_apex):
+        with pytest.raises(ValueError, match="no host insight"):
+            annotate_host_vulns(f"ghost.{target_apex}", [VulnProperty(id="CVE-2021-44223")])

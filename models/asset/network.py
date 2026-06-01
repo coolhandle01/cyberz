@@ -1,21 +1,26 @@
 """
-models/network.py - typed shapes for the asset-layer network properties
+models.asset.network - typed shapes for the OAM registrant / network assets
 of an attack surface.
 
-Sits between ``models.primitives.IPAddress`` (the typed address) and
+Sits between ``models.primitives.IpAddr`` (the typed address) and
 ``models.asset`` (the FQDN / Endpoint layer agents reason about). The
 data here is what Team Cymru bulk-whois, RDAP lookups, and (eventually)
 amass's graph emit about the IP-layer ownership of an asset.
 
-When amass lands (#45), the ASN / netblock / RIR-Org data persists
-there as ``SimpleProperty`` / ``SourceProperty`` values on amass's
-``IPAddress`` and ``ASN`` asset nodes. This module is the runtime
-in-memory shape; the amass-side property is the persisted shape. Two
-layers, one model.
+Mid-migration to the faithful per-OAM-type modules: the faithful
+``IPAddress`` / ``AutonomousSystem`` / ``Netblock`` assets live here now (amass
+groups all three in its ``network`` package). The legacy cybersquad
+compositions (``AsnRecord`` / ``Contact`` / ``ContactRole`` / ``RdapRecord``)
+remain until the recon producers are rewired onto the faithful assets (in
+``registration`` / ``org`` / ``contact`` / ``people`` / ``identifier``) plus
+``Relation`` edges - then they are removed.
 
-Reference: the Open Asset Model's IPAddress / AutonomousSystem /
-Netblock / RIROrganization asset types
-(https://github.com/owasp-amass/open-asset-model).
+OAM assets:
+* ``IPAddress``
+  <https://owasp-amass.github.io/docs/open_asset_model/assets/ip_address/>
+* ``AutonomousSystem``
+  <https://owasp-amass.github.io/docs/open_asset_model/assets/autonomous_system/>
+* ``Netblock`` <https://owasp-amass.github.io/docs/open_asset_model/assets/netblock/>
 
 ``RdapRecord`` is the structured-registrant sibling of ``AsnRecord``.
 RFC 7483 / RDAP gives us per-field registrant_organisation /
@@ -37,9 +42,86 @@ from __future__ import annotations
 from datetime import datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
-from models.primitives import Email, IPAddress
+from models.asset.property import SourceProperty, VulnProperty
+from models.primitives import Cidr, Email, IpAddr, IPType
+
+
+class IPAddress(BaseModel):
+    """The cybersquad shape that maps to amass's OAM ``IPAddress`` asset.
+
+    A single IP-address node. Mirrors amass's ``IPAddress`` field for field
+    (OAM json tag in parentheses): ``address`` (``address``) and ``type``
+    (``type`` - "IPv4" / "IPv6", determined by the address family). The legacy
+    ``IpAddr`` primitive (renamed off this asset's name) validates the literal.
+    """
+
+    address: IpAddr  # address
+    type: IPType  # type ("IPv4" / "IPv6") - exhaustive; must match address family
+
+    # OAM VulnProperty annotations hung off this IP node (additive, default-empty).
+    vulns: list[VulnProperty] = Field(default_factory=list)
+    # OAM SourceProperty provenance - which tool / feed surfaced this IP.
+    sources: list[SourceProperty] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _type_matches_address(self) -> IPAddress:
+        """``type`` is fully determined by ``address``'s family (the ``IpAddr``
+        primitive already validated the literal), so a ``type`` that disagrees
+        with ``address`` is a producer bug we reject rather than persist.
+        """
+        import ipaddress
+
+        version = ipaddress.ip_address(self.address).version
+        expected = IPType.IPV6 if version == 6 else IPType.IPV4
+        if self.type != expected:
+            raise ValueError(
+                f"type {self.type!r} does not match address {self.address!r} (expected {expected})"
+            )
+        return self
+
+
+class AutonomousSystem(BaseModel):
+    """The cybersquad shape that maps to amass's OAM ``AutonomousSystem``.
+
+    The BGP autonomous system an IP's prefix is announced by. OAM models it as
+    just its number; the registrant detail is a related ``AutnumRecord`` and
+    ``Organization``. Mirrors amass field for field (OAM json tag in
+    parentheses).
+    """
+
+    number: int = Field(ge=0, le=4_294_967_295)  # number (32-bit ASN per RFC 6793)
+
+
+class Netblock(BaseModel):
+    """The cybersquad shape that maps to amass's OAM ``Netblock`` asset.
+
+    The announced address prefix an IP is contained by. ``cidr`` is kept as a
+    string (amass uses ``netip.Prefix``; cybersquad keeps the CIDR text).
+    Mirrors amass field for field (OAM json tag in parentheses).
+    """
+
+    cidr: Cidr  # cidr (e.g. "8.8.8.0/24") - validated IPv4/IPv6 network prefix
+    type: IPType  # type ("IPv4" / "IPv6") - exhaustive; must match cidr's family
+
+    @model_validator(mode="after")
+    def _type_matches_cidr(self) -> Netblock:
+        """``type`` is exhaustive (IPv4 / IPv6) and fully determined by
+        ``cidr``'s family, so it is required rather than optional - and a
+        ``type`` that disagrees with ``cidr`` is a producer bug we reject
+        rather than persist (``cidr`` is already canonical via the ``Cidr``
+        primitive, so ``ip_network`` here cannot raise).
+        """
+        import ipaddress
+
+        version = ipaddress.ip_network(self.cidr).version
+        expected = IPType.IPV6 if version == 6 else IPType.IPV4
+        if self.type != expected:
+            raise ValueError(
+                f"type {self.type!r} does not match cidr {self.cidr!r} (expected {expected})"
+            )
+        return self
 
 
 class AsnRecord(BaseModel):
@@ -57,7 +139,7 @@ class AsnRecord(BaseModel):
     pre-amass adds joins for no gain.
     """
 
-    ip: IPAddress
+    ip: IpAddr
     asn: int = Field(ge=0, le=4_294_967_295)  # 32-bit ASN range per RFC 6793
     prefix: str = Field(
         max_length=64,
@@ -224,4 +306,12 @@ class RdapRecord(BaseModel):
     )
 
 
-__all__ = ["AsnRecord", "Contact", "ContactRole", "RdapRecord"]
+__all__ = [
+    "AsnRecord",
+    "AutonomousSystem",
+    "Contact",
+    "ContactRole",
+    "IPAddress",
+    "Netblock",
+    "RdapRecord",
+]

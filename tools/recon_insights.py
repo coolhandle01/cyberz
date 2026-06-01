@@ -14,11 +14,11 @@ primitives:
 * ``validate_insight(insight, sweep, programme)`` - quality gate. Returns the
   issue list. Hard errors block ``finalise_recon``.
 * ``host_dir(fqdn)`` - the per-host evidence directory under
-  ``<run_dir>/hosts/<fqdn>/``. Future recon tools (screenshots, scan
+  ``<run_dir>/assets/<fqdn>/``. Future recon tools (screenshots, scan
   output, response bodies) write per-host artefacts here so each
   directory carries one FQDN asset's worth of evidence end-to-end.
 * ``save_insight`` / ``load_insights`` - persist insights under
-  ``<run_dir>/hosts/<fqdn>/insight.json``.
+  ``<run_dir>/assets/<fqdn>/insight.json``.
 * ``finalise_recon(programme, attack_graph_path)`` - load the sweep, validate every
   insight, build the canonical ``AttackGraph`` for downstream agents, and
   write ``recon.json``. Refuses on hard errors or insufficient curation.
@@ -34,8 +34,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from pydantic import ValidationError
+
 import runtime
-from models import AttackGraph, HostInsight, HostPriority, HostScore, RawFinding
+from models import AttackGraph, HostInsight, HostPriority, HostScore, RawFinding, Url, VulnProperty
 from models.h1 import Programme
 
 # The insight shapes (HostAnnotation, InsightValidationIssue,
@@ -71,6 +73,7 @@ from tools.recon_host_store import (
     save_host_notes,
     save_host_ports,
     save_host_score,
+    save_host_urls,
     save_insight,
     save_tls_certificate,
     tls_path,
@@ -224,6 +227,32 @@ def load_attack_graph(attack_graph_filename: str = _ATTACK_GRAPH_FILENAME) -> At
     return AttackGraph.model_validate_json(path.read_text(encoding="utf-8"))
 
 
+def annotate_host_vulns(hostname: str, vulns: list[VulnProperty]) -> HostInsight:
+    """Merge OAM ``VulnProperty`` annotations onto an existing host insight.
+
+    The Vulnerability Researcher's hook onto the OAM graph: after an NVD CVE
+    lookup matches a host's detected technology, the VR attaches the CVEs as
+    ``VulnProperty`` values on that host's FQDN asset. Loads the OA-authored
+    insight, appends the vulns the host does not already carry (dedup by
+    ``id``), persists, and returns the updated insight.
+
+    Raises ``ValueError`` if the host has no insight yet - the OSINT Analyst
+    curates the asset (Annotate Host) before the VR annotates its vulns.
+    """
+    target = hostname.strip().lower()
+    match = next((i for i in load_insights() if i.hostname.strip().lower() == target), None)
+    if match is None:
+        raise ValueError(
+            f"no host insight for {target!r}; the OSINT Analyst must Annotate Host "
+            "before the Vulnerability Researcher annotates its vulns"
+        )
+    existing_ids = {v.id for v in match.vulns}
+    merged = list(match.vulns) + [v for v in vulns if v.id not in existing_ids]
+    updated = match.model_copy(update={"vulns": merged})
+    save_insight(updated)
+    return updated
+
+
 # Finalisation
 
 # Status codes whose hosts deserve an annotation: 2xx is a live target,
@@ -240,15 +269,41 @@ def _finding_host(target: str) -> str:
     return (urlparse(candidate).hostname or target).strip().lower()
 
 
+def _url_asset(raw: str) -> Url:
+    """Parse a discovered URL string into the OAM ``Url`` asset shape.
+
+    Maps urllib's split components onto the OAM ``URL`` fields (scheme / host
+    / port / path / query / fragment / userinfo). Raises ``ValueError`` (bad
+    port in the netloc) or ``ValidationError`` (e.g. an over-long raw URL)
+    when the result does not fit the ``Url`` shape; ``_materialise_host_dirs``
+    skips those rather than abort the run.
+    """
+    from urllib.parse import urlsplit
+
+    parts = urlsplit(raw)
+    return Url(
+        raw=raw,
+        scheme=parts.scheme,
+        host=parts.hostname or "",
+        port=parts.port,
+        path=parts.path,
+        options=parts.query,
+        fragment=parts.fragment,
+        username=parts.username or "",
+        password=parts.password or "",
+    )
+
+
 def _materialise_host_dirs(sweep: AttackGraph, insights: list[HostInsight]) -> None:
-    """Write each host's OAM-node directory under ``hosts/<fqdn>/``.
+    """Write each host's OAM-node directory under ``assets/<fqdn>/``.
 
     The OA's per-node handoff, split into typed facets so #45 can swap each
     JSON write for an amass insert one day:
 
     * ``host.json`` / ``notes.md`` - the curation: the typed score+priority,
       and the prose "look here, because ..." lifted out of the data shape.
-    * ``ports.json`` / ``findings.json`` / ``tls.json`` - the recon facts,
+    * ``ports.json`` / ``findings.json`` / ``tls.json`` / ``urls.json`` - the
+      recon facts (the OAM ``Service`` / ``TLSCertificate`` / ``URL`` assets),
       read back off the sweep.
 
     Dormant facets stay unwritten (empty ports, no certs) rather than
@@ -279,6 +334,18 @@ def _materialise_host_dirs(sweep: AttackGraph, insights: list[HostInsight]) -> N
 
     for certificate in sweep.tls_certificates:
         save_tls_certificate(certificate)
+
+    urls_by_host: dict[str, list[Url]] = {}
+    for endpoint in sweep.endpoints:
+        try:
+            url_asset = _url_asset(endpoint.url)
+        except (ValueError, ValidationError):
+            # A malformed / over-long URL must not abort finalisation; skip it.
+            continue
+        if url_asset.host:
+            urls_by_host.setdefault(url_asset.host.lower(), []).append(url_asset)
+    for hostname, host_urls in urls_by_host.items():
+        save_host_urls(hostname, host_urls)
 
 
 def finalise_recon(
@@ -344,10 +411,13 @@ def finalise_recon(
         technologies=sweep.technologies,
         passive_findings=sweep.passive_findings,
         network_hops=sweep.network_hops,
-        # Carry the sweep's enrichment forward - finalise previously dropped
-        # ip_assets (and would drop tls_certificates), losing it from the
-        # PT-facing recon.json even though the sweep gathered it.
-        ip_assets=sweep.ip_assets,
+        # Carry the sweep's enrichment forward - finalise rebuilds the graph by
+        # field, so every sweep-gathered field must be relisted here or it is
+        # dropped from the PT-facing recon.json (the IP subgraph, the DNS
+        # records, the relation edges, the certs).
+        ip_enrichment=sweep.ip_enrichment,
+        dns_records=sweep.dns_records,
+        relations=sweep.relations,
         tls_certificates=sweep.tls_certificates,
         host_insights=insights,
         notes=_build_notes(sweep, insights),
@@ -394,6 +464,7 @@ __all__ = [
     "InsightValidationIssue",
     "InsightValidationReport",
     "ReconFinalisationError",
+    "annotate_host_vulns",
     "finalise_recon",
     "findings_path",
     "host_dir",

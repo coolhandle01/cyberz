@@ -1,22 +1,13 @@
-"""tests/models/test_attack.py - unit tests for models/attack.py."""
+"""tests/models/attack/test_tree.py - unit tests for models/attack/tree.py."""
 
 from __future__ import annotations
 
 import pytest
 
-from models import (
-    Severity,
-)
-from models.attack import AttackForest, AttackTree
+from models import Severity
+from models.attack import AttackTree
 
 pytestmark = pytest.mark.unit
-
-
-class TestAttackForest:
-    def test_serialise_roundtrip(self, attack_forest):
-        restored = AttackForest.model_validate_json(attack_forest.model_dump_json())
-        assert restored.programme_handle == attack_forest.programme_handle
-        assert restored.trees[0].expected_ceiling == Severity.CRITICAL
 
 
 class TestAttackTree:
