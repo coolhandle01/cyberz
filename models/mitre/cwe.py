@@ -1,10 +1,10 @@
 """
-models/cwe.py - typed shape for a Common Weakness Enumeration entry.
+models.mitre.cwe - typed shape for a Common Weakness Enumeration entry.
 
-Lives in models/ alongside the per-domain shapes (cve / h1 / attack /
-asset / etc.). The CWE catalogue data and the substring-match lookup
-live in ``tools/cwe_data.py``; this module is just the row contract
-consumers import to type-check return shapes against.
+Lives in the MITRE domain package alongside the weakness-taxonomy shapes. The
+CWE catalogue data and the substring-match lookup live in ``tools/cwe_data.py``;
+this module is just the row contract consumers import to type-check return
+shapes against.
 """
 
 from __future__ import annotations

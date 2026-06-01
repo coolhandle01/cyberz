@@ -8,7 +8,7 @@ across every consumer.
 
 | Module | Contents |
 |---|---|
-| ``models.primitives`` | ``Severity``, ``FQDN``, ``HttpUrl``, ``IpAddr``, ``Email`` |
+| ``models.primitives`` | ``FQDN``, ``HttpUrl``, ``IpAddr``, ``Cidr``, ``Email``, ``IPType`` |
 | ``models.finding`` | ``RawFinding``, ``VerifiedVulnerability``, ``RawFindingSummary`` |
 | ``models.asset`` | assets ``Endpoint``, ``EndpointPage``, ``IpEnrichment``, |
 |                  | ``Service``, ``Product``, ``ProductRelease``, ``Url``, |
@@ -19,8 +19,8 @@ across every consumer.
 | ``models.asset.network`` | ``AsnRecord``, ``Contact``, ``ContactRole``, |
 |                          | ``DomainRecord``, ``RdapRecord`` |
 | ``models.workspace`` | ``RunFile``, ``RunFileContent`` |
-| ``models.cve`` | ``CveEntry`` |
-| ``models.cwe`` | ``CWEEntry`` |
+| ``models.nvd`` | ``CveEntry``, ``Severity`` |
+| ``models.mitre`` | ``CWEEntry`` |
 | ``models.owasp`` | ``OWASPEntry`` |
 | ``models.dns`` | ``PtrRecord``, ``TakeoverCandidate`` |
 | ``models.insight`` | ``HostRole``, ``HostPriority``, ``HostInsight``, ``HostScore``, |
@@ -87,7 +87,6 @@ from models.attack import (
     AttackGraph,
     AttackTree,
 )
-from models.cwe import CWEEntry
 from models.dns import PtrRecord, TakeoverCandidate
 from models.finding import RawFinding, RawFindingSummary, VerifiedVulnerability
 from models.h1 import ProgrammeReportSummary
@@ -103,6 +102,7 @@ from models.insight import (
     ReconFinalisationError,
 )
 from models.metrics import RunMetrics
+from models.mitre import CWEEntry
 from models.nvd import CveEntry, Severity
 from models.owasp import OWASPEntry
 from models.primitives import FQDN, Cidr, Email, HttpUrl, IpAddr, IPType
