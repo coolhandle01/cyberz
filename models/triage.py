@@ -22,7 +22,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
-from models.primitives import Severity
+from models.nvd import Severity
 
 
 class SeverityDecision(StrEnum):

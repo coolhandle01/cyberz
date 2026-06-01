@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, field_validator
 
-from models.primitives import Severity
+from models.nvd import Severity
 
 
 class AttackTree(BaseModel):

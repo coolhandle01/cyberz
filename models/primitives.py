@@ -19,7 +19,6 @@ from typing import Annotated
 
 from pydantic import AfterValidator
 
-
 # ``FQDN`` is the typed string every scope-guard input flows through.
 # Using ``Annotated[str, AfterValidator(...)]`` keeps the runtime type as
 # ``str`` (anything expecting ``str`` keeps working) while pydantic applies
