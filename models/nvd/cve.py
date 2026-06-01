@@ -1,5 +1,5 @@
 """
-models.cve - the NVD CVE record shape, returned by VR's NVD CVE Lookup.
+models.nvd.cve - the NVD CVE record shape, returned by VR's NVD CVE Lookup.
 
 Pairs with ``tools/cwe_data.py`` and ``tools/owasp_data.py`` as the
 external-vocabulary lookups the VR uses during triage; this is the only

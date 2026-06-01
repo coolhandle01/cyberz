@@ -87,7 +87,6 @@ from models.attack import (
     AttackGraph,
     AttackTree,
 )
-from models.cve import CveEntry
 from models.cwe import CWEEntry
 from models.dns import PtrRecord, TakeoverCandidate
 from models.finding import RawFinding, RawFindingSummary, VerifiedVulnerability
@@ -104,8 +103,9 @@ from models.insight import (
     ReconFinalisationError,
 )
 from models.metrics import RunMetrics
+from models.nvd import CveEntry, Severity
 from models.owasp import OWASPEntry
-from models.primitives import FQDN, Cidr, Email, HttpUrl, IpAddr, IPType, Severity
+from models.primitives import FQDN, Cidr, Email, HttpUrl, IpAddr, IPType
 from models.report import AuthoredDraft
 from models.scanner import (
     HttpxMode,

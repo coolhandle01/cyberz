@@ -2,11 +2,13 @@
 models.primitives - foundational typed-string and enum primitives shared
 across the model graph.
 
-Both ``Severity`` and ``FQDN`` are leaf dependencies - they have no
-forward references into other model modules - so they live in the
+The typed-string primitives here (``FQDN``, ``IpAddr``, ``Cidr``, ``HttpUrl``,
+``Email``) and the ``IPType`` enum are asset-identity leaf dependencies - they
+have no forward references into other model modules - so they live in the
 deepest layer of the package. ``models.finding``, ``models.asset``,
-``models.h1`` and the rest depend on them; nothing here depends on the
-others.
+``models.h1`` and the rest depend on them; nothing here depends on the others.
+(``Severity`` used to live here too; it moved to ``models.nvd`` as a
+CVSS-derived scoring rating, not an asset-identity primitive.)
 """
 
 from __future__ import annotations
@@ -16,14 +18,6 @@ from enum import StrEnum
 from typing import Annotated
 
 from pydantic import AfterValidator
-
-
-class Severity(StrEnum):
-    INFORMATIONAL = "informational"
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    CRITICAL = "critical"
 
 
 # ``FQDN`` is the typed string every scope-guard input flows through.
