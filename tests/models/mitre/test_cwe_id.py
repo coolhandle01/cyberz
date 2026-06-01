@@ -6,22 +6,13 @@ import pytest
 from pydantic import BaseModel, ValidationError
 
 from models import CweId
+from models.mitre.cwe_id import _validate_cwe_id
 
 pytestmark = pytest.mark.unit
 
 
 class _CweIdProbe(BaseModel):
     """Thin probe model to drive the CweId validator in isolation."""
-
-    value: CweId
-
-
-class _StrictCweIdProbe(BaseModel):
-    """Strict-mode probe: Pydantic does not int-coerce, so the validator's
-    own type guard is reachable (the lax path coerces ``True`` -> ``1`` before
-    the AfterValidator runs)."""
-
-    model_config = {"strict": True}
 
     value: CweId
 
@@ -38,12 +29,14 @@ class TestCweId:
         with pytest.raises(ValidationError):
             _CweIdProbe(value=bad)
 
-    def test_rejects_bool_on_strict_path(self):
-        # bool is an int subclass; a True/False slipping in as a CWE id is a
-        # bug. The lax model path coerces True->1 before the AfterValidator
-        # runs, so the guard is exercised via the strict path where it fires.
-        with pytest.raises(ValidationError):
-            _StrictCweIdProbe(value=True)
+    @pytest.mark.parametrize("bad", [True, 7.5, "89"])
+    def test_validator_rejects_non_int(self, bad):
+        # The type guard fires on non-ints (bool is an int subclass; a float or
+        # str must not slip through). Tested by calling the validator directly:
+        # Pydantic's lax model path would coerce these before the AfterValidator
+        # runs, so the guard's own branch is only reachable here.
+        with pytest.raises(ValueError):
+            _validate_cwe_id(bad)
 
     def test_runtime_type_is_int(self):
         probe = _CweIdProbe(value=89)
