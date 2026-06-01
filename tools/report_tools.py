@@ -498,7 +498,8 @@ def validate_draft(draft: ReportDraft) -> ValidationReport:
                 section="cwe",
                 severity="warning",
                 message=(
-                    f"CWE-{draft.cwe_id} is not in the local catalogue; double-check via Lookup CWE"
+                    f"CWE-{draft.cwe_id} is not a recognised MITRE CWE id;"
+                    " double-check via Lookup CWE"
                 ),
             )
         )

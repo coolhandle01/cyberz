@@ -262,7 +262,12 @@ class TestRenderDraftMarkdown:
 
     def test_contains_cwe_name(self, target_apex):
         md = render_draft_markdown(_good_draft(target_apex))
-        assert "CWE-89 (SQL Injection)" in md
+        # The name is sourced from the MITRE corpus (cwe2), not a hand-written
+        # short label, so assert the id plus the canonical short form MITRE
+        # embeds in CWE-89's name ("...('SQL Injection')") rather than pinning
+        # the full verbose name string.
+        assert "CWE-89" in md
+        assert "SQL Injection" in md
 
     def test_steps_are_numbered(self, target_apex):
         md = render_draft_markdown(_good_draft(target_apex))
